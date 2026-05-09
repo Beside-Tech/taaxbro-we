@@ -1,13 +1,24 @@
 @import url('https://fonts.googleapis.com/css2?family=Mona+Sans:ital,wght@0,200..900;1,200..900&family=Space+Grotesk:wght@300..700&display=swap');
 @import 'tailwindcss';
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 body {
   font-family: 'Mona Sans', sans-serif;
   background: #fafafa;
 }
 
+html.dark body {
+  background: #111111;
+}
+
+.dark h6 {
+  color: white;
+}
+
 h6 {
   font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.875rem;
 }
 
 .layout-padding {
@@ -173,6 +184,27 @@ h6 {
 
 .swiper-pagination-bullet-active {
   background: #6d1bff !important;
+}
+
+/* Testimonial dark mode */
+.dark .testimonial-card {
+  background: #1c1c1c;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.dark .testimonial-swiper .swiper-slide-active .testimonial-card {
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 20px 100px rgba(0, 0, 0, 0.6);
+}
+
+.dark .testimonial-swiper .swiper-slide:not(.swiper-slide-active) .testimonial-card {
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.dark .testimonial-swiper .swiper-slide:not(.swiper-slide-active) .testimonial-quote,
+.dark .testimonial-swiper .swiper-slide:not(.swiper-slide-active) .testimonial-name,
+.dark .testimonial-swiper .swiper-slide:not(.swiper-slide-active) p {
+  color: rgba(255, 255, 255, 0.4) !important;
 }
 
 @theme {
