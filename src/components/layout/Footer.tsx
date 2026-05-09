@@ -28,7 +28,7 @@ export default function Footer() {
           {/* Brand — spans 2 cols on tablet */}
           <div className='md:col-span-2 lg:col-span-1 flex flex-col gap-4'>
             <div className='flex flex-col gap-1'>
-              <img src={logoMark} alt='' className='h-10 w-auto self-start brightness-0 invert' />
+              <img src={logoMark} alt='' className='h-10 w-auto self-start' />
               <span className='font-medium text-base'>Taaxbro</span>
             </div>
             <p className='text-2xl font-bold leading-snug'>

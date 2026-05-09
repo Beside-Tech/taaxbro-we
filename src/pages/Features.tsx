@@ -1,3 +1,5 @@
+import gsap from 'gsap';
+import { useScrollAnimation } from '../hooks/useScrollAnimation';
 import featuresHero from '../assets/features-hero2.png';
 import btbTransfer from '../assets/btbtransfer.svg';
 import multiAcct from '../assets/multiacct.svg';
@@ -93,35 +95,49 @@ const booksFeatures = [
   },
 ];
 
+function onCardEnter(e: React.MouseEvent<HTMLDivElement>) {
+  const icon = e.currentTarget.querySelector<HTMLElement>('.card-icon');
+  if (icon) gsap.to(icon, { y: -6, scale: 1.1, duration: 0.3, ease: 'power2.out' });
+}
+
+function onCardLeave(e: React.MouseEvent<HTMLDivElement>) {
+  const icon = e.currentTarget.querySelector<HTMLElement>('.card-icon');
+  if (icon) gsap.to(icon, { y: 0, scale: 1, duration: 0.35, ease: 'power2.inOut' });
+}
+
 export default function Features() {
+  const ref = useScrollAnimation();
+
   return (
-    <>
+    <div ref={ref}>
       {/* Hero */}
       <section className='mt-18 pb-12 text-center layout-padding'>
-        <h6 className='font-medium mb-2'>[FEATURES]</h6>
-        <h1 className='text-2xl md:text-4xl lg:text-5xl mb-4 dark:text-white'>
-          Every tool your business finances need.{' '}
-          <br className='hidden sm:block' />
-          All working together
-        </h1>
-        <p className='text-sm md:text-base font-light max-w-2xl mx-auto mb-6 dark:text-gray-400'>
-          Taaxbro isn't three apps sharing a login. It's one AI-powered system —
-          so your payments inform your books, your books inform your taxes, and
-          your taxes file themselves.
-        </p>
+        <div data-anim>
+          <h6 className='font-medium mb-2'>[FEATURES]</h6>
+          <h1 className='text-2xl md:text-4xl lg:text-5xl mb-4 dark:text-white'>
+            Every tool your business finances need.{' '}
+            <br className='hidden sm:block' />
+            All working together
+          </h1>
+          <p className='text-sm md:text-base font-light max-w-2xl mx-auto mb-6 dark:text-white'>
+            Taaxbro isn't three apps sharing a login. It's one AI-powered system —
+            so your payments inform your books, your books inform your taxes, and
+            your taxes file themselves.
+          </p>
 
-        <div className='flex items-center justify-center gap-2 flex-wrap mb-8'>
-          {['Taaxbro Tax', 'Taaxbro Pay', 'Taaxbro Books'].map((label) => (
-            <a
-              key={label}
-              href={`#${label.toLowerCase().replace(' ', '-')}`}
-              className='border border-dark dark:border-white text-dark dark:text-white px-5 py-2 rounded-full text-sm hover:bg-dark hover:text-white dark:hover:bg-white dark:hover:text-dark transition-colors'>
-              {label}
-            </a>
-          ))}
+          <div className='flex items-center justify-center gap-2 flex-wrap mb-8'>
+            {['Taaxbro Tax', 'Taaxbro Pay', 'Taaxbro Books'].map((label) => (
+              <a
+                key={label}
+                href={`#${label.toLowerCase().replace(' ', '-')}`}
+                className='border border-dark dark:border-white text-dark dark:text-white px-5 py-2 rounded-full text-sm hover:bg-dark hover:text-white dark:hover:bg-white dark:hover:text-dark transition-colors'>
+                {label}
+              </a>
+            ))}
+          </div>
         </div>
 
-        <div className='rounded-2xl overflow-hidden'>
+        <div data-anim className='rounded-2xl overflow-hidden'>
           <img
             src={featuresHero}
             alt='Taaxbro features — business owners using the platform'
@@ -132,21 +148,27 @@ export default function Features() {
 
       {/* Taaxbro Pay */}
       <section id='taaxbro-pay' className='py-16 layout-padding'>
-        <h6 className='font-medium mb-2'>[TAAXBRO PAY]</h6>
-        <h2 className='text-2xl md:text-4xl mb-8 dark:text-white'>
-          Business payments that <br className='hidden sm:block' />
-          reconcile themselves
-        </h2>
+        <div data-anim>
+          <h6 className='font-medium mb-2'>[TAAXBRO PAY]</h6>
+          <h2 className='text-2xl md:text-4xl mb-8 dark:text-white'>
+            Business payments that <br className='hidden sm:block' />
+            reconcile themselves
+          </h2>
+        </div>
 
         <div className='grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-4'>
-          {/* Dark featured card — stays dark in both modes */}
-          <div className='bg-dark dark:bg-primary-40 text-white rounded-2xl p-6 flex flex-col justify-between min-h-72'>
+          {/* Dark featured card */}
+          <div
+            data-anim
+            onMouseEnter={onCardEnter}
+            onMouseLeave={onCardLeave}
+            className='bg-dark dark:bg-primary-40 text-white rounded-2xl p-6 flex flex-col justify-between min-h-72 cursor-default'>
             <div className='flex flex-col gap-4'>
               <div className='w-10 h-10'>
                 <img
                   src={btbTransfer}
                   alt=''
-                  className='w-full h-full object-contain'
+                  className='card-icon w-full h-full object-contain'
                 />
               </div>
               <div>
@@ -164,19 +186,22 @@ export default function Features() {
           </div>
 
           {/* 2×2 grid */}
-          <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
+          <div data-anim-group className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
             {payFeatures.map(({ icon, title, description, rounded }) => (
               <div
                 key={title}
-                className='bg-white dark:bg-[#1c1c1c] border border-grey-10 dark:border-white/10 rounded-2xl p-4 flex flex-col gap-3'>
+                data-anim-item
+                onMouseEnter={onCardEnter}
+                onMouseLeave={onCardLeave}
+                className='bg-white dark:bg-[#1c1c1c] border border-grey-10 dark:border-white/10 rounded-2xl p-4 flex flex-col gap-3 cursor-default'>
                 <img
                   src={icon}
                   alt={title}
-                  className={`w-10 h-10 mb-4 object-contain ${rounded ? 'rounded-lg' : ''}`}
+                  className={`card-icon w-10 h-10 mb-4 object-contain ${rounded ? 'rounded-lg' : ''}`}
                 />
                 <div>
                   <h4 className='font-medium mb-1 dark:text-white'>{title}</h4>
-                  <p className='text-xs md:text-sm font-light dark:text-gray-400'>
+                  <p className='text-xs md:text-sm font-light dark:text-white'>
                     {description}
                   </p>
                 </div>
@@ -186,22 +211,25 @@ export default function Features() {
         </div>
       </section>
 
-      {/* Taaxbro Tax — already dark, unchanged */}
+      {/* Taaxbro Tax */}
       <section id='taaxbro-tax' className='bg-dark text-white py-16'>
         <div className='layout-padding'>
-          <h6 className='font-medium mb-2 text-white/50'>[TAAXBRO TAX]</h6>
-          <h2 className='text-2xl md:text-4xl mb-12'>
-            Built for Nigerian Compliance.
-          </h2>
-          <div className='border-t border-white/20 grid grid-cols-1 sm:grid-cols-2'>
+          <div data-anim>
+            <h6 className='font-medium mb-2 text-white'>[TAAXBRO TAX]</h6>
+            <h2 className='text-2xl md:text-4xl mb-12'>
+              Built for Nigerian Compliance.
+            </h2>
+          </div>
+          <div data-anim-group className='border-t border-white/20 grid grid-cols-1 sm:grid-cols-2'>
             {taxFeatures.map(({ num, title, description }) => (
               <div
                 key={num}
+                data-anim-item
                 className='border-b border-white/20 py-8 flex gap-4 items-start'>
                 <h6 className='font-medium'>[{num}]</h6>
                 <div>
                   <h4 className='text-base font-medium mb-1'>{title}</h4>
-                  <p className='text-sm font-light text-white/70'>
+                  <p className='text-xs md:text-sm font-light text-white'>
                     {description}
                   </p>
                 </div>
@@ -213,24 +241,29 @@ export default function Features() {
 
       {/* Taaxbro Books */}
       <section id='taaxbro-books' className='py-16 layout-padding'>
-        <h6 className='font-medium mb-2'>[TAAXBRO BOOKS]</h6>
-        <h2 className='text-2xl md:text-4xl mb-8 dark:text-white'>
-          Bookkeeping without the <br className='hidden sm:block' />
-          bookkeeper
-        </h2>
-        <div className='grid grid-cols-1 sm:grid-cols-2 gap-6'>
+        <div data-anim>
+          <h6 className='font-medium mb-2'>[TAAXBRO BOOKS]</h6>
+          <h2 className='text-2xl md:text-4xl mb-8 dark:text-white'>
+            Bookkeeping without the <br className='hidden sm:block' />
+            bookkeeper
+          </h2>
+        </div>
+        <div data-anim-group className='grid grid-cols-1 sm:grid-cols-2 gap-6'>
           {booksFeatures.map(({ icon, title, description }) => (
             <div
               key={title}
-              className='bg-white dark:bg-[#1c1c1c] border border-grey-10 dark:border-white/10 rounded-2xl p-6 flex flex-col gap-4'>
+              data-anim-item
+              onMouseEnter={onCardEnter}
+              onMouseLeave={onCardLeave}
+              className='bg-white dark:bg-[#1c1c1c] border border-grey-10 dark:border-white/10 rounded-2xl p-6 flex flex-col gap-4 cursor-default'>
               <img
                 src={icon}
                 alt={title}
-                className='w-10 h-10 mb-4 object-contain'
+                className='card-icon w-10 h-10 mb-4 object-contain'
               />
               <div>
                 <h4 className='font-medium mb-1 dark:text-white'>{title}</h4>
-                <p className='text-xs md:text-sm font-light dark:text-gray-400'>
+                <p className='text-xs md:text-sm font-light dark:text-white'>
                   {description}
                 </p>
               </div>
@@ -238,6 +271,6 @@ export default function Features() {
           ))}
         </div>
       </section>
-    </>
+    </div>
   );
 }

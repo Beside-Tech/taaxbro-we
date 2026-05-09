@@ -18,6 +18,7 @@ html.dark body {
 
 h6 {
   font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.875rem;
 }
 
 .layout-padding {
@@ -203,7 +204,7 @@ h6 {
 .dark .testimonial-swiper .swiper-slide:not(.swiper-slide-active) .testimonial-quote,
 .dark .testimonial-swiper .swiper-slide:not(.swiper-slide-active) .testimonial-name,
 .dark .testimonial-swiper .swiper-slide:not(.swiper-slide-active) p {
-  color: #6b7280 !important;
+  color: rgba(255, 255, 255, 0.4) !important;
 }
 
 @theme {

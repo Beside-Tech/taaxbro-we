@@ -1,11 +1,13 @@
 import { Icon } from '@iconify/react';
+import { useScrollAnimation } from '../hooks/useScrollAnimation';
 
 const plans = [
   {
     name: 'Starter',
     price: 'Free',
     priceLabel: null,
-    description: 'For sole operators and micro-businesses just getting started.',
+    description:
+      'For sole operators and micro-businesses just getting started.',
     features: [
       'Up to 5 invoices per month',
       'Manual expense tracking',
@@ -42,7 +44,8 @@ const plans = [
     name: 'Business',
     price: '₦19,500',
     priceLabel: '/month',
-    description: 'For scaling businesses with a team and complex compliance needs.',
+    description:
+      'For scaling businesses with a team and complex compliance needs.',
     features: [
       'Everything in Growth',
       'Up to 5 user seats with role-based access (Admin, Accountant, Viewer)',
@@ -59,27 +62,41 @@ const plans = [
 ];
 
 export default function Pricing() {
+  const ref = useScrollAnimation();
+
   return (
-    <>
+    <div ref={ref}>
       {/* Header */}
-      <section className='pt-4 pb-8 text-center layout-padding'>
+      <section data-anim className='mt-18 pb-8 text-center layout-padding'>
         <h6 className='font-medium mb-2'>[PRICING]</h6>
         <h1 className='text-3xl sm:text-4xl lg:text-5xl mb-2 dark:text-white'>
           Flexible Pricing for Every Need
         </h1>
-        <p className='text-base font-light mx-auto dark:text-gray-400'>
-          Choose the plan that fits your business — upgrade or downgrade anytime.
+        <p className='text-base font-light mx-auto dark:text-white'>
+          Choose the plan that fits your business — upgrade or downgrade
+          anytime.
         </p>
       </section>
 
       {/* Plans */}
       <section className='py-12 pb-28'>
         <div className='layout-padding'>
-          <div className='grid grid-cols-1 md:grid-cols-3 gap-6 items-center'>
+          <div data-anim-group className='grid grid-cols-1 md:grid-cols-3 gap-6 items-center'>
             {plans.map(
-              ({ name, price, priceLabel, description, features, cta, ctaStyle, highlight, badge }) => (
+              ({
+                name,
+                price,
+                priceLabel,
+                description,
+                features,
+                cta,
+                ctaStyle,
+                highlight,
+                badge,
+              }) => (
                 <div
                   key={name}
+                  data-anim-item
                   className={`relative rounded-2xl p-4 flex flex-col gap-6 bg-white dark:bg-[#1c1c1c] ${
                     highlight
                       ? 'border-2 border-primary-30 shadow-lg shadow-primary-10 dark:shadow-primary-30/20'
@@ -92,15 +109,21 @@ export default function Pricing() {
                   )}
 
                   <div className='flex flex-col gap-1'>
-                    <h2 className='text-2xl font-medium text-dark dark:text-white'>{name}</h2>
-                    <p className='text-sm font-light dark:text-gray-400'>{description}</p>
+                    <h2 className='text-2xl font-medium text-dark dark:text-white'>
+                      {name}
+                    </h2>
+                    <p className='text-sm font-light dark:text-white'>
+                      {description}
+                    </p>
                   </div>
 
                   <div className='border-t border-grey-10 dark:border-white/10 pt-6'>
                     <div className='flex items-end gap-1'>
-                      <span className='text-4xl font-medium dark:text-white'>{price}</span>
+                      <span className='text-4xl font-medium dark:text-white'>
+                        {price}
+                      </span>
                       {priceLabel && (
-                        <span className='text-grey-30 dark:text-gray-400 text-sm mb-1'>
+                        <span className='text-grey-30 dark:text-white text-sm mb-1'>
                           {priceLabel}
                         </span>
                       )}
@@ -108,11 +131,18 @@ export default function Pricing() {
                   </div>
 
                   <div>
-                    <p className='text-sm font-semibold mb-2 dark:text-white'>What's included:</p>
+                    <p className='text-sm font-semibold mb-2 dark:text-white'>
+                      What's included:
+                    </p>
                     <ul className='flex flex-col gap-3'>
                       {features.map((f) => (
-                        <li key={f} className='flex items-start gap-1.5 text-[#4D4A4A] dark:text-gray-300'>
-                          <Icon icon='mdi:check' className='text-lg shrink-0 mt-0.5' />
+                        <li
+                          key={f}
+                          className='flex items-start gap-1.5 text-[#4D4A4A] dark:text-white'>
+                          <Icon
+                            icon='mdi:check'
+                            className='text-lg shrink-0 mt-0.5'
+                          />
                           <span className='text-sm'>{f}</span>
                         </li>
                       ))}
@@ -135,6 +165,6 @@ export default function Pricing() {
           </div>
         </div>
       </section>
-    </>
+    </div>
   );
 }

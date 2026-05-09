@@ -40,47 +40,145 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  useEffect(() => {
+    setOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    document.body.style.overflow = open ? 'hidden' : '';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [open]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 768) setOpen(false);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const handleHowItWorks = () => {
     setOpen(false);
     if (location.pathname === '/') {
-      document
-        .getElementById('how-it-works')
-        ?.scrollIntoView({ behavior: 'smooth' });
+      document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' });
     } else {
       navigate('/');
       setTimeout(() => {
-        document
-          .getElementById('how-it-works')
-          ?.scrollIntoView({ behavior: 'smooth' });
+        document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' });
       }, 150);
     }
   };
 
   return (
-    <nav
-      className={`fixed py-4 top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        visible ? 'translate-y-0' : '-translate-y-full'
-      } ${
-        isScrolled
-          ? 'bg-white/80 dark:bg-[#111111]/90 backdrop-blur-md shadow-sm'
-          : 'bg-transparent backdrop-blur-none shadow-none'
-      }`}>
-      <div className='layout-padding flex items-center justify-between h-16'>
-        <Link to='/'>
-          <img src={logo} alt='' className='h-20 w-auto' />
-        </Link>
+    <>
+      <nav
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 py-4 ${
+          visible ? 'translate-y-0' : '-translate-y-full'
+        } ${
+          isScrolled
+            ? 'bg-white/80 dark:bg-[#111111]/90 backdrop-blur-md shadow-sm'
+            : 'bg-transparent'
+        }`}>
+        <div className='layout-padding flex items-center justify-between h-20'>
+          <Link to='/'>
+            <img src={logo} alt='Taaxbro' className='h-20 w-auto' />
+          </Link>
 
-        <ul className='hidden md:flex items-center gap-8'>
+          {/* Desktop links */}
+          <ul className='hidden md:flex items-center gap-8'>
+            {navLinks.map(({ to, label }) => (
+              <li key={to}>
+                <NavLink
+                  to={to}
+                  end={to === '/'}
+                  className={({ isActive }) =>
+                    `text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'text-primary-30'
+                        : 'text-dark dark:text-white hover:text-primary-30'
+                    }`
+                  }>
+                  {label}
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+
+          {/* Desktop CTAs */}
+          <div className='hidden md:flex items-center gap-3'>
+            <button
+              onClick={toggle}
+              aria-label='Toggle dark mode'
+              className='w-9 h-9 flex items-center justify-center rounded-full text-dark dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer'>
+              <Icon icon={dark ? 'ph:sun' : 'ph:moon'} className='text-xl' />
+            </button>
+            <button
+              onClick={handleHowItWorks}
+              className='border border-dark dark:border-white text-dark dark:text-white text-sm font-medium px-5 py-2 rounded-full hover:bg-dark hover:text-white dark:hover:bg-white dark:hover:text-dark transition-colors cursor-pointer'>
+              How it Works
+            </button>
+            <button className='bg-dark dark:bg-white text-white dark:text-dark text-sm font-medium px-5 py-2 rounded-full hover:bg-primary-40 dark:hover:bg-primary-10 transition-colors cursor-pointer'>
+              Get Started
+            </button>
+          </div>
+
+          {/* Mobile controls */}
+          <div className='md:hidden flex items-center gap-1'>
+            <button
+              onClick={toggle}
+              aria-label='Toggle dark mode'
+              className='w-9 h-9 flex items-center justify-center rounded-full text-dark dark:text-white transition-colors cursor-pointer'>
+              <Icon icon={dark ? 'ph:sun' : 'ph:moon'} className='text-xl' />
+            </button>
+            <button
+              className='w-9 h-9 flex items-center justify-center text-dark dark:text-white'
+              onClick={() => setOpen(true)}
+              aria-label='Open menu'>
+              <Icon icon='mdi:menu' className='text-2xl' />
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      {/* Mobile menu backdrop */}
+      <div
+        className={`fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity duration-300 ${
+          open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        }`}
+        onClick={() => setOpen(false)}
+      />
+
+      {/* Mobile menu slide panel */}
+      <div
+        className={`fixed top-0 right-0 h-full w-full bg-white/90 dark:bg-[#1a1a1a]/90 backdrop-blur-md z-50 md:hidden transition-transform duration-300 flex flex-col ${
+          open ? 'translate-x-0' : 'translate-x-full'
+        }`}>
+        {/* Panel header */}
+        <div className='flex items-center justify-between px-5 h-20 shrink-0'>
+          <img src={logo} alt='Taaxbro' className='h-20 w-auto' />
+          <button
+            onClick={() => setOpen(false)}
+            aria-label='Close menu'
+            className='w-9 h-9 flex items-center justify-center text-dark dark:text-white'>
+            <Icon icon='mdi:close' className='text-2xl' />
+          </button>
+        </div>
+
+        {/* Nav links */}
+        <ul className='flex flex-col gap-1 p-4 flex-1 overflow-y-auto'>
           {navLinks.map(({ to, label }) => (
             <li key={to}>
               <NavLink
                 to={to}
                 end={to === '/'}
+                onClick={() => setOpen(false)}
                 className={({ isActive }) =>
-                  `text-sm font-medium transition-colors ${
+                  `flex items-center px-3 py-3 rounded-xl text-sm font-medium transition-colors ${
                     isActive
-                      ? 'text-primary-30'
-                      : 'text-dark dark:text-white hover:text-primary-30'
+                      ? 'bg-primary-10 dark:bg-primary-40/20 text-primary-30'
+                      : 'text-dark dark:text-white hover:bg-grey-10/50 dark:hover:bg-white/5'
                   }`
                 }>
                 {label}
@@ -89,68 +187,18 @@ export default function Navbar() {
           ))}
         </ul>
 
-        <div className='hidden md:flex items-center gap-3'>
-          <button
-            onClick={toggle}
-            aria-label='Toggle dark mode'
-            className='w-9 h-9 flex items-center justify-center rounded-full text-dark dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer'>
-            <Icon icon={dark ? 'ph:sun' : 'ph:moon'} className='text-xl' />
-          </button>
+        {/* CTA buttons */}
+        <div className='p-4 flex flex-col gap-2.5 border-t border-grey-10 dark:border-white/10 shrink-0'>
           <button
             onClick={handleHowItWorks}
-            className='border border-dark dark:border-white text-dark dark:text-white text-sm font-medium px-5 py-2 rounded-full hover:bg-dark hover:text-white dark:hover:bg-white dark:hover:text-dark transition-colors cursor-pointer'>
+            className='w-full border border-dark dark:border-white text-dark dark:text-white text-sm font-medium py-2.5 rounded-full cursor-pointer hover:bg-dark hover:text-white dark:hover:bg-white dark:hover:text-dark transition-colors'>
             How it Works
           </button>
-          <button className='bg-dark dark:bg-white text-white dark:text-dark text-sm font-medium px-5 py-2 rounded-full hover:bg-primary-40 dark:hover:bg-primary-10 transition-colors cursor-pointer'>
+          <button className='w-full bg-dark dark:bg-white text-white dark:text-dark text-sm font-medium py-2.5 rounded-full cursor-pointer hover:bg-primary-40 transition-colors'>
             Get Started
           </button>
         </div>
-
-        <div className='md:hidden flex items-center gap-2'>
-          <button
-            onClick={toggle}
-            aria-label='Toggle dark mode'
-            className='w-9 h-9 flex items-center justify-center rounded-full text-dark dark:text-white transition-colors cursor-pointer'>
-            <Icon icon={dark ? 'ph:sun' : 'ph:moon'} className='text-xl' />
-          </button>
-          <button
-            className='text-dark dark:text-white p-1'
-            onClick={() => setOpen(!open)}
-            aria-label='Toggle menu'>
-            <Icon icon={open ? 'mdi:close' : 'mdi:menu'} className='text-2xl' />
-          </button>
-        </div>
       </div>
-
-      {open && (
-        <div className='md:hidden bg-white dark:bg-[#1c1c1c] border-t border-grey-10 dark:border-white/10 layout-padding py-5 flex flex-col gap-5'>
-          <ul className='flex flex-col gap-4'>
-            {navLinks.map(({ to, label }) => (
-              <li key={to}>
-                <NavLink
-                  to={to}
-                  end={to === '/'}
-                  onClick={() => setOpen(false)}
-                  className={({ isActive }) =>
-                    `text-sm font-medium ${isActive ? 'text-primary-30' : 'text-dark dark:text-white'}`
-                  }>
-                  {label}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-          <div className='flex flex-col gap-2 pt-1 border-t border-grey-10 dark:border-white/10'>
-            <button
-              onClick={handleHowItWorks}
-              className='border border-dark dark:border-white text-dark dark:text-white text-sm font-medium px-5 py-2.5 rounded-full cursor-pointer'>
-              How it Works
-            </button>
-            <button className='bg-dark dark:bg-white text-white dark:text-dark text-sm font-medium px-5 py-2.5 rounded-full cursor-pointer'>
-              Get Started
-            </button>
-          </div>
-        </div>
-      )}
-    </nav>
+    </>
   );
 }
