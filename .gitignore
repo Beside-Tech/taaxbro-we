@@ -22,7 +22,3 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-
-# Documentation
-taaxbro_design_brief_v2.docx
-*.docx
