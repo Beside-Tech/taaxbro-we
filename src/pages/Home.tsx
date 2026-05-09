@@ -92,19 +92,18 @@ export default function Home() {
   return (
     <>
       {/* Hero */}
-
-      <section className='mt-8 pl-[5%] lg:pl-[8%] xl:pl-[10%] xxl:pl-[20%] xxl:pr-[20%] grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center'>
+      <section className='mt-18 pl-[5%] lg:pl-[8%] xl:pl-[10%] xxl:pl-[20%] xxl:pr-[20%] grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center'>
         <div className='flex flex-col gap-4 max-w-xl mx-auto text-center lg:text-left'>
-          <h1 className='text-4xl xl:text-5xl'>
+          <h1 className='text-4xl xl:text-5xl dark:text-white'>
             Your Business Finances, <br />
             Finally Under Control
           </h1>
-          <p className='font-light text-sm md:text-base xl:text-lg'>
+          <p className='font-light text-sm md:text-base xl:text-lg dark:text-gray-400'>
             Payments, tax compliance, and bookkeeping — powered by AI, built for
             Nigerian businesses. One platform. Zero spreadsheets.
           </p>
           <div className='flex items-center gap-2 flex-wrap mx-auto lg:mx-0'>
-            <button className='bg-dark text-white  px-6 py-3 rounded-full hover:bg-primary-40 transition-colors cursor-pointer'>
+            <button className='bg-dark dark:bg-white text-white dark:text-dark px-6 py-3 rounded-full hover:bg-primary-40 transition-colors cursor-pointer'>
               Try for Free
             </button>
             <button
@@ -113,36 +112,34 @@ export default function Home() {
                   .getElementById('how-it-works')
                   ?.scrollIntoView({ behavior: 'smooth' })
               }
-              className='border border-dark text-dark px-6 py-3 rounded-full hover:bg-dark hover:text-white transition-colors cursor-pointer'>
+              className='border border-dark dark:border-white text-dark dark:text-white px-6 py-3 rounded-full hover:bg-dark hover:text-white dark:hover:bg-white dark:hover:text-dark transition-colors cursor-pointer'>
               How it Works
             </button>
           </div>
         </div>
 
         <div className='flex justify-center lg:justify-end xxl:justify-center'>
-          {/* svg: lg and xl only — animated float */}
           <img
             src={heroImage}
             alt='Taaxbro dashboard'
             className='hero-svg hidden lg:block xxl:hidden w-full object-contain'
           />
-          {/* png: mobile, tablet (< lg) and xxl — rounded grey border */}
           <img
             src={heroImage2}
             alt='Taaxbro dashboard'
-            className='block lg:hidden xxl:block w-full max-w-sm md:max-w-lg xxl:max-w-full object-contain rounded-2xl border border-grey-20'
+            className='block lg:hidden xxl:block w-full max-w-sm md:max-w-lg xxl:max-w-full object-contain rounded-2xl border border-grey-20 dark:border-white/10'
           />
         </div>
       </section>
 
       {/* Core Operations */}
-      <section className=' py-20 lg:py-28'>
+      <section className='py-20 lg:py-28'>
         <div className='layout-padding'>
           <div className='text-center max-w-xl mx-auto mb-14'>
-            <h2 className='text-3xl sm:text-4xl  mb-4'>
+            <h2 className='text-2xl md:text-4xl mb-4 dark:text-white'>
               Three core financial operations. One seamless system.
             </h2>
-            <p className='font-light text-base sm:text-lg'>
+            <p className='font-light text-sm md:text-lg dark:text-white'>
               Payments, tax compliance, and bookkeeping — not bolted together,
               but built as one intelligent system.
             </p>
@@ -152,17 +149,19 @@ export default function Home() {
             {coreOps.map(({ icon, title, description, image }) => (
               <div
                 key={title}
-                className='bg-white border border-grey-10 rounded-2xl flex flex-col justify-between'>
+                className='bg-white dark:bg-[#1c1c1c] border border-grey-10 dark:border-white/10 rounded-2xl flex flex-col justify-between'>
                 <div className='p-4 flex flex-col gap-3 text-center justify-center'>
                   <div className='flex justify-center items-center'>
-                    <Icon icon={icon} className='text-3xl xl:text-4xl' />
+                    <Icon
+                      icon={icon}
+                      className='text-3xl xl:text-4xl dark:text-white'
+                    />
                   </div>
-
                   <div>
-                    <h3 className='font-medium text-base lg:text-lg'>
+                    <h3 className='font-medium text-base lg:text-lg dark:text-white'>
                       {title}
                     </h3>
-                    <p className='text-xs md:text-sm font-light'>
+                    <p className='text-xs md:text-sm font-light dark:text-white'>
                       {description}
                     </p>
                   </div>
@@ -180,24 +179,23 @@ export default function Home() {
         </div>
       </section>
 
-      {/*  How It Works  */}
+      {/* How It Works */}
       <section id='how-it-works' className='layout-padding'>
         <div className='flex flex-col lg:flex-row justify-between items-center mb-8'>
           <div className='max-w-full lg:max-w-[40%] text-center lg:text-left'>
             <h6 className='font-medium text-sm mb-1'>[HOW IT WORKS]</h6>
-            <h2 className='text-2xl md:text-3xl xl:text-4xl lg:whitespace-nowrap'>
+            <h2 className='text-2xl md:text-3xl xl:text-4xl lg:whitespace-nowrap dark:text-white'>
               Taxes sorted. No experts required
             </h2>
           </div>
-
-          <p className='font-light text-sm max-w-full lg:max-w-[38%] text-center lg:text-left'>
+          <p className='font-light text-sm max-w-full lg:max-w-[38%] text-center lg:text-left dark:text-gray-400'>
             No accountant. No spreadsheets. No chasing receipts. Just connect
             your accounts and we take care of the rest — built for business
             owners who have better things to do.
           </p>
         </div>
 
-        <div className=' grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center'>
+        <div className='grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center'>
           <div className='mx-auto'>
             <img
               src={howItWorksImg}
@@ -205,14 +203,17 @@ export default function Home() {
               className='xxl:max-w-130 rounded-3xl object-cover'
             />
           </div>
-
           <div className='flex flex-col justify-center gap-6 xl:max-w-[85%] xxl:max-w-[85%] lg:justify-self-end'>
             {steps.map(({ num, title, description }) => (
               <div key={num} className='flex gap-4 items-center'>
                 <h6 className='font-medium'>[{num}]</h6>
                 <div>
-                  <h4 className='text-base md:text-xl mb-1'>{title}</h4>
-                  <p className='text-sm font-light'>{description}</p>
+                  <h4 className='text-base md:text-xl mb-1 dark:text-white'>
+                    {title}
+                  </h4>
+                  <p className='text-sm font-light dark:text-gray-400'>
+                    {description}
+                  </p>
                 </div>
               </div>
             ))}
@@ -220,14 +221,14 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Testimonials  */}
+      {/* Testimonials */}
       <section className='py-20 lg:py-28 overflow-hidden'>
         <div className='text-center mb-12'>
-          <h6 className=' text-sm font-medium mb-1'>[TESTIMONIALS]</h6>
-          <h2 className='text-3xl sm:text-4xl mb-1'>
+          <h6 className='text-sm font-medium mb-1'>[TESTIMONIALS]</h6>
+          <h2 className='text-3xl sm:text-4xl mb-1 dark:text-white'>
             Real Stories, Real Results
           </h2>
-          <p className='text-sm lg:text-base font-light '>
+          <p className='text-sm lg:text-base font-light dark:text-gray-400'>
             500+ Nigerian businesses trust Taaxbro with their finances.
           </p>
           <div className='flex justify-center mt-6'>
@@ -254,25 +255,23 @@ export default function Home() {
             className='testimonial-swiper'>
             {carouselTestimonials.map(({ quote, name, role }, index) => (
               <SwiperSlide key={`${name}-${index}`}>
-                <article className='testimonial-card relative flex min-h-72 flex-col justify-between overflow-hidden rounded-2xl border border-grey-10 bg-white p-6 text-left md:min-h-80 md:p-8'>
+                <article className='testimonial-card relative flex min-h-72 flex-col justify-between overflow-hidden rounded-2xl border border-grey-10 dark:border-white/10 bg-white dark:bg-[#1c1c1c] p-6 text-left md:min-h-80 md:p-8'>
                   <div
                     className='testimonial-pattern absolute inset-0 opacity-0'
                     style={{ backgroundImage: `url(${taaxbroPattern})` }}
                   />
-                  <div className='testimonial-pattern-overlay absolute inset-0 bg-white/95 opacity-0' />
-
+                  <div className='testimonial-pattern-overlay absolute inset-0 bg-white/95 dark:bg-[#1c1c1c]/95 opacity-0' />
                   <div className='relative z-10'>
-                    <p className='testimonial-quote text-sm leading-relaxed text-dark md:text-base'>
+                    <p className='testimonial-quote text-sm leading-relaxed text-dark dark:text-white md:text-base'>
                       "{quote}"
                     </p>
                   </div>
-
                   <div className='relative z-10 flex items-end justify-between gap-6'>
                     <div>
-                      <p className='testimonial-name text-lg font-medium text-dark md:text-xl'>
+                      <p className='testimonial-name text-lg font-medium text-dark dark:text-white md:text-xl'>
                         {name}
                       </p>
-                      <p className='mt-1 text-xs font-light text-dark md:text-sm'>
+                      <p className='mt-1 text-xs font-light text-dark dark:text-gray-400 md:text-sm'>
                         {role}
                       </p>
                     </div>
@@ -291,13 +290,13 @@ export default function Home() {
             <button
               type='button'
               aria-label='Previous testimonial'
-              className='testimonial-prev flex size-11 items-center justify-center rounded-lg border border-grey-10 bg-white text-dark transition-colors hover:border-dark'>
+              className='testimonial-prev flex size-11 items-center justify-center rounded-lg border border-grey-10 dark:border-white/10 bg-white dark:bg-[#1c1c1c] text-dark dark:text-white transition-colors hover:border-dark dark:hover:border-white'>
               <Icon icon='mdi:arrow-left' className='text-2xl' />
             </button>
             <button
               type='button'
               aria-label='Next testimonial'
-              className='testimonial-next flex size-11 items-center justify-center rounded-lg border border-grey-10 bg-white text-dark transition-colors hover:border-dark'>
+              className='testimonial-next flex size-11 items-center justify-center rounded-lg border border-grey-10 dark:border-white/10 bg-white dark:bg-[#1c1c1c] text-dark dark:text-white transition-colors hover:border-dark dark:hover:border-white'>
               <Icon icon='mdi:arrow-right' className='text-2xl' />
             </button>
           </div>

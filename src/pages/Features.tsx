@@ -97,17 +97,17 @@ export default function Features() {
   return (
     <>
       {/* Hero */}
-      <section className='pt-4 pb-12 text-center layout-padding'>
+      <section className='mt-18 pb-12 text-center layout-padding'>
         <h6 className='font-medium mb-2'>[FEATURES]</h6>
-        <h1 className='text-3xl sm:text-4xl lg:text-5xl mb-4'>
+        <h1 className='text-2xl md:text-4xl lg:text-5xl mb-4 dark:text-white'>
           Every tool your business finances need.{' '}
           <br className='hidden sm:block' />
           All working together
         </h1>
-        <p className='text-base font-light max-w-2xl mx-auto mb-6'>
-          Taaxbro isn't three apps sharing a login. It's one AI-powered system
-          — so your payments inform your books, your books inform your taxes,
-          and your taxes file themselves.
+        <p className='text-sm md:text-base font-light max-w-2xl mx-auto mb-6 dark:text-gray-400'>
+          Taaxbro isn't three apps sharing a login. It's one AI-powered system —
+          so your payments inform your books, your books inform your taxes, and
+          your taxes file themselves.
         </p>
 
         <div className='flex items-center justify-center gap-2 flex-wrap mb-8'>
@@ -115,7 +115,7 @@ export default function Features() {
             <a
               key={label}
               href={`#${label.toLowerCase().replace(' ', '-')}`}
-              className='border border-dark text-dark px-5 py-2 rounded-full text-sm hover:bg-dark hover:text-white transition-colors'>
+              className='border border-dark dark:border-white text-dark dark:text-white px-5 py-2 rounded-full text-sm hover:bg-dark hover:text-white dark:hover:bg-white dark:hover:text-dark transition-colors'>
               {label}
             </a>
           ))}
@@ -125,7 +125,7 @@ export default function Features() {
           <img
             src={featuresHero}
             alt='Taaxbro features — business owners using the platform'
-            className='w-full object-cover'
+            className='w-full object-cover border border-[#8979FF]/30 rounded-2xl'
           />
         </div>
       </section>
@@ -133,14 +133,14 @@ export default function Features() {
       {/* Taaxbro Pay */}
       <section id='taaxbro-pay' className='py-16 layout-padding'>
         <h6 className='font-medium mb-2'>[TAAXBRO PAY]</h6>
-        <h2 className='text-3xl sm:text-4xl mb-8'>
+        <h2 className='text-2xl md:text-4xl mb-8 dark:text-white'>
           Business payments that <br className='hidden sm:block' />
           reconcile themselves
         </h2>
 
-        <div className='grid grid-cols-1 lg:grid-cols-2 gap-4'>
-          {/* Dark featured card */}
-          <div className='bg-dark text-white rounded-2xl p-6 flex flex-col justify-between min-h-72'>
+        <div className='grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-4'>
+          {/* Dark featured card — stays dark in both modes */}
+          <div className='bg-dark dark:bg-primary-40 text-white rounded-2xl p-6 flex flex-col justify-between min-h-72'>
             <div className='flex flex-col gap-4'>
               <div className='w-10 h-10'>
                 <img
@@ -150,10 +150,8 @@ export default function Features() {
                 />
               </div>
               <div>
-                <h3 className='text-xl font-medium mb-3'>
-                  Bank-to-bank transfers
-                </h3>
-                <p className='text-sm font-light text-white/80 leading-relaxed'>
+                <h3 className='font-medium mb-2'>Bank-to-bank transfers</h3>
+                <p className='text-xs md:text-sm font-light text-white'>
                   Taaxbro isn't three apps sharing a login. It's one AI-powered
                   system — so your payments inform your books, your books inform
                   your taxes, and your taxes file themselves.
@@ -170,15 +168,15 @@ export default function Features() {
             {payFeatures.map(({ icon, title, description, rounded }) => (
               <div
                 key={title}
-                className='bg-white border border-grey-10 rounded-2xl p-4 flex flex-col gap-3'>
+                className='bg-white dark:bg-[#1c1c1c] border border-grey-10 dark:border-white/10 rounded-2xl p-4 flex flex-col gap-3'>
                 <img
                   src={icon}
                   alt={title}
-                  className={`w-10 h-10 object-contain ${rounded ? 'rounded-lg' : ''}`}
+                  className={`w-10 h-10 mb-4 object-contain ${rounded ? 'rounded-lg' : ''}`}
                 />
                 <div>
-                  <h4 className='font-medium text-sm mb-1'>{title}</h4>
-                  <p className='text-xs font-light text-grey-30'>
+                  <h4 className='font-medium mb-1 dark:text-white'>{title}</h4>
+                  <p className='text-xs md:text-sm font-light dark:text-gray-400'>
                     {description}
                   </p>
                 </div>
@@ -188,20 +186,19 @@ export default function Features() {
         </div>
       </section>
 
-      {/* Taaxbro Tax */}
+      {/* Taaxbro Tax — already dark, unchanged */}
       <section id='taaxbro-tax' className='bg-dark text-white py-16'>
         <div className='layout-padding'>
           <h6 className='font-medium mb-2 text-white/50'>[TAAXBRO TAX]</h6>
-          <h2 className='text-3xl sm:text-4xl mb-12'>
+          <h2 className='text-2xl md:text-4xl mb-12'>
             Built for Nigerian Compliance.
           </h2>
-
           <div className='border-t border-white/20 grid grid-cols-1 sm:grid-cols-2'>
             {taxFeatures.map(({ num, title, description }) => (
               <div
                 key={num}
                 className='border-b border-white/20 py-8 flex gap-4 items-start'>
-                <h6 className='font-medium text-white/50 shrink-0'>[{num}]</h6>
+                <h6 className='font-medium'>[{num}]</h6>
                 <div>
                   <h4 className='text-base font-medium mb-1'>{title}</h4>
                   <p className='text-sm font-light text-white/70'>
@@ -217,24 +214,25 @@ export default function Features() {
       {/* Taaxbro Books */}
       <section id='taaxbro-books' className='py-16 layout-padding'>
         <h6 className='font-medium mb-2'>[TAAXBRO BOOKS]</h6>
-        <h2 className='text-3xl sm:text-4xl mb-8'>
+        <h2 className='text-2xl md:text-4xl mb-8 dark:text-white'>
           Bookkeeping without the <br className='hidden sm:block' />
           bookkeeper
         </h2>
-
         <div className='grid grid-cols-1 sm:grid-cols-2 gap-6'>
           {booksFeatures.map(({ icon, title, description }) => (
             <div
               key={title}
-              className='bg-white border border-grey-10 rounded-2xl p-6 flex flex-col gap-4'>
+              className='bg-white dark:bg-[#1c1c1c] border border-grey-10 dark:border-white/10 rounded-2xl p-6 flex flex-col gap-4'>
               <img
                 src={icon}
                 alt={title}
-                className='w-10 h-10 object-contain'
+                className='w-10 h-10 mb-4 object-contain'
               />
               <div>
-                <h4 className='font-medium text-base mb-1'>{title}</h4>
-                <p className='text-sm font-light'>{description}</p>
+                <h4 className='font-medium mb-1 dark:text-white'>{title}</h4>
+                <p className='text-xs md:text-sm font-light dark:text-gray-400'>
+                  {description}
+                </p>
               </div>
             </div>
           ))}
