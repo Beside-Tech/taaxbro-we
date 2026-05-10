@@ -54,9 +54,16 @@ h6 {
 }
 
 /* 2XL displays / wide monitors (≥ 1616px) */
-@media (min-width: 1616px) {
+@media (min-width: 1632px) {
   .layout-padding {
-    padding-inline: 20%;
+    padding-inline: 15%;
+  }
+}
+
+/* 3XL displays / super wide monitors (≥ 2000px) */
+@media (min-width: 2016px) {
+  .layout-padding {
+    padding-inline: 22%;
   }
 }
 
@@ -197,18 +204,28 @@ h6 {
   box-shadow: 0 20px 100px rgba(0, 0, 0, 0.6);
 }
 
-.dark .testimonial-swiper .swiper-slide:not(.swiper-slide-active) .testimonial-card {
+.dark
+  .testimonial-swiper
+  .swiper-slide:not(.swiper-slide-active)
+  .testimonial-card {
   border-color: rgba(255, 255, 255, 0.06);
 }
 
-.dark .testimonial-swiper .swiper-slide:not(.swiper-slide-active) .testimonial-quote,
-.dark .testimonial-swiper .swiper-slide:not(.swiper-slide-active) .testimonial-name,
+.dark
+  .testimonial-swiper
+  .swiper-slide:not(.swiper-slide-active)
+  .testimonial-quote,
+.dark
+  .testimonial-swiper
+  .swiper-slide:not(.swiper-slide-active)
+  .testimonial-name,
 .dark .testimonial-swiper .swiper-slide:not(.swiper-slide-active) p {
   color: rgba(255, 255, 255, 0.4) !important;
 }
 
 @theme {
-  --breakpoint-xxl: 101rem;
+  --breakpoint-xxl: 102rem;
+  --breakpoint-xxxl: 126rem;
   --color-primary-10: #ebd9ff;
   --color-primary-20: #c77dff;
   --color-primary-30: #6d1bff;

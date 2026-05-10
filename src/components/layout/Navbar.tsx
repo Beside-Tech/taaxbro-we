@@ -62,11 +62,15 @@ export default function Navbar() {
   const handleHowItWorks = () => {
     setOpen(false);
     if (location.pathname === '/') {
-      document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' });
+      document
+        .getElementById('how-it-works')
+        ?.scrollIntoView({ behavior: 'smooth' });
     } else {
       navigate('/');
       setTimeout(() => {
-        document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' });
+        document
+          .getElementById('how-it-works')
+          ?.scrollIntoView({ behavior: 'smooth' });
       }, 150);
     }
   };
@@ -145,7 +149,9 @@ export default function Navbar() {
       {/* Mobile menu backdrop */}
       <div
         className={`fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity duration-300 ${
-          open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          open
+            ? 'opacity-100 pointer-events-auto'
+            : 'opacity-0 pointer-events-none'
         }`}
         onClick={() => setOpen(false)}
       />
@@ -177,7 +183,7 @@ export default function Navbar() {
                 className={({ isActive }) =>
                   `flex items-center px-3 py-3 rounded-xl text-sm font-medium transition-colors ${
                     isActive
-                      ? 'bg-primary-10 dark:bg-primary-40/20 text-primary-30'
+                      ? 'bg-primary-10 text-primary-40'
                       : 'text-dark dark:text-white hover:bg-grey-10/50 dark:hover:bg-white/5'
                   }`
                 }>
