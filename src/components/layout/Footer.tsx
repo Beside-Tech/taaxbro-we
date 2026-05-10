@@ -11,10 +11,26 @@ const navLinks = [
 ];
 
 const socials = [
-  { icon: 'mdi:instagram', href: 'https://www.instagram.com/taaxbro', label: 'Instagram' },
-  { icon: 'ri:twitter-x-line', href: 'https://x.com/taaxbro', label: 'X (Twitter)' },
-  { icon: 'mdi:linkedin', href: 'https://www.linkedin.com/company/taaxbro', label: 'LinkedIn' },
-  { icon: 'mdi:facebook', href: 'https://facebook.com/taaxbro', label: 'Facebook' },
+  {
+    icon: 'mdi:instagram',
+    href: 'https://www.instagram.com/taaxbro',
+    label: 'Instagram',
+  },
+  {
+    icon: 'ri:twitter-x-line',
+    href: 'https://x.com/taaxbro',
+    label: 'X (Twitter)',
+  },
+  {
+    icon: 'mdi:linkedin',
+    href: 'https://www.linkedin.com/company/taaxbro',
+    label: 'LinkedIn',
+  },
+  {
+    icon: 'mdi:facebook',
+    href: 'https://facebook.com/taaxbro',
+    label: 'Facebook',
+  },
 ];
 
 export default function Footer() {
@@ -22,7 +38,7 @@ export default function Footer() {
 
   return (
     <footer className='bg-dark text-white'>
-      <div className='layout-padding py-12'>
+      <div className='layout-padding pt-10 pb-4'>
         {/* Main grid — 1 col mobile, 2 col tablet, 3 col desktop */}
         <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr] gap-10'>
           {/* Brand — spans 2 cols on tablet */}
@@ -31,7 +47,7 @@ export default function Footer() {
               <img src={logoMark} alt='' className='h-10 w-auto self-start' />
               <span className='font-medium text-base'>Taaxbro</span>
             </div>
-            <p className='text-2xl font-bold leading-snug'>
+            <p className='text-2xl'>
               Your Business Finances
               <br />
               Finally Under Your Control
@@ -75,8 +91,10 @@ export default function Footer() {
         </div>
 
         {/* Newsletter */}
-        <div className='mt-12 pt-10 border-t border-white/10'>
-          <h4 className='font-semibold text-base mb-1'>Subscribe to our Newsletter</h4>
+        <div className='mt-12'>
+          <h4 className='font-semibold text-base mb-1'>
+            Subscribe to our Newsletter
+          </h4>
           <p className='text-grey-30 text-sm mb-4'>
             Get updates on new features and product releases
           </p>
@@ -95,8 +113,10 @@ export default function Footer() {
         </div>
 
         {/* Bottom bar */}
-        <div className='mt-10 pt-6 border-t border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4'>
-          <p className='text-grey-30 text-sm'>2026 Taaxbro, All rights reserved</p>
+        <div className='mt-28 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4'>
+          <p className='text-grey-30 text-sm'>
+            2026 Taaxbro, All rights reserved
+          </p>
           <div className='flex items-center gap-6'>
             <a
               href='#'

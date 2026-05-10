@@ -96,13 +96,15 @@ const booksFeatures = [
 ];
 
 function onCardEnter(e: React.MouseEvent<HTMLDivElement>) {
+  gsap.to(e.currentTarget, { y: -6, duration: 0.3, ease: 'power2.out' });
   const icon = e.currentTarget.querySelector<HTMLElement>('.card-icon');
-  if (icon) gsap.to(icon, { y: -6, scale: 1.1, duration: 0.3, ease: 'power2.out' });
+  if (icon) gsap.to(icon, { scale: 1.15, duration: 0.3, ease: 'power2.out' });
 }
 
 function onCardLeave(e: React.MouseEvent<HTMLDivElement>) {
+  gsap.to(e.currentTarget, { y: 0, duration: 0.35, ease: 'power2.inOut' });
   const icon = e.currentTarget.querySelector<HTMLElement>('.card-icon');
-  if (icon) gsap.to(icon, { y: 0, scale: 1, duration: 0.35, ease: 'power2.inOut' });
+  if (icon) gsap.to(icon, { scale: 1, duration: 0.35, ease: 'power2.inOut' });
 }
 
 export default function Features() {
@@ -120,9 +122,9 @@ export default function Features() {
             All working together
           </h1>
           <p className='text-sm md:text-base font-light max-w-2xl mx-auto mb-6 dark:text-white'>
-            Taaxbro isn't three apps sharing a login. It's one AI-powered system —
-            so your payments inform your books, your books inform your taxes, and
-            your taxes file themselves.
+            Taaxbro isn't three apps sharing a login. It's one AI-powered system
+            — so your payments inform your books, your books inform your taxes,
+            and your taxes file themselves.
           </p>
 
           <div className='flex items-center justify-center gap-2 flex-wrap mb-8'>
@@ -141,7 +143,7 @@ export default function Features() {
           <img
             src={featuresHero}
             alt='Taaxbro features — business owners using the platform'
-            className='w-full object-cover border border-[#8979FF]/30 rounded-2xl'
+            className='aspect-[1.7/1] md:aspect-auto w-full object-cover border border-[#8979FF]/30 rounded-2xl'
           />
         </div>
       </section>
@@ -186,7 +188,9 @@ export default function Features() {
           </div>
 
           {/* 2×2 grid */}
-          <div data-anim-group className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
+          <div
+            data-anim-group
+            className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
             {payFeatures.map(({ icon, title, description, rounded }) => (
               <div
                 key={title}
@@ -220,7 +224,9 @@ export default function Features() {
               Built for Nigerian Compliance.
             </h2>
           </div>
-          <div data-anim-group className='border-t border-white/20 grid grid-cols-1 sm:grid-cols-2'>
+          <div
+            data-anim-group
+            className='border-t border-white/20 grid grid-cols-1 sm:grid-cols-2'>
             {taxFeatures.map(({ num, title, description }) => (
               <div
                 key={num}

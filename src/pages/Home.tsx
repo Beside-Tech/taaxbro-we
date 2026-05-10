@@ -1,3 +1,4 @@
+import gsap from 'gsap';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Navigation, Autoplay } from 'swiper/modules';
 import { Icon } from '@iconify/react';
@@ -89,15 +90,25 @@ const testimonials = [
 
 const carouselTestimonials = [...testimonials, ...testimonials];
 
+function onCardEnter(e: React.MouseEvent<HTMLDivElement>) {
+  gsap.to(e.currentTarget, { y: -6, duration: 0.3, ease: 'power2.out' });
+}
+
+function onCardLeave(e: React.MouseEvent<HTMLDivElement>) {
+  gsap.to(e.currentTarget, { y: 0, duration: 0.35, ease: 'power2.inOut' });
+}
+
 export default function Home() {
   const ref = useScrollAnimation();
 
   return (
     <div ref={ref}>
       {/* Hero */}
-      <section className='mt-18 pl-[5%] lg:pl-[8%] xl:pl-[10%] xxl:pl-[20%] xxl:pr-[20%] grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center'>
-        <div data-anim className='flex flex-col gap-4 max-w-xl mx-auto text-center lg:text-left'>
-          <h1 className='text-4xl xl:text-5xl dark:text-white'>
+      <section className='mt-18 pl-[5%] lg:pl-[8%] xl:pl-[10%] xxl:pl-[15%] xxl:pr-[15%] xxxl:pl-[22%] xxxl:pr-[22%] grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center'>
+        <div
+          data-anim
+          className='flex flex-col gap-4 max-w-xl mx-auto lg:mx-0 text-center lg:text-left'>
+          <h1 className='text-3xl md:text-4xl xl:text-5xl dark:text-white'>
             Your Business Finances, <br />
             Finally Under Control
           </h1>
@@ -121,7 +132,9 @@ export default function Home() {
           </div>
         </div>
 
-        <div data-anim className='flex justify-center lg:justify-end xxl:justify-center'>
+        <div
+          data-anim
+          className='flex justify-center lg:justify-end xxl:justify-center'>
           <img
             src={heroImage}
             alt='Taaxbro dashboard'
@@ -148,12 +161,16 @@ export default function Home() {
             </p>
           </div>
 
-          <div data-anim-group className='grid grid-cols-1 max-w-90 lg:max-w-full mx-auto lg:grid-cols-3 gap-6 xl:gap-8'>
+          <div
+            data-anim-group
+            className='grid grid-cols-1 max-w-90 lg:max-w-full mx-auto lg:grid-cols-3 gap-6 xl:gap-8'>
             {coreOps.map(({ icon, title, description, image }) => (
               <div
                 key={title}
                 data-anim-item
-                className='bg-white dark:bg-[#1c1c1c] border border-grey-10 dark:border-white/10 rounded-2xl flex flex-col justify-between'>
+                onMouseEnter={onCardEnter}
+                onMouseLeave={onCardLeave}
+                className='bg-white dark:bg-[#1c1c1c] border border-grey-10 dark:border-white/10 rounded-2xl flex flex-col justify-between cursor-default'>
                 <div className='p-4 flex flex-col gap-3 text-center justify-center'>
                   <div className='flex justify-center items-center'>
                     <Icon
@@ -185,7 +202,9 @@ export default function Home() {
 
       {/* How It Works */}
       <section id='how-it-works' className='layout-padding'>
-        <div data-anim className='flex flex-col lg:flex-row justify-between items-center mb-8'>
+        <div
+          data-anim
+          className='flex flex-col lg:flex-row justify-between items-center mb-8'>
           <div className='max-w-full lg:max-w-[40%] text-center lg:text-left'>
             <h6 className='font-medium text-sm mb-1'>[HOW IT WORKS]</h6>
             <h2 className='text-2xl md:text-3xl xl:text-4xl lg:whitespace-nowrap dark:text-white'>
@@ -207,7 +226,9 @@ export default function Home() {
               className='xxl:max-w-130 rounded-3xl object-cover'
             />
           </div>
-          <div data-anim-group className='flex flex-col justify-center gap-6 xl:max-w-[85%] xxl:max-w-[85%] lg:justify-self-end'>
+          <div
+            data-anim-group
+            className='flex flex-col justify-center gap-6 xl:max-w-[85%] xxl:max-w-[85%] lg:justify-self-end'>
             {steps.map(({ num, title, description }) => (
               <div key={num} data-anim-item className='flex gap-4 items-center'>
                 <h6 className='font-medium'>[{num}]</h6>
@@ -229,7 +250,7 @@ export default function Home() {
       <section className='py-20 lg:py-28 overflow-hidden'>
         <div data-anim className='text-center mb-12'>
           <h6 className='text-sm font-medium mb-1'>[TESTIMONIALS]</h6>
-          <h2 className='text-3xl sm:text-4xl mb-1 dark:text-white'>
+          <h2 className='text-2xl md:text-4xl mb-1 dark:text-white'>
             Real Stories, Real Results
           </h2>
           <p className='text-sm lg:text-base font-light dark:text-white'>
