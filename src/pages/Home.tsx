@@ -104,7 +104,7 @@ export default function Home() {
   return (
     <div ref={ref}>
       {/* Hero */}
-      <section className='mt-18 pl-[5%] lg:pl-[8%] xl:pl-[10%] xxl:pl-[15%] xxl:pr-[15%] xxxl:pl-[22%] xxxl:pr-[22%] grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center'>
+      <section className='mt-18 pl-[5%] pr-[5%] lg:pl-[8%] lg:pr-0 xl:pl-[10%] xxl:pl-[15%] xxl:pr-[15%] xxxl:pl-[22%] xxxl:pr-[22%] grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center'>
         <div
           data-anim
           className='flex flex-col gap-4 max-w-xl mx-auto lg:mx-0 text-center lg:text-left'>
