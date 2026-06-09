@@ -1,17 +1,22 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { auth, ApiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 
 export default function VerifyPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const email = searchParams.get('email') ?? '';
+  const [email, setEmail] = useState<string | undefined>(undefined);
   const { setUser } = useAuth();
 
   const [digits, setDigits] = useState(['', '', '', '', '', '']);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setEmail(params.get('email') ?? '');
+  }, []);
+
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [resendMsg, setResendMsg] = useState('');
@@ -76,8 +81,17 @@ export default function VerifyPage() {
     }
   };
 
+  useEffect(() => {
+    if (email === '') {
+      router.replace('/register');
+    }
+  }, [email, router]);
+
+  if (email === undefined) {
+    return null;
+  }
+
   if (!email) {
-    router.replace('/register');
     return null;
   }
 
