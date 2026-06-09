@@ -1,21 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Icon } from '@iconify/react';
 import { auth, ApiError } from '@/lib/api';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const token = searchParams.get('token') ?? '';
-
+  const [token, setToken] = useState<string | undefined>(undefined);
   const [password, setPassword] = useState('');
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setToken(params.get('token') ?? '');
+  }, []);
+
   const [confirm, setConfirm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  if (token === undefined) {
+    return null;
+  }
 
   if (!token) {
     return (

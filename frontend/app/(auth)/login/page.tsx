@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Icon } from '@iconify/react';
 import { useAuth } from '@/context/AuthContext';
 import { ApiError } from '@/lib/api';
@@ -10,7 +10,7 @@ import { ApiError } from '@/lib/api';
 export default function LoginPage() {
   const { login } = useAuth();
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const [nextPath, setNextPath] = useState('/overview');
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -18,14 +18,18 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setNextPath(params.get('next') ?? '/overview');
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
       await login(email, password);
-      const next = searchParams.get('next') ?? '/overview';
-      router.push(next);
+      router.push(nextPath);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {
