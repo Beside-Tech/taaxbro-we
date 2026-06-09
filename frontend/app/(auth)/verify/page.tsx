@@ -7,14 +7,14 @@ import { useAuth } from '@/context/AuthContext';
 
 export default function VerifyPage() {
   const router = useRouter();
-  const [email, setEmail] = useState<string | undefined>(undefined);
+  const [email, setEmail] = useState<string | null>(null);
   const { setUser } = useAuth();
 
   const [digits, setDigits] = useState(['', '', '', '', '', '']);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    setEmail(params.get('email') ?? '');
+    setEmail(params.get('email'));
   }, []);
 
   const [error, setError] = useState('');
@@ -58,7 +58,7 @@ export default function VerifyPage() {
     setError('');
     setLoading(true);
     try {
-      const user = await auth.verifyEmail({ email, otp });
+      const user = await auth.verifyEmail({ email: email!, otp });
       setUser(user);
       router.push(user.onboarding_completed ? '/overview' : '/onboarding');
     } catch (err) {
@@ -73,7 +73,7 @@ export default function VerifyPage() {
     setResendMsg('');
     setError('');
     try {
-      const res = await auth.resendOtp(email);
+      const res = await auth.resendOtp(email!);
       setResendMsg(res.message);
       setResendCooldown(60);
     } catch (err) {
@@ -82,12 +82,12 @@ export default function VerifyPage() {
   };
 
   useEffect(() => {
-    if (email === '') {
+    if (email === null || email === '') {
       router.replace('/register');
     }
   }, [email, router]);
 
-  if (email === undefined) {
+  if (email === null) {
     return null;
   }
 
