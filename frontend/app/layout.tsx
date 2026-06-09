@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Mona_Sans, Space_Grotesk } from 'next/font/google';
 import { ThemeProvider } from '@/context/ThemeContext';
+import { AuthProvider } from '@/context/AuthContext';
 import './globals.css';
 
 const monaSans = Mona_Sans({
@@ -33,7 +34,7 @@ export default function RootLayout({
       className={`${monaSans.variable} ${spaceGrotesk.variable}`}
       suppressHydrationWarning>
       <body>
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider><AuthProvider>{children}</AuthProvider></ThemeProvider>
       </body>
     </html>
   );
