@@ -2,13 +2,35 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Icon } from '@iconify/react';
+import { useAuth } from '@/context/AuthContext';
+import { ApiError } from '@/lib/api';
 
 export default function LoginPage() {
-  const [showPassword, setShowPassword] = useState(false);
+  const { login } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await login(email, password);
+      const next = searchParams.get('next') ?? '/overview';
+      router.push(next);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -29,12 +51,21 @@ export default function LoginPage() {
         <div className='flex-1 h-px bg-grey-10' />
       </div>
 
+      {error && (
+        <div className='mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700'>
+          {error}
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className='flex flex-col gap-4'>
         <div className='flex flex-col gap-1'>
           <label className='text-sm'>Email Address</label>
           <input
             type='email'
             placeholder='example@example.com'
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
             className='border border-grey-10 rounded-lg px-4 py-3 text-sm outline-none focus:border-primary-30 transition-colors placeholder:text-secondary-40'
           />
         </div>
@@ -42,14 +73,17 @@ export default function LoginPage() {
         <div className='flex flex-col gap-1'>
           <div className='flex items-center justify-between'>
             <label className='text-sm'>Password</label>
-            <button type='button' className='text-sm text-primary-30 hover:underline'>
+            <Link href='/forgot-password' className='text-sm text-primary-30 hover:underline'>
               Forgot password?
-            </button>
+            </Link>
           </div>
           <div className='relative'>
             <input
               type={showPassword ? 'text' : 'password'}
               placeholder='Enter password'
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
               className='w-full border border-grey-10 rounded-lg px-4 py-3 pr-11 text-sm outline-none focus:border-primary-30 transition-colors placeholder:text-secondary-40'
             />
             <button
@@ -63,8 +97,9 @@ export default function LoginPage() {
 
         <button
           type='submit'
-          className='w-full bg-primary-30 text-white rounded-full py-3 text-sm font-medium hover:bg-primary-40 transition-colors mt-1'>
-          Sign In
+          disabled={loading}
+          className='w-full bg-primary-30 text-white rounded-full py-3 text-sm font-medium hover:bg-primary-40 transition-colors mt-1 disabled:opacity-60 disabled:cursor-not-allowed'>
+          {loading ? 'Signing in…' : 'Sign In'}
         </button>
       </form>
 
