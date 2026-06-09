@@ -18,10 +18,15 @@ async function request<T>(
   options: RequestInit = {},
   retry = true,
 ): Promise<T> {
+  const headers = {
+    ...options.headers,
+    ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+  };
+
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...options.headers },
+    headers,
   });
 
   if (res.status === 401 && retry) {

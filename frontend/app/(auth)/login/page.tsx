@@ -1,16 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { Icon } from '@iconify/react';
 import { useAuth } from '@/context/AuthContext';
 import { ApiError } from '@/lib/api';
 
 export default function LoginPage() {
   const { login } = useAuth();
-  const router = useRouter();
-  const [nextPath, setNextPath] = useState('/overview');
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -18,18 +15,15 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    setNextPath(params.get('next') ?? '/overview');
-  }, []);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
       await login(email, password);
-      router.push(nextPath);
+      // AuthContext.login() already calls router.push based on onboarding_completed
+      // Do NOT push here — double-push causes a race where middleware fires before
+      // the cookie is readable, bouncing the user back to /login
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {
