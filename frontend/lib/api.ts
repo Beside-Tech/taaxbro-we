@@ -123,3 +123,73 @@ export const auth = {
     });
   },
 };
+// ─── Dashboard ─────────────────────────────────────────────────────────────
+
+export interface DashboardStats {
+  revenue_current_month: number;
+  revenue_prev_month: number;
+  revenue_change_pct: number | null;
+  tax_liabilities_due: number;
+  tax_liabilities_status: 'At Risk' | 'On Track' | 'Overdue';
+  outstanding_invoices_amount: number;
+  outstanding_invoices_unpaid: number;
+  outstanding_invoices_overdue: number;
+  tax_reserve: number;
+  next_filing_date: string | null; // ISO date
+}
+
+export interface DashboardTransaction {
+  id: string;
+  transaction_date: string;
+  type: 'credit' | 'debit';
+  counterparty_name: string | null;
+  bank_name: string | null;
+  amount: number;
+  vat_amount: number | null;
+  category: string | null;
+}
+
+export interface ComplianceItem {
+  label: string;
+  ok: boolean;
+}
+
+export interface DashboardCompliance {
+  score: number;
+  items: ComplianceItem[];
+}
+
+export interface DashboardData {
+  stats: DashboardStats;
+  recent_transactions: DashboardTransaction[];
+  compliance: DashboardCompliance | null;
+}
+
+export const dashboard = {
+  get(): Promise<DashboardData> {
+    return request<DashboardData>('/api/v1/dashboard');
+  },
+};
+
+// ─── Onboarding ────────────────────────────────────────────────────────────
+
+export interface OnboardingPayload {
+  full_name: string;
+  phone: string;
+  business_name: string;
+  business_type: string;
+  state: string;
+  tin?: string;
+  rc_number?: string;
+  vat_registered: boolean;
+  vat_registration_no?: string;
+}
+
+export const onboarding = {
+  complete(data: OnboardingPayload): Promise<AuthUser> {
+    return request<AuthUser>('/api/v1/onboarding', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+};

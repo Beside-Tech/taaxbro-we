@@ -1,20 +1,17 @@
 'use client';
 
 import { Icon } from '@iconify/react';
+import { useAuth } from '@/context/AuthContext';
 
 interface TopBarProps {
   children: React.ReactNode;
-  userEmail?: string;
-  userName?: string;
-  userAvatar?: string;
 }
 
-export default function TopBar({
-  children,
-  userEmail = 'danielochoja@gmail.com',
-  userName = 'Daniel',
-  userAvatar,
-}: TopBarProps) {
+export default function TopBar({ children }: TopBarProps) {
+  const { user } = useAuth();
+  const email = user?.email ?? '';
+  const name = user?.full_name ?? email.split('@')[0] ?? '';
+
   return (
     <header className='flex items-center justify-between px-8 py-4'>
       <div>{children}</div>
@@ -24,17 +21,9 @@ export default function TopBar({
         </button>
         <div className='flex items-center gap-2 border border-grey-10 rounded-full pl-1 pr-4 py-1'>
           <div className='w-8 h-8 rounded-full bg-secondary-40 overflow-hidden flex items-center justify-center shrink-0'>
-            {userAvatar ? (
-              <img
-                src={userAvatar}
-                alt={userName}
-                className='w-full h-full object-cover'
-              />
-            ) : (
-              <Icon icon='ph:user-fill' className='text-white text-sm' />
-            )}
+            <Icon icon='ph:user-fill' className='text-white text-sm' />
           </div>
-          <span className='text-sm text-secondary-10'>{userEmail}</span>
+          <span className='text-sm text-secondary-10'>{email}</span>
         </div>
       </div>
     </header>

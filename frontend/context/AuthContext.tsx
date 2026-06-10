@@ -16,7 +16,7 @@ interface AuthContextValue {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  /** Call after verify-email succeeds to hydrate the context immediately. */
+  /** Call after verify-email or onboarding completes to hydrate context. */
   setUser: (user: AuthUser) => void;
 }
 
@@ -37,12 +37,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    const user = await auth.login({ email, password });
-    setUser(user);
-    // /onboarding does not exist yet as a route — always send to /overview.
-    // When the onboarding flow is built, restore:
-    //   router.push(user.onboarding_completed ? '/overview' : '/onboarding');
-    router.push('/overview');
+    const loggedInUser = await auth.login({ email, password });
+    setUser(loggedInUser);
+    // Restore full onboarding check now that /onboarding route exists
+    router.push(loggedInUser.onboarding_completed ? '/overview' : '/onboarding');
   }, [router]);
 
   const logout = useCallback(async () => {
