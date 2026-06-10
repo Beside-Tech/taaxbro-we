@@ -21,9 +21,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      // AuthContext.login() already calls router.push based on onboarding_completed
-      // Do NOT push here — double-push causes a race where middleware fires before
-      // the cookie is readable, bouncing the user back to /login
+      // AuthContext.login() handles the redirect to /overview
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {
