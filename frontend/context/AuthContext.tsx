@@ -39,7 +39,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const user = await auth.login({ email, password });
     setUser(user);
-    router.push(user.onboarding_completed ? '/overview' : '/onboarding');
+    // /onboarding does not exist yet as a route — always send to /overview.
+    // When the onboarding flow is built, restore:
+    //   router.push(user.onboarding_completed ? '/overview' : '/onboarding');
+    router.push('/overview');
   }, [router]);
 
   const logout = useCallback(async () => {
