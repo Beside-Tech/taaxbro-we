@@ -13,24 +13,31 @@ export class ApiError extends Error {
   }
 }
 
+// Auth routes that must NEVER trigger the silent-refresh retry.
+// They legitimately return 401 on bad credentials — retrying them would
+// swallow the real error message and show "Session expired" instead.
+const NO_RETRY_PATHS = [
+  '/api/v1/auth/login',
+  '/api/v1/auth/refresh',
+  '/api/v1/auth/logout',
+];
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
   retry = true,
 ): Promise<T> {
-  const headers = {
-    ...options.headers,
-    ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-  };
-
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     credentials: 'include',
-    headers,
+    headers: { 'Content-Type': 'application/json', ...options.headers },
   });
 
-  if (res.status === 401 && retry) {
-    // Attempt silent refresh
+  // On 401: attempt one silent token refresh, then retry the original request.
+  // Skip this for auth endpoints — they return 401 for bad credentials and
+  // must surface the real error (e.g. "Invalid password") to the user.
+  const shouldRetry = res.status === 401 && retry && !NO_RETRY_PATHS.includes(path);
+  if (shouldRetry) {
     const refreshed = await fetch(`${BASE}/api/v1/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
@@ -38,7 +45,7 @@ async function request<T>(
     if (refreshed.ok) {
       return request<T>(path, options, false);
     }
-    throw new ApiError(401, 'Session expired');
+    throw new ApiError(401, 'Session expired. Please log in again.');
   }
 
   if (!res.ok) {
