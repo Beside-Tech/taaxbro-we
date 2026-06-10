@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Icon } from '@iconify/react';
@@ -8,7 +8,7 @@ import { auth, ApiError } from '@/lib/api';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router       = useRouter();
   const searchParams = useSearchParams();
 
@@ -186,5 +186,13 @@ export default function RegisterPage() {
         </Link>
       </p>
     </>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className='p-8 text-center'>Loading…</div>}>
+      <RegisterForm />
+    </Suspense>
   );
 }
