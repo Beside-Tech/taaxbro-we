@@ -171,16 +171,22 @@ export const dashboard = {
   },
 };
 
-// ─── Onboarding ────────────────────────────────────────────────────────────
+// ─── Onboarding ──────────────────────────────────────────────────────
 
 export interface OnboardingPayload {
-  full_name: string;
-  phone: string;
+  // Step 1
+  user_type: string;             // 'business' | 'freelancer' | 'tax_professional'
+
+  // Step 2 — required
   business_name: string;
   business_type: string;
   state: string;
+
+  // Step 2 — optional
+  industry?: string;
   tin?: string;
   rc_number?: string;
+  nin?: string;                  // 11-digit NIN, freelancers only
   vat_registered: boolean;
   vat_registration_no?: string;
 }
