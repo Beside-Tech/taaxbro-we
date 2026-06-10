@@ -25,6 +25,9 @@ const APP_PUBLIC_PATHS = [
   '/forgot-password',
   '/reset-password',
   '/verify',
+  // Google OAuth callback — the backend sets the cookie and redirects here.
+  // The middleware must NOT require a cookie on this path or the redirect loop.
+  '/auth/callback',
 ];
 
 // Dashboard routes that require a token
@@ -38,15 +41,9 @@ const APP_PROTECTED_PATHS = [
 ];
 
 // Paths that only exist on the marketing site — redirect away on app subdomain.
-// NOTE: Never include '/' here — Next.js RSC prefetches always request '/' for
-// the root layout and cannot follow a cross-origin redirect (CORS blocks it).
-// The root path is handled separately below.
 const MARKETING_ONLY_PATHS = ['/features', '/pricing', '/support'];
 
 // ─── RSC / prefetch detection ────────────────────────────────────────────────
-// Next.js App Router fires same-origin fetches with these markers when
-// prefetching or transitioning routes. These MUST NOT be redirected cross-origin
-// or the browser will block them with a CORS error and the navigation hangs.
 function isNextInternalFetch(req: NextRequest): boolean {
   return (
     req.nextUrl.searchParams.has('_rsc') ||
@@ -67,9 +64,8 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // ── Marketing portal (taaxbro.com / www.taaxbro.com) ────────────────────
+  // ── Marketing portal ────────────────────────────────────────────────────
   if (portal === 'marketing') {
-    // App-only routes visited on marketing domain → redirect to app subdomain
     const isAppRoute =
       APP_PUBLIC_PATHS.some((p) => pathname.startsWith(p)) ||
       APP_PROTECTED_PATHS.some((p) => pathname.startsWith(p));
@@ -80,7 +76,6 @@ export function middleware(req: NextRequest) {
       return NextResponse.redirect(appUrl);
     }
 
-    // Marketing paths (/, /features, /pricing, /support) — serve normally
     return NextResponse.next();
   }
 
@@ -102,24 +97,18 @@ export function middleware(req: NextRequest) {
 
   // ── App portal (app.taaxbro.com) ─────────────────────────────────────────
 
-  // Root path on app subdomain: if this is an RSC/prefetch internal fetch let
-  // it through (Next.js needs the root layout); otherwise redirect to marketing.
+  // Root path
   if (pathname === '/') {
-    if (isNextInternalFetch(req)) {
-      return NextResponse.next();
-    }
+    if (isNextInternalFetch(req)) return NextResponse.next();
     const marketingUrl = req.nextUrl.clone();
     marketingUrl.host = req.nextUrl.host.replace(/^app\./, '');
     return NextResponse.redirect(marketingUrl);
   }
 
-  // Marketing-only content paths on app subdomain → redirect to marketing site.
-  // Also skip redirect for RSC/prefetch fetches to avoid CORS blocks.
+  // Marketing-only paths
   const isMarketingOnly = MARKETING_ONLY_PATHS.some((p) => pathname.startsWith(p));
   if (isMarketingOnly) {
-    if (isNextInternalFetch(req)) {
-      return NextResponse.next();
-    }
+    if (isNextInternalFetch(req)) return NextResponse.next();
     const marketingUrl = req.nextUrl.clone();
     marketingUrl.host = req.nextUrl.host.replace(/^app\./, '');
     return NextResponse.redirect(marketingUrl);
@@ -130,7 +119,7 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Protect all dashboard/app routes — require access_token cookie
+  // Protect dashboard routes — require access_token cookie
   const token = req.cookies.get('access_token');
   if (!token) {
     const loginUrl = req.nextUrl.clone();

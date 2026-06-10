@@ -3,19 +3,27 @@
 /**
  * Web onboarding wizard — runs once after email verification.
  *
- * Step 1 — Who are you?          (role selection)
- * Step 2 — Business Details       (name / type / industry / state + TIN / CAC / NIN)
- * Step 3 — Connect Accounts       (Mono bank, email OAuth, WhatsApp notify)
+ * Step 1 — Who are you?               (role selection)
+ * Step 2 — Business / Identity Details (smart fields per role)
+ * Step 3 — Brand & Logo               (optional logo upload — same as WhatsApp)
+ * Step 4 — Connect Accounts           (email OAuth; Mono = coming soon)
  *
- * On completion: POST /api/v1/onboarding → redirects to /overview.
+ * Unification rules
+ * ─────────────────
+ * • WhatsApp users who already completed the WA 11-step wizard have
+ *   onboarding_completed = true and are redirected to /overview immediately.
+ * • The wizard is fully skippable from Step 2 onward — a "Skip for now →"
+ *   link posts the minimum payload and goes to /overview.
  *
- * WhatsApp users who registered via the WA wizard skip this page entirely
- * because their Business record is already created; they land on /overview
- * directly (onboarding_completed may still be false for them — the WA path
- * sets it to true via its own route on first profile completion).
+ * Smart field matrix
+ * ──────────────────
+ *   business        → business_name, business_type, industry, state, TIN, CAC (rc_number)
+ *   freelancer      → full_name label, sole_proprietorship type locked, state, TIN, NIN
+ *   tax_professional→ full_name label, sole_proprietorship type locked, state, TIN
+ *   (individual is just "freelancer" with NIN)
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '@iconify/react';
 import { onboarding, type OnboardingPayload, ApiError } from '@/lib/api';
@@ -55,23 +63,23 @@ const USER_TYPES = [
   {
     value: 'freelancer',
     icon: 'ph:laptop-fill',
-    label: "I'm a freelancer",
-    description: 'Self-employed, sole trader, or FX earner',
+    label: "I'm a freelancer / individual",
+    description: 'Self-employed, sole trader, contractor, or FX earner',
   },
   {
     value: 'tax_professional',
     icon: 'ph:scales-fill',
     label: "I'm a tax professional",
-    description: 'Accountant managing multiple client businesses',
+    description: 'Accountant or consultant managing multiple clients',
   },
 ];
 
-const STEP_LABELS = ['Who are you?', 'Tax Identity/Business Details', 'Connect Accounts'];
+const STEP_LABELS = ['Who are you?', 'Your Details', 'Logo & Brand', 'Connect'];
 
-// ─── Form state ────────────────────────────────────────────────────────────────
+// ─── Form state ───────────────────────────────────────────────────────────────
 
 interface FormData {
-  user_type:    string;
+  user_type:     string;
   business_name: string;
   business_type: string;
   industry:      string;
@@ -82,7 +90,7 @@ interface FormData {
 }
 
 const EMPTY: FormData = {
-  user_type:    '',
+  user_type:     '',
   business_name: '',
   business_type: '',
   industry:      '',
@@ -92,22 +100,22 @@ const EMPTY: FormData = {
   nin:           '',
 };
 
-// Connection state — tracks which integrations the user has initiated.
-// The actual OAuth / Mono widget completes out-of-band; we mark "connecting"
-// optimistically. Real status is confirmed server-side on /overview load.
 interface Connections {
-  bank:      'idle' | 'connecting' | 'connected';
-  email:     'idle' | 'connecting' | 'connected';
-  whatsapp:  'idle' | 'connecting' | 'connected';
+  email: 'idle' | 'connecting' | 'connected';
 }
 
-// ─── Shared field components ───────────────────────────────────────────────────
+// ─── Shared field components ──────────────────────────────────────────────────
 
-function Label({ children, hint }: { children: React.ReactNode; hint?: string }) {
+function Label({ children, hint, optional }: { children: React.ReactNode; hint?: string; optional?: boolean }) {
   return (
-    <div className='flex flex-col gap-1'>
-      <span className='text-sm font-medium text-secondary-10'>{children}</span>
-      {hint && <span className='text-xs text-secondary-30 -mt-0.5'>{hint}</span>}
+    <div className='flex flex-col gap-0.5'>
+      <div className='flex items-center gap-1.5'>
+        <span className='text-sm font-medium text-secondary-10'>{children}</span>
+        {optional && (
+          <span className='text-[10px] font-medium text-secondary-40 bg-grey-10/60 rounded-full px-2 py-0.5'>Optional</span>
+        )}
+      </div>
+      {hint && <span className='text-xs text-secondary-30'>{hint}</span>}
     </div>
   );
 }
@@ -130,7 +138,7 @@ function Sel({ placeholder, children, ...props }: React.SelectHTMLAttributes<HTM
         {...props}
         className='w-full border border-grey-10 rounded-xl px-4 py-3 pr-10 text-sm text-secondary-10
           bg-white focus:outline-none focus:ring-2 focus:ring-primary-30/40 focus:border-primary-30
-          transition appearance-none'>
+          transition appearance-none disabled:bg-[#f7f7f7] disabled:text-secondary-30'>
         {placeholder && <option value=''>{placeholder}</option>}
         {children}
       </select>
@@ -139,7 +147,7 @@ function Sel({ placeholder, children, ...props }: React.SelectHTMLAttributes<HTM
   );
 }
 
-// ─── Step progress tracker ─────────────────────────────────────────────────────
+// ─── Step progress tracker ────────────────────────────────────────────────────
 
 function StepTracker({ current }: { current: number }) {
   return (
@@ -149,19 +157,17 @@ function StepTracker({ current }: { current: number }) {
         const active = i === current;
         return (
           <div key={i} className='flex flex-col items-center flex-1 relative'>
-            {/* connector line — sits behind the circles */}
             {i > 0 && (
               <div
                 className={`absolute top-[18px] h-0.5 transition-colors ${done ? 'bg-primary-40' : 'bg-grey-10'}`}
                 style={{ left: 'calc(-50% + 18px)', right: 'calc(50% + 18px)' }}
               />
             )}
-            {/* circle */}
             <div className={`relative z-10 w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold
               transition-all ${done || active ? 'bg-primary-40 text-white' : 'bg-white border-2 border-grey-10 text-secondary-30'}`}>
               {done ? <Icon icon='ph:check-bold' className='text-sm' /> : i + 1}
             </div>
-            <span className={`mt-2 text-[11px] text-center leading-tight px-1 ${active ? 'font-medium text-secondary-10' : 'text-secondary-30'}`}>
+            <span className={`mt-2 text-[10px] text-center leading-tight px-1 ${active ? 'font-medium text-secondary-10' : 'text-secondary-30'}`}>
               {label}
             </span>
           </div>
@@ -171,7 +177,7 @@ function StepTracker({ current }: { current: number }) {
   );
 }
 
-// ─── Step 1: Who are you? ──────────────────────────────────────────────────────
+// ─── Step 1: Who are you? ─────────────────────────────────────────────────────
 
 function Step1({ value, onChange }: { value: string; onChange(v: string): void }) {
   return (
@@ -212,55 +218,89 @@ function Step1({ value, onChange }: { value: string; onChange(v: string): void }
   );
 }
 
-// ─── Step 2: Business Details + Tax Identification ─────────────────────────────
+// ─── Step 2: Smart details per user_type ──────────────────────────────────────
 
 function Step2({ form, set }: { form: FormData; set(k: keyof FormData, v: string): void }) {
+  const isBusiness   = form.user_type === 'business';
   const isFreelancer = form.user_type === 'freelancer';
+  const isTaxPro     = form.user_type === 'tax_professional';
+
+  // Freelancers / tax professionals are always sole proprietorships
+  const lockBusinessType = isFreelancer || isTaxPro;
+  const nameLabel        = isBusiness ? 'Business Name' : 'Full Name / Trading Name';
+  const namePlaceholder  = isBusiness
+    ? 'e.g. Daniel Incorporated'
+    : isFreelancer
+    ? 'e.g. Adaeze Nwosu Consulting'
+    : 'e.g. Chukwuemeka Obi & Associates';
+
+  // Auto-set business type for locked roles
+  useEffect(() => {
+    if (lockBusinessType && form.business_type !== 'sole_proprietorship') {
+      set('business_type', 'sole_proprietorship');
+    }
+  }, [form.user_type]); // eslint-disable-line
+
   return (
     <>
-      <h1 className='text-[26px] font-bold text-secondary-10 mb-1'>Business Details</h1>
+      <h1 className='text-[24px] font-bold text-secondary-10 mb-1'>Your Details</h1>
       <p className='text-sm text-secondary-30 mb-6 leading-relaxed'>
         These fields determine your applicable tax types and auto-fill your invoices and filings.
       </p>
 
       <div className='space-y-4'>
+        {/* Name */}
         <div className='flex flex-col gap-1.5'>
-          <Label>Business Name</Label>
+          <Label>{nameLabel}</Label>
           <Inp
-            placeholder={isFreelancer ? 'e.g. Adaeze Nwosu Consulting' : 'e.g. Daniel Incorporated'}
+            placeholder={namePlaceholder}
             value={form.business_name}
             onChange={(e) => set('business_name', e.target.value)}
           />
         </div>
 
-        <div className='grid grid-cols-2 gap-3'>
-          <div className='flex flex-col gap-1.5'>
-            <Label>Business Type</Label>
-            <Sel
-              placeholder='Select type'
-              value={form.business_type}
-              onChange={(e) => set('business_type', e.target.value)}>
-              {BUSINESS_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
-            </Sel>
-          </div>
-          <div className='flex flex-col gap-1.5'>
-            <Label>Industry</Label>
-            <Sel
-              placeholder='Select industry'
-              value={form.industry}
-              onChange={(e) => set('industry', e.target.value)}>
-              {INDUSTRIES.map((ind) => (
-                <option key={ind} value={ind.toLowerCase().replace(' ', '_')}>{ind}</option>
-              ))}
-            </Sel>
-          </div>
+        {/* Business type row */}
+        <div className={`grid ${isBusiness ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
+          {!lockBusinessType && (
+            <div className='flex flex-col gap-1.5'>
+              <Label>Business Type</Label>
+              <Sel
+                placeholder='Select type'
+                value={form.business_type}
+                onChange={(e) => set('business_type', e.target.value)}>
+                {BUSINESS_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </Sel>
+            </div>
+          )}
+
+          {isBusiness && (
+            <div className='flex flex-col gap-1.5'>
+              <Label>Industry</Label>
+              <Sel
+                placeholder='Select industry'
+                value={form.industry}
+                onChange={(e) => set('industry', e.target.value)}>
+                {INDUSTRIES.map((ind) => (
+                  <option key={ind} value={ind.toLowerCase().replace(' ', '_')}>{ind}</option>
+                ))}
+              </Sel>
+            </div>
+          )}
+
+          {lockBusinessType && (
+            <div className='flex flex-col gap-1.5'>
+              <Label>Registration Type</Label>
+              <Inp value='Sole Proprietorship / Individual' disabled />
+            </div>
+          )}
         </div>
 
+        {/* State */}
         <div className='grid grid-cols-2 gap-3'>
           <div className='flex flex-col gap-1.5'>
-            <Label>Country of Operation</Label>
+            <Label>Country</Label>
             <Inp value='Nigeria' disabled />
           </div>
           <div className='flex flex-col gap-1.5'>
@@ -277,40 +317,47 @@ function Step2({ form, set }: { form: FormData; set(k: keyof FormData, v: string
         </div>
       </div>
 
-      {/* Tax Identification */}
-      <div className='mt-8 mb-6'>
-        <h2 className='text-xl font-bold text-secondary-10 mb-1'>Tax Identification</h2>
-        <p className='text-sm text-secondary-30 leading-relaxed'>
-          Required by NRS to file VAT and CIT returns on your behalf. You can skip and add this
-          later in Compliance Hub
+      {/* Tax Identification — smart section */}
+      <div className='mt-7 mb-5'>
+        <h2 className='text-[17px] font-bold text-secondary-10 mb-1'>Tax Identification</h2>
+        <p className='text-xs text-secondary-30 leading-relaxed'>
+          Required by FIRS to file returns on your behalf. You can skip and add these later in Compliance Hub.
         </p>
       </div>
 
       <div className='space-y-4'>
+        {/* TIN — shown for all types */}
         <div className='flex flex-col gap-1.5'>
-          <Label>Tax Identification Number (TIN)</Label>
+          <Label optional>Tax Identification Number (TIN)</Label>
           <Inp
-            placeholder='eg. 123-223-223'
+            placeholder='e.g. 123-223-223'
             value={form.tin}
             onChange={(e) => set('tin', e.target.value)}
           />
         </div>
 
-        <div className='flex flex-col gap-1.5'>
-          <Label>CAC Registration Number</Label>
-          <Inp
-            placeholder='eg. RC 123456'
-            value={form.rc_number}
-            onChange={(e) => set('rc_number', e.target.value)}
-          />
-        </div>
+        {/* CAC — only for registered businesses */}
+        {isBusiness && (
+          <div className='flex flex-col gap-1.5'>
+            <Label optional hint='CAC Registration Number (RC number) — for incorporated companies only'>
+              CAC Registration Number
+            </Label>
+            <Inp
+              placeholder='e.g. RC 123456'
+              value={form.rc_number}
+              onChange={(e) => set('rc_number', e.target.value)}
+            />
+          </div>
+        )}
 
-        {/* NIN only shown for freelancers */}
+        {/* NIN — only for freelancers / individuals */}
         {isFreelancer && (
           <div className='flex flex-col gap-1.5'>
-            <Label>NIN (Freelancers)</Label>
+            <Label optional hint='Your National Identification Number — used for individual PAYE filings'>
+              National Identification Number (NIN)
+            </Label>
             <Inp
-              placeholder='11 Digit National Identification Number'
+              placeholder='11-digit NIN'
               value={form.nin}
               onChange={(e) => set('nin', e.target.value.replace(/\D/g, '').slice(0, 11))}
               inputMode='numeric'
@@ -323,105 +370,218 @@ function Step2({ form, set }: { form: FormData; set(k: keyof FormData, v: string
   );
 }
 
-// ─── Step 3: Connect Accounts ──────────────────────────────────────────────────
-
-const INTEGRATIONS = [
-  {
-    key:         'bank' as const,
-    label:       'Bank Account',
-    description: 'Real-time sync via Mono open banking',
-    counted:     true,  // counts toward the "X out of 2 Connected" required total
-  },
-  {
-    key:         'email' as const,
-    label:       'Email Inbox',
-    description: 'Auto-detect invoices & payment confirmations',
-    counted:     true,
-  },
-  {
-    key:         'whatsapp' as const,
-    label:       'Whatsapp (Optional)',
-    description: 'Get notified the moment a customer pays you. Tax deadlines, invoice alerts, and compliance updates – straight to WhatsApp.',
-    counted:     false,
-  },
-];
+// ─── Step 3: Logo upload ──────────────────────────────────────────────────────
 
 function Step3({
-  connections,
-  onConnect,
+  logoPreview,
+  logoFile,
+  uploading,
+  uploadError,
+  onPick,
+  onRemove,
 }: {
+  logoPreview: string | null;
+  logoFile: File | null;
+  uploading: boolean;
+  uploadError: string;
+  onPick(f: File): void;
+  onRemove(): void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <>
+      <h1 className='text-[28px] font-bold text-center text-secondary-10 leading-tight mb-2'>
+        Upload Your Logo
+      </h1>
+      <p className='text-sm text-secondary-30 text-center mb-8 leading-relaxed'>
+        Your logo appears on all PDF invoices, tax documents, and receipts.<br />
+        You can always update this later in Settings.
+      </p>
+
+      <div className='flex flex-col items-center gap-5'>
+        {/* Preview / dropzone */}
+        <div
+          onClick={() => !uploading && inputRef.current?.click()}
+          className={`relative w-40 h-40 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center
+            cursor-pointer transition-all overflow-hidden
+            ${logoPreview
+              ? 'border-primary-30 bg-primary-50'
+              : 'border-grey-10 bg-[#fafafa] hover:border-primary-20 hover:bg-primary-50'
+            }`}>
+          {logoPreview ? (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={logoPreview} alt='Logo preview' className='w-full h-full object-contain p-3' />
+              <button
+                type='button'
+                onClick={(e) => { e.stopPropagation(); onRemove(); }}
+                className='absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600 transition'>
+                <Icon icon='ph:x-bold' className='text-xs' />
+              </button>
+            </>
+          ) : (
+            <>
+              <Icon icon='ph:image-square-fill' className='text-4xl text-secondary-40 mb-2' />
+              <span className='text-xs text-secondary-30 text-center px-3 leading-snug'>Click to upload<br />PNG, JPG, SVG · Max 2MB</span>
+            </>
+          )}
+          {uploading && (
+            <div className='absolute inset-0 bg-white/70 flex items-center justify-center rounded-2xl'>
+              <Icon icon='ph:circle-notch' className='animate-spin text-2xl text-primary-40' />
+            </div>
+          )}
+        </div>
+
+        <input
+          ref={inputRef}
+          type='file'
+          accept='image/png,image/jpeg,image/svg+xml,image/webp'
+          className='hidden'
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) onPick(f);
+            e.target.value = '';
+          }}
+        />
+
+        {logoFile && !uploading && (
+          <p className='text-xs text-secondary-30 truncate max-w-[200px]'>{logoFile.name}</p>
+        )}
+
+        {uploadError && (
+          <p className='text-xs text-red-600 flex items-center gap-1'>
+            <Icon icon='ph:warning-circle' className='shrink-0' />
+            {uploadError}
+          </p>
+        )}
+
+        <button
+          type='button'
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+          className='flex items-center gap-2 border border-grey-10 bg-white text-secondary-10 text-sm font-medium
+            px-5 py-2.5 rounded-full hover:border-primary-30 hover:text-primary-30 transition-colors
+            disabled:opacity-50 disabled:cursor-not-allowed'>
+          <Icon icon='ph:upload-simple' className='text-base' />
+          {logoPreview ? 'Change logo' : 'Select logo'}
+        </button>
+      </div>
+
+      <p className='text-xs text-secondary-30 text-center mt-6 leading-relaxed'>
+        Supported formats: PNG, JPG, SVG, WEBP · Recommended: square, min 200×200 px
+      </p>
+    </>
+  );
+}
+
+// ─── Step 4: Connect accounts ─────────────────────────────────────────────────
+
+function Step4({ connections, onConnect }: {
   connections: Connections;
   onConnect(key: keyof Connections): void;
 }) {
-  const connectedCount = (['bank', 'email'] as const)
-    .filter((k) => connections[k] === 'connected').length;
-
   return (
     <>
       <h1 className='text-[28px] font-bold text-center text-secondary-10 leading-tight mb-2'>
         Connect Accounts
       </h1>
       <p className='text-sm text-secondary-30 text-center mb-8 leading-relaxed'>
-        Select what to connect now. Everything can be added or removed<br />later in Integrations.
+        Everything can be added or removed later in Integrations.
       </p>
 
       <div className='space-y-3'>
-        {INTEGRATIONS.map((intg) => {
-          const status = connections[intg.key];
-          return (
-            <div
-              key={intg.key}
-              className='flex items-center justify-between gap-4 border border-grey-10 rounded-2xl p-5 bg-[#fafafa]'>
-              <div className='flex-1 min-w-0'>
-                <p className='text-sm font-semibold text-secondary-10'>{intg.label}</p>
-                <p className='text-xs text-secondary-30 mt-1 leading-relaxed'>{intg.description}</p>
-              </div>
-
-              {status === 'connected' ? (
-                <div className='shrink-0 flex items-center gap-1.5 bg-success text-white text-sm font-medium px-4 py-2 rounded-full'>
-                  <Icon icon='ph:check' />
-                  Connected
-                </div>
-              ) : (
-                <button
-                  type='button'
-                  onClick={() => onConnect(intg.key)}
-                  disabled={status === 'connecting'}
-                  className='shrink-0 border border-grey-10 bg-white text-secondary-10 text-sm font-medium px-4 py-2
-                    rounded-full hover:border-primary-30 hover:text-primary-30 transition-colors
-                    disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5'>
-                  {status === 'connecting' && (
-                    <Icon icon='ph:circle-notch' className='animate-spin text-base' />
-                  )}
-                  {status === 'connecting' ? 'Connecting…' : 'Connect'}
-                </button>
-              )}
+        {/* Email */}
+        <div className='flex items-center justify-between gap-4 border border-grey-10 rounded-2xl p-5 bg-[#fafafa]'>
+          <div className='flex-1 min-w-0'>
+            <p className='text-sm font-semibold text-secondary-10'>Email Inbox</p>
+            <p className='text-xs text-secondary-30 mt-1 leading-relaxed'>
+              Auto-detect invoices & payment confirmations from Gmail or Outlook
+            </p>
+          </div>
+          {connections.email === 'connected' ? (
+            <div className='shrink-0 flex items-center gap-1.5 bg-success text-white text-sm font-medium px-4 py-2 rounded-full'>
+              <Icon icon='ph:check' />Connected
             </div>
-          );
-        })}
-      </div>
+          ) : (
+            <button
+              type='button'
+              onClick={() => onConnect('email')}
+              disabled={connections.email === 'connecting'}
+              className='shrink-0 border border-grey-10 bg-white text-secondary-10 text-sm font-medium px-4 py-2
+                rounded-full hover:border-primary-30 hover:text-primary-30 transition-colors
+                disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5'>
+              {connections.email === 'connecting' && (
+                <Icon icon='ph:circle-notch' className='animate-spin text-base' />
+              )}
+              {connections.email === 'connecting' ? 'Connecting…' : 'Connect'}
+            </button>
+          )}
+        </div>
 
-      <div className='mt-6 pt-5 border-t border-grey-10'>
-        <p className='text-sm font-medium text-secondary-10'>
-          {connectedCount} out of 2 Connected
-        </p>
+        {/* Mono — Coming Soon */}
+        <div className='flex items-center justify-between gap-4 border border-grey-10 rounded-2xl p-5 bg-[#fafafa] opacity-60'>
+          <div className='flex-1 min-w-0'>
+            <div className='flex items-center gap-2 mb-0.5'>
+              <p className='text-sm font-semibold text-secondary-10'>Bank Account via Mono</p>
+              <span className='text-[10px] font-semibold text-primary-30 bg-primary-50 rounded-full px-2 py-0.5 shrink-0'>
+                Coming Soon
+              </span>
+            </div>
+            <p className='text-xs text-secondary-30 leading-relaxed'>
+              Real-time bank sync via Mono open banking — launching soon
+            </p>
+          </div>
+          <button
+            type='button'
+            disabled
+            className='shrink-0 border border-grey-10 bg-white text-secondary-30 text-sm font-medium px-4 py-2
+              rounded-full cursor-not-allowed'>
+            Soon
+          </button>
+        </div>
+
+        {/* WhatsApp */}
+        <div className='flex items-center justify-between gap-4 border border-grey-10 rounded-2xl p-5 bg-[#fafafa]'>
+          <div className='flex-1 min-w-0'>
+            <div className='flex items-center gap-2 mb-0.5'>
+              <p className='text-sm font-semibold text-secondary-10'>WhatsApp Notifications</p>
+              <span className='text-[10px] font-medium text-secondary-40 bg-grey-10/60 rounded-full px-2 py-0.5 shrink-0'>Optional</span>
+            </div>
+            <p className='text-xs text-secondary-30 leading-relaxed'>
+              Get paid alerts, tax deadlines, and invoice confirmations on WhatsApp
+            </p>
+          </div>
+          <a
+            href='https://wa.me/your-taaxbro-number'
+            target='_blank'
+            rel='noopener noreferrer'
+            className='shrink-0 border border-grey-10 bg-white text-secondary-10 text-sm font-medium px-4 py-2
+              rounded-full hover:border-primary-30 hover:text-primary-30 transition-colors'>
+            Connect
+          </a>
+        </div>
       </div>
     </>
   );
 }
 
-// ─── Page ──────────────────────────────────────────────────────────────────────
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function OnboardingPage() {
   const [step, setStep]               = useState(0);
   const [form, setForm]               = useState<FormData>(EMPTY);
-  const [connections, setConnections] = useState<Connections>({ bank: 'idle', email: 'idle', whatsapp: 'idle' });
+  const [connections, setConnections] = useState<Connections>({ email: 'idle' });
+  const [logoFile, setLogoFile]       = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [uploading, setUploading]     = useState(false);
+  const [uploadError, setUploadError] = useState('');
   const [error, setError]             = useState('');
   const [loading, setLoading]         = useState(false);
   const router                        = useRouter();
   const { setUser, user }             = useAuth();
 
-  // If already onboarded (e.g. WA user who somehow lands here), skip straight to overview
+  // ── Redirect if already onboarded (WA users, or returning web users) ──────
   useEffect(() => {
     if (user?.onboarding_completed) router.replace('/overview');
   }, [user, router]);
@@ -429,83 +589,76 @@ export default function OnboardingPage() {
   const setField = (key: keyof FormData, value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
-  // ── Advance guard ────────────────────────────────────────────────────────────
+  // ── Logo file pick ────────────────────────────────────────────────────────
+  function handleLogoPick(file: File) {
+    if (file.size > 2 * 1024 * 1024) {
+      setUploadError('File too large — max 2MB');
+      return;
+    }
+    setUploadError('');
+    setLogoFile(file);
+    const reader = new FileReader();
+    reader.onload = (e) => setLogoPreview(e.target?.result as string);
+    reader.readAsDataURL(file);
+  }
+
+  function handleLogoRemove() {
+    setLogoFile(null);
+    setLogoPreview(null);
+    setUploadError('');
+  }
+
+  // ── Upload logo to backend ────────────────────────────────────────────────
+  async function uploadLogo(): Promise<string | null> {
+    if (!logoFile) return null;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', logoFile);
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/business/logo`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+      if (!res.ok) {
+        setUploadError('Logo upload failed — you can add it later in Settings.');
+        return null;
+      }
+      const data = await res.json();
+      return data.logo_url as string;
+    } catch {
+      setUploadError('Logo upload failed — you can add it later in Settings.');
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  // ── Advance guard ─────────────────────────────────────────────────────────
   function canAdvance(): boolean {
     if (step === 0) return !!form.user_type;
     if (step === 1) return !!form.business_name.trim() && !!form.business_type && !!form.state;
-    return true; // step 2: connections are opt-in; CTA becomes "Complete Verification"
+    return true; // logo and connections are optional
   }
 
-  // ── Connect handler ──────────────────────────────────────────────────────────
+  // ── Connect handler ───────────────────────────────────────────────────────
   async function handleConnect(key: keyof Connections) {
     setConnections((prev) => ({ ...prev, [key]: 'connecting' }));
-
-    if (key === 'bank') {
-      // Launch Mono Connect widget
-      // The widget calls back with a `code`; exchange via POST /api/v1/mono/connect
-      // For now, open Mono Connect in a popup (real implementation wires the JS SDK)
-      try {
-        const { MonoConnect } = await import('@mono.co/connect.js').catch(() => ({ MonoConnect: null }));
-        if (MonoConnect) {
-          const mono = new MonoConnect({
-            key: process.env.NEXT_PUBLIC_MONO_PUBLIC_KEY ?? '',
-            scope: 'auth',
-            onSuccess: async ({ code }: { code: string }) => {
-              try {
-                const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/mono/connect`, {
-                  method: 'POST',
-                  credentials: 'include',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ code }),
-                });
-                if (res.ok) {
-                  setConnections((prev) => ({ ...prev, bank: 'connected' }));
-                } else {
-                  setConnections((prev) => ({ ...prev, bank: 'idle' }));
-                }
-              } catch {
-                setConnections((prev) => ({ ...prev, bank: 'idle' }));
-              }
-            },
-            onClose: () => setConnections((prev) => ({ ...prev, bank: 'idle' })),
-          });
-          mono.open();
-        } else {
-          // Mono SDK not available in this environment — mark connected for now
-          // (remove this fallback once @mono.co/connect.js is installed)
-          await new Promise((r) => setTimeout(r, 800));
-          setConnections((prev) => ({ ...prev, bank: 'connected' }));
-        }
-      } catch {
-        setConnections((prev) => ({ ...prev, bank: 'idle' }));
-      }
-      return;
-    }
-
-    if (key === 'email') {
-      // Phase 2: Google OAuth for Gmail read-only
-      // For now: stub
-      await new Promise((r) => setTimeout(r, 600));
-      setConnections((prev) => ({ ...prev, email: 'connected' }));
-      return;
-    }
-
-    if (key === 'whatsapp') {
-      // Redirect to settings page where WA integration lives
-      // or open a mini-modal with the WA connect flow
-      await new Promise((r) => setTimeout(r, 400));
-      setConnections((prev) => ({ ...prev, whatsapp: 'connected' }));
-      return;
-    }
+    // Phase 2: real Google Gmail OAuth
+    await new Promise((r) => setTimeout(r, 600));
+    setConnections((prev) => ({ ...prev, [key]: 'connected' }));
   }
 
-  // ── Submit ───────────────────────────────────────────────────────────────────
+  // ── Submit (step 3 = logo, step 4 CTA) ───────────────────────────────────
   async function handleSubmit() {
     setError('');
     setLoading(true);
     try {
+      // Upload logo first (non-blocking — failures are swallowed with a warning)
+      if (logoFile) await uploadLogo();
+
       const payload: OnboardingPayload = {
-        user_type:    form.user_type,
+        user_type:     form.user_type,
         business_name: form.business_name,
         business_type: form.business_type,
         industry:      form.industry   || undefined,
@@ -513,7 +666,7 @@ export default function OnboardingPage() {
         tin:           form.tin        || undefined,
         rc_number:     form.rc_number  || undefined,
         nin:           form.nin        || undefined,
-        vat_registered: false, // collected later in Compliance Hub
+        vat_registered: false,
       };
       const updatedUser = await onboarding.complete(payload);
       setUser(updatedUser);
@@ -525,13 +678,39 @@ export default function OnboardingPage() {
     }
   }
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  // ── Skip from any step >= 1 ───────────────────────────────────────────────
+  async function handleSkip() {
+    if (step === 0) return; // step 0 requires a role selection
+    setError('');
+    setLoading(true);
+    try {
+      const payload: OnboardingPayload = {
+        user_type:     form.user_type || 'business',
+        business_name: form.business_name || (user?.full_name ?? 'My Business'),
+        business_type: form.business_type || 'sole_proprietorship',
+        state:         form.state || 'Lagos',
+        vat_registered: false,
+      };
+      const updatedUser = await onboarding.complete(payload);
+      setUser(updatedUser);
+      router.push('/overview');
+    } catch {
+      // If skip fails, just redirect — don't block the user
+      router.push('/overview');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  const isLastStep = step === STEP_LABELS.length - 1;
+
   return (
     <div className='w-full max-w-[560px] mx-auto'>
       <div className='bg-white rounded-3xl border border-grey-10/80 shadow-sm px-8 py-9 md:px-12 md:py-10'>
         <StepTracker current={step} />
 
-        <div className='min-h-[380px]'>
+        <div className='min-h-[360px]'>
           {step === 0 && (
             <Step1 value={form.user_type} onChange={(v) => setField('user_type', v)} />
           )}
@@ -539,7 +718,17 @@ export default function OnboardingPage() {
             <Step2 form={form} set={setField} />
           )}
           {step === 2 && (
-            <Step3 connections={connections} onConnect={handleConnect} />
+            <Step3
+              logoPreview={logoPreview}
+              logoFile={logoFile}
+              uploading={uploading}
+              uploadError={uploadError}
+              onPick={handleLogoPick}
+              onRemove={handleLogoRemove}
+            />
+          )}
+          {step === 3 && (
+            <Step4 connections={connections} onConnect={handleConnect} />
           )}
         </div>
 
@@ -558,12 +747,12 @@ export default function OnboardingPage() {
               type='button'
               onClick={() => { setError(''); setStep((s) => s - 1); }}
               className='border border-grey-10 text-secondary-10 text-sm font-medium px-6 py-3 rounded-full
-                hover:border-secondary-20 hover:text-secondary-10 transition-colors'>
+                hover:border-secondary-20 transition-colors'>
               Back
             </button>
           )}
 
-          {step < 2 ? (
+          {!isLastStep ? (
             <button
               type='button'
               disabled={!canAdvance()}
@@ -582,11 +771,23 @@ export default function OnboardingPage() {
                 disabled:opacity-60 disabled:cursor-not-allowed'>
               {loading
                 ? <Icon icon='ph:circle-notch' className='animate-spin text-base' />
-                : 'Complete Verification'
+                : 'Complete Setup'
               }
             </button>
           )}
         </div>
+
+        {/* Skip link — visible from step 1 onward */}
+        {step >= 1 && !loading && (
+          <div className='text-center mt-4'>
+            <button
+              type='button'
+              onClick={handleSkip}
+              className='text-xs text-secondary-30 hover:text-secondary-10 transition-colors'>
+              Skip for now → I'll finish this later
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

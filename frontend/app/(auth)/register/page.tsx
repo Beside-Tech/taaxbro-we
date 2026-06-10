@@ -1,23 +1,34 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Icon } from '@iconify/react';
 import { auth, ApiError } from '@/lib/api';
 
-export default function RegisterPage() {
-  const router = useRouter();
+const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
+export default function RegisterPage() {
+  const router       = useRouter();
+  const searchParams = useSearchParams();
+
+  const [fullName, setFullName]         = useState('');
+  const [email, setEmail]               = useState('');
+  const [password, setPassword]         = useState('');
+  const [confirm, setConfirm]           = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [agreed, setAgreed] = useState(false);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [showConfirm, setShowConfirm]   = useState(false);
+  const [agreed, setAgreed]             = useState(false);
+  const [error, setError]               = useState('');
+  const [loading, setLoading]           = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  // Surface Google OAuth errors
+  useEffect(() => {
+    const err = searchParams.get('error');
+    if (err === 'google_denied') setError('Google sign-up was cancelled.');
+    if (err === 'google_failed') setError('Google sign-up failed. Please try again or use email.');
+  }, [searchParams]);
 
   const validate = () => {
     if (password.length < 8) return 'Password must be at least 8 characters.';
@@ -36,12 +47,25 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await auth.signup({ full_name: fullName, email, password });
-      // Pass email to verify page via query param
       router.push(`/register/verify?email=${encodeURIComponent(email)}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleSignup = async () => {
+    setError('');
+    setGoogleLoading(true);
+    try {
+      const res  = await fetch(`${API}/api/v1/auth/google/url`, { credentials: 'include' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? 'Google OAuth unavailable');
+      window.location.href = data.url;
+    } catch (err: unknown) {
+      setGoogleLoading(false);
+      setError(err instanceof Error ? err.message : 'Could not start Google sign-up.');
     }
   };
 
@@ -52,9 +76,14 @@ export default function RegisterPage() {
 
       <button
         type='button'
-        className='w-full flex items-center justify-center gap-2 border border-grey-10 rounded-full py-3 text-sm font-medium text-dark hover:bg-grey-10/30 transition-colors mb-5'>
-        <Icon icon='logos:google-icon' className='text-xl' />
-        Continue with Google
+        disabled={googleLoading || loading}
+        onClick={handleGoogleSignup}
+        className='w-full flex items-center justify-center gap-2 border border-grey-10 rounded-full py-3 text-sm font-medium text-dark hover:bg-grey-10/30 transition-colors mb-5 disabled:opacity-60 disabled:cursor-not-allowed'>
+        {googleLoading
+          ? <Icon icon='ph:circle-notch' className='animate-spin text-xl' />
+          : <Icon icon='logos:google-icon' className='text-xl' />
+        }
+        {googleLoading ? 'Redirecting to Google…' : 'Continue with Google'}
       </button>
 
       <div className='flex items-center gap-3 mb-5'>
@@ -64,7 +93,8 @@ export default function RegisterPage() {
       </div>
 
       {error && (
-        <div className='mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700'>
+        <div className='mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2'>
+          <Icon icon='ph:warning-circle' className='shrink-0' />
           {error}
         </div>
       )}
@@ -143,7 +173,7 @@ export default function RegisterPage() {
 
         <button
           type='submit'
-          disabled={loading}
+          disabled={loading || googleLoading}
           className='w-full bg-primary-30 text-white rounded-full py-3 text-sm font-medium hover:bg-primary-40 transition-colors mt-1 disabled:opacity-60 disabled:cursor-not-allowed'>
           {loading ? 'Creating account…' : 'Create Account'}
         </button>

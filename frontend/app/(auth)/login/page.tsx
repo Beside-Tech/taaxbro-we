@@ -1,19 +1,33 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Icon } from '@iconify/react';
 import { useAuth } from '@/context/AuthContext';
 import { ApiError } from '@/lib/api';
 
+const API = process.env.NEXT_PUBLIC_API_URL ?? '';
+
 export default function LoginPage() {
   const { login } = useAuth();
+  const router       = useRouter();
+  const searchParams = useSearchParams();
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail]             = useState('');
+  const [password, setPassword]       = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [error, setError]             = useState('');
+  const [loading, setLoading]         = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  // Surface Google OAuth errors passed back via query param
+  useEffect(() => {
+    const err = searchParams.get('error');
+    if (err === 'google_denied') setError('Google sign-in was cancelled.');
+    if (err === 'google_failed') setError('Google sign-in failed. Please try again or use email.');
+    if (err === 'google_no_email') setError('Could not retrieve your Google email. Please use email sign-in.');
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,11 +35,27 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      // AuthContext.login() handles the redirect to /overview
+      // AuthContext.login() handles redirect
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setError('');
+    setGoogleLoading(true);
+    try {
+      const res  = await fetch(`${API}/api/v1/auth/google/url`, { credentials: 'include' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? 'Google OAuth unavailable');
+      // Full-page redirect to Google consent screen
+      // The backend callback will set cookies and redirect back to /overview or /onboarding
+      window.location.href = data.url;
+    } catch (err: unknown) {
+      setGoogleLoading(false);
+      setError(err instanceof Error ? err.message : 'Could not start Google sign-in.');
     }
   };
 
@@ -36,9 +66,14 @@ export default function LoginPage() {
 
       <button
         type='button'
-        className='w-full flex items-center justify-center gap-2 border border-grey-10 rounded-full py-3 text-sm font-medium text-dark hover:bg-grey-10/30 transition-colors mb-5'>
-        <Icon icon='logos:google-icon' className='text-xl' />
-        Login with Google
+        disabled={googleLoading || loading}
+        onClick={handleGoogleLogin}
+        className='w-full flex items-center justify-center gap-2 border border-grey-10 rounded-full py-3 text-sm font-medium text-dark hover:bg-grey-10/30 transition-colors mb-5 disabled:opacity-60 disabled:cursor-not-allowed'>
+        {googleLoading
+          ? <Icon icon='ph:circle-notch' className='animate-spin text-xl' />
+          : <Icon icon='logos:google-icon' className='text-xl' />
+        }
+        {googleLoading ? 'Redirecting to Google…' : 'Login with Google'}
       </button>
 
       <div className='flex items-center gap-3 mb-5'>
@@ -48,7 +83,8 @@ export default function LoginPage() {
       </div>
 
       {error && (
-        <div className='mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700'>
+        <div className='mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2'>
+          <Icon icon='ph:warning-circle' className='shrink-0' />
           {error}
         </div>
       )}
@@ -93,7 +129,7 @@ export default function LoginPage() {
 
         <button
           type='submit'
-          disabled={loading}
+          disabled={loading || googleLoading}
           className='w-full bg-primary-30 text-white rounded-full py-3 text-sm font-medium hover:bg-primary-40 transition-colors mt-1 disabled:opacity-60 disabled:cursor-not-allowed'>
           {loading ? 'Signing in…' : 'Sign In'}
         </button>
