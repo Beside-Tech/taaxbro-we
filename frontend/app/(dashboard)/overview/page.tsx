@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { Icon } from '@iconify/react';
 import TopBar from '@/components/dashboard/TopBar';
 import GreetingHeading from '@/components/dashboard/GreetingHeading';
-import { dashboard, type DashboardData } from '@/lib/api';
+import { dashboard, business, onboarding, type DashboardData } from '@/lib/api';
+import { useAuth } from '@/context/AuthContext';
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 
@@ -60,10 +61,71 @@ const typeLabel: Record<string, string> = {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+const INDUSTRIES = [
+  'Technology', 'Agriculture', 'Finance', 'Healthcare', 'Education', 'Retail',
+  'Manufacturing', 'Real Estate', 'Media', 'Legal', 'Consulting', 'Hospitality',
+  'Transportation', 'Construction', 'Energy', 'Other',
+];
+
+const USER_TYPES = [
+  {
+    value: 'business',
+    icon: 'ph:briefcase-fill',
+    label: 'I run a business',
+  },
+  {
+    value: 'freelancer',
+    icon: 'ph:laptop-fill',
+    label: "I'm a freelancer / individual",
+  },
+  {
+    value: 'tax_professional',
+    icon: 'ph:scales-fill',
+    label: "I'm a tax professional",
+  },
+];
+
 export default function OverviewPage() {
+  const { user, setUser } = useAuth();
   const [data, setData]       = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
+  const [dismissBanner, setDismissBanner] = useState(false);
+  const [openModal, setOpenModal] = useState(false);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalError, setModalError] = useState('');
+  const [modalForm, setModalForm] = useState({ user_type: '', industry: '' });
+
+  async function handleModalSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setModalLoading(true);
+    setModalError('');
+    try {
+      const profile = await business.getProfile();
+      const payload = {
+        user_type: modalForm.user_type,
+        business_name: profile.name ?? user?.full_name ?? 'My Business',
+        business_type: profile.business_type ?? 'sole_proprietorship',
+        state: profile.state ?? 'Lagos',
+        industry: modalForm.industry,
+        tin: profile.tin ?? undefined,
+        rc_number: profile.rc_number ?? undefined,
+        vat_registered: false,
+      };
+      const updatedUser = await onboarding.complete(payload);
+      setUser(updatedUser);
+      setOpenModal(false);
+    } catch (err: any) {
+      setModalError(err.message ?? 'Failed to update profile settings.');
+    } finally {
+      setModalLoading(false);
+    }
+  }
+
+  const showCompleteProfileBanner =
+    user?.onboarding_completed &&
+    (!user?.user_type || !user?.industry) &&
+    !dismissBanner;
 
   useEffect(() => {
     dashboard
@@ -96,6 +158,41 @@ export default function OverviewPage() {
           <div className='px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2'>
             <Icon icon='ph:warning-circle' className='text-lg shrink-0' />
             {error}
+          </div>
+        )}
+
+        {/* Profile Completion Banner */}
+        {showCompleteProfileBanner && (
+          <div className='relative overflow-hidden bg-gradient-to-r from-primary-40 via-primary-30 to-purple-600 rounded-2xl p-6 text-white shadow-md flex flex-col md:flex-row md:items-center justify-between gap-5 transition-all animate-fade-in'>
+            <div className='absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-xl pointer-events-none' />
+            <div className='absolute -left-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-xl pointer-events-none' />
+            
+            <div className='flex items-start gap-4 z-10'>
+              <div className='w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center shrink-0 shadow-inner'>
+                <Icon icon='ph:rocket-launch-fill' className='text-2xl text-white' />
+              </div>
+              <div>
+                <h3 className='font-bold text-lg leading-snug'>Complete Your Profile</h3>
+                <p className='text-sm text-white/80 mt-1 max-w-xl leading-relaxed'>
+                  Choose your business role and industry to unlock personalized tax calculation metrics, custom deadlines, and tailored compliance schedules.
+                </p>
+              </div>
+            </div>
+
+            <div className='flex items-center gap-3 shrink-0 z-10'>
+              <button
+                type='button'
+                onClick={() => setOpenModal(true)}
+                className='bg-white text-primary-40 text-sm font-semibold px-5 py-2.5 rounded-full hover:bg-grey-10 hover:scale-[1.02] active:scale-[0.98] transition shadow-md'>
+                Set Up Now
+              </button>
+              <button
+                type='button'
+                onClick={() => setDismissBanner(true)}
+                className='bg-white/10 text-white hover:bg-white/20 text-sm font-semibold px-4 py-2.5 rounded-full transition'>
+                Dismiss
+              </button>
+            </div>
           </div>
         )}
 
@@ -324,6 +421,105 @@ export default function OverviewPage() {
           )}
         </div>
       </main>
+
+      {/* Profile Completion Modal */}
+      {openModal && (
+        <div className='fixed inset-0 z-50 flex items-center justify-center p-4 bg-secondary-10/40 backdrop-blur-sm animate-fade-in'>
+          <div className='bg-white rounded-3xl border border-grey-10 shadow-xl max-w-md w-full p-6 md:p-8 animate-scale-up'>
+            <div className='flex items-center justify-between mb-5'>
+              <div className='flex items-center gap-2.5'>
+                <div className='w-9 h-9 rounded-lg bg-primary-50 text-primary-30 flex items-center justify-center'>
+                  <Icon icon='ph:user-circle-gear-fill' className='text-xl' />
+                </div>
+                <h2 className='text-xl font-bold text-secondary-10'>Configure Profile</h2>
+              </div>
+              <button
+                type='button'
+                onClick={() => setOpenModal(false)}
+                className='text-secondary-30 hover:text-secondary-10 transition p-1.5 hover:bg-grey-10/50 rounded-full'>
+                <Icon icon='ph:x-bold' className='text-lg' />
+              </button>
+            </div>
+
+            {modalError && (
+              <div className='mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2'>
+                <Icon icon='ph:warning-circle' className='text-base shrink-0' />
+                {modalError}
+              </div>
+            )}
+
+            <form onSubmit={handleModalSubmit} className='space-y-5'>
+              {/* Role Selection */}
+              <div className='flex flex-col gap-2'>
+                <label className='text-sm font-medium text-secondary-10'>Business Role</label>
+                <div className='grid grid-cols-1 gap-2'>
+                  {USER_TYPES.map((t) => {
+                    const selected = modalForm.user_type === t.value;
+                    return (
+                      <button
+                        key={t.value}
+                        type='button'
+                        onClick={() => setModalForm(prev => ({ ...prev, user_type: t.value }))}
+                        className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition
+                          ${selected
+                            ? 'border-primary-30 bg-primary-50/50 font-medium'
+                            : 'border-grey-10 hover:border-primary-20 bg-white'
+                          }`}>
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0
+                          ${selected ? 'bg-primary-40 text-white' : 'bg-secondary-40/10 text-secondary-30'}`}>
+                          <Icon icon={t.icon} className='text-sm' />
+                        </div>
+                        <span className={`text-xs ${selected ? 'text-primary-40 font-semibold' : 'text-secondary-10'}`}>
+                          {t.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Industry Selection */}
+              <div className='flex flex-col gap-2'>
+                <label className='text-sm font-medium text-secondary-10'>Industry / Sector</label>
+                <select
+                  required
+                  value={modalForm.industry}
+                  onChange={(e) => setModalForm(prev => ({ ...prev, industry: e.target.value }))}
+                  className='w-full border border-grey-10 rounded-xl px-4 py-3 text-sm text-secondary-10
+                    bg-white focus:outline-none focus:ring-2 focus:ring-primary-30/40 focus:border-primary-30
+                    transition appearance-none pr-10 relative'>
+                  <option value=''>Select your industry</option>
+                  {INDUSTRIES.map((ind) => (
+                    <option key={ind} value={ind.toLowerCase().replace(' ', '_')}>{ind}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Action Buttons */}
+              <div className='flex items-center gap-3 mt-6 pt-2'>
+                <button
+                  type='button'
+                  onClick={() => setOpenModal(false)}
+                  className='flex-1 border border-grey-10 text-secondary-10 text-sm font-medium px-5 py-3 rounded-full
+                    hover:bg-grey-10/40 transition-colors'>
+                  Cancel
+                </button>
+                <button
+                  type='submit'
+                  disabled={modalLoading || !modalForm.user_type || !modalForm.industry}
+                  className='flex-1 flex items-center justify-center gap-2 bg-primary-40 hover:bg-primary-30 text-white text-sm
+                    font-semibold rounded-full py-3 transition disabled:opacity-40 disabled:cursor-not-allowed shadow-md'>
+                  {modalLoading ? (
+                    <Icon icon='ph:circle-notch' className='animate-spin text-base' />
+                  ) : (
+                    'Save Configuration'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

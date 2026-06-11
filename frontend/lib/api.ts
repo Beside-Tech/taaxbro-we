@@ -70,6 +70,8 @@ export interface AuthUser {
   full_name: string | null;
   business_id: string | null;
   onboarding_completed: boolean;
+  user_type?: string | null;
+  industry?: string | null;
 }
 
 export const auth = {
@@ -189,6 +191,11 @@ export interface OnboardingPayload {
   nin?: string;                  // 11-digit NIN, freelancers only
   vat_registered: boolean;
   vat_registration_no?: string;
+  address?: string;
+  phone?: string;
+  bank_name?: string;
+  account_number?: string;
+  account_name?: string;
 }
 
 export const onboarding = {
@@ -197,5 +204,22 @@ export const onboarding = {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  },
+};
+
+export interface BusinessProfile {
+  business_id:   string;
+  name:          string | null;
+  business_type: string | null;
+  industry:      string | null;
+  state:         string | null;
+  tin:           string | null;
+  rc_number:     string | null;
+  logo_url:      string | null;
+}
+
+export const business = {
+  getProfile(): Promise<BusinessProfile> {
+    return request<BusinessProfile>('/api/v1/business/me');
   },
 };

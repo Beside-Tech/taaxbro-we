@@ -87,6 +87,11 @@ interface FormData {
   tin:           string;
   rc_number:     string;
   nin:           string;
+  address:       string;
+  phone:         string;
+  bank_name:     string;
+  account_number:string;
+  account_name:  string;
 }
 
 const EMPTY: FormData = {
@@ -98,6 +103,11 @@ const EMPTY: FormData = {
   tin:           '',
   rc_number:     '',
   nin:           '',
+  address:       '',
+  phone:         '',
+  bank_name:     '',
+  account_number:'',
+  account_name:  '',
 };
 
 interface Connections {
@@ -315,6 +325,26 @@ function Step2({ form, set }: { form: FormData; set(k: keyof FormData, v: string
             </Sel>
           </div>
         </div>
+
+        {/* Contact details */}
+        <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
+          <div className='flex flex-col gap-1.5'>
+            <Label optional hint='Support phone number to display on invoices'>Invoice Phone Number</Label>
+            <Inp
+              placeholder='e.g. +234 803 123 4567'
+              value={form.phone}
+              onChange={(e) => set('phone', e.target.value)}
+            />
+          </div>
+          <div className='flex flex-col gap-1.5'>
+            <Label optional hint='Physical business location printed on invoices'>Physical Business Address</Label>
+            <Inp
+              placeholder='e.g. 12 Joel Ogunnaike St, Ikeja'
+              value={form.address}
+              onChange={(e) => set('address', e.target.value)}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Tax Identification — smart section */}
@@ -477,9 +507,11 @@ function Step3({
 
 // ─── Step 4: Connect accounts ─────────────────────────────────────────────────
 
-function Step4({ connections, onConnect }: {
+function Step4({ connections, onConnect, form, set }: {
   connections: Connections;
   onConnect(key: keyof Connections): void;
+  form: FormData;
+  set(k: keyof FormData, v: string): void;
 }) {
   return (
     <>
@@ -560,6 +592,47 @@ function Step4({ connections, onConnect }: {
               rounded-full hover:border-primary-30 hover:text-primary-30 transition-colors'>
             Connect
           </a>
+        </div>
+      </div>
+
+      {/* Manual Bank Details */}
+      <div className='mt-7 mb-5'>
+        <h2 className='text-[17px] font-bold text-secondary-10 mb-1'>Manual Bank Account Details</h2>
+        <p className='text-xs text-secondary-30 leading-relaxed'>
+          Specify where clients should remit invoice payments if you are not using automated bank linking.
+        </p>
+      </div>
+
+      <div className='space-y-4'>
+        <div className='grid grid-cols-2 gap-3'>
+          <div className='flex flex-col gap-1.5'>
+            <Label optional>Bank Name</Label>
+            <Inp
+              placeholder='e.g. GTBank, Zenith'
+              value={form.bank_name}
+              onChange={(e) => set('bank_name', e.target.value)}
+            />
+          </div>
+          <div className='flex flex-col gap-1.5'>
+            <Label optional>Account Number</Label>
+            <Inp
+              placeholder='10-digit account number'
+              value={form.account_number}
+              onChange={(e) => set('account_number', e.target.value.replace(/\D/g, '').slice(0, 10))}
+              inputMode='numeric'
+              maxLength={10}
+            />
+          </div>
+        </div>
+        <div className='flex flex-col gap-1.5'>
+          <Label optional hint='The exact account name to print on invoices'>
+            Account Name
+          </Label>
+          <Inp
+            placeholder='e.g. Daniel Incorporated'
+            value={form.account_name}
+            onChange={(e) => set('account_name', e.target.value)}
+          />
         </div>
       </div>
     </>
@@ -667,6 +740,11 @@ export default function OnboardingPage() {
         rc_number:     form.rc_number  || undefined,
         nin:           form.nin        || undefined,
         vat_registered: false,
+        address:       form.address    || undefined,
+        phone:         form.phone      || undefined,
+        bank_name:     form.bank_name  || undefined,
+        account_number:form.account_number || undefined,
+        account_name:  form.account_name  || undefined,
       };
       const updatedUser = await onboarding.complete(payload);
       setUser(updatedUser);
@@ -690,6 +768,11 @@ export default function OnboardingPage() {
         business_type: form.business_type || 'sole_proprietorship',
         state:         form.state || 'Lagos',
         vat_registered: false,
+        address:       form.address    || undefined,
+        phone:         form.phone      || undefined,
+        bank_name:     form.bank_name  || undefined,
+        account_number:form.account_number || undefined,
+        account_name:  form.account_name  || undefined,
       };
       const updatedUser = await onboarding.complete(payload);
       setUser(updatedUser);
@@ -728,7 +811,7 @@ export default function OnboardingPage() {
             />
           )}
           {step === 3 && (
-            <Step4 connections={connections} onConnect={handleConnect} />
+            <Step4 connections={connections} onConnect={handleConnect} form={form} set={setField} />
           )}
         </div>
 
