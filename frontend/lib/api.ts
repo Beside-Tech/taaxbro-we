@@ -200,6 +200,7 @@ export interface OnboardingPayload {
   bank_name?: string;
   account_number?: string;
   account_name?: string;
+  owner_name?: string;
 }
 
 export const onboarding = {
@@ -229,6 +230,7 @@ export interface BusinessProfile {
   account_number:       string | null;
   account_name:         string | null;
   user_type:            string | null;
+  owner_name:           string | null;
 }
 
 export const business = {

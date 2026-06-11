@@ -81,6 +81,7 @@ const STEP_LABELS = ['Who are you?', 'Your Details', 'Logo & Brand', 'Connect'];
 interface FormData {
   user_type:     string;
   business_name: string;
+  owner_name:    string;
   business_type: string;
   industry:      string;
   state:         string;
@@ -97,6 +98,7 @@ interface FormData {
 const EMPTY: FormData = {
   user_type:     '',
   business_name: '',
+  owner_name:    '',
   business_type: '',
   industry:      '',
   state:         '',
@@ -260,14 +262,38 @@ function Step2({ form, set }: { form: FormData; set(k: keyof FormData, v: string
 
       <div className='space-y-4'>
         {/* Name */}
-        <div className='flex flex-col gap-1.5'>
-          <Label>{nameLabel}</Label>
-          <Inp
-            placeholder={namePlaceholder}
-            value={form.business_name}
-            onChange={(e) => set('business_name', e.target.value)}
-          />
-        </div>
+        {isBusiness ? (
+          <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
+            <div className='flex flex-col gap-1.5'>
+              <Label>Business Name</Label>
+              <Inp
+                placeholder='e.g. Daniel Incorporated'
+                value={form.business_name}
+                onChange={(e) => set('business_name', e.target.value)}
+              />
+            </div>
+            <div className='flex flex-col gap-1.5'>
+              <Label>Owner Name</Label>
+              <Inp
+                placeholder='e.g. Daniel Obi'
+                value={form.owner_name}
+                onChange={(e) => set('owner_name', e.target.value)}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className='flex flex-col gap-1.5'>
+            <Label>{nameLabel}</Label>
+            <Inp
+              placeholder={namePlaceholder}
+              value={form.business_name}
+              onChange={(e) => {
+                set('business_name', e.target.value);
+                set('owner_name', e.target.value);
+              }}
+            />
+          </div>
+        )}
 
         {/* Business type row */}
         <div className={`grid ${isBusiness ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
@@ -733,6 +759,7 @@ export default function OnboardingPage() {
       const payload: OnboardingPayload = {
         user_type:     form.user_type,
         business_name: form.business_name,
+        owner_name:    form.owner_name || undefined,
         business_type: form.business_type,
         industry:      form.industry   || undefined,
         state:         form.state,
@@ -765,6 +792,7 @@ export default function OnboardingPage() {
       const payload: OnboardingPayload = {
         user_type:     form.user_type || 'business',
         business_name: form.business_name || (user?.full_name ?? 'My Business'),
+        owner_name:    form.owner_name || (user?.full_name ?? undefined),
         business_type: form.business_type || 'sole_proprietorship',
         state:         form.state || 'Lagos',
         vat_registered: false,

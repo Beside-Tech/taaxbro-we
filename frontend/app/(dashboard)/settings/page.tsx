@@ -53,6 +53,7 @@ export default function SettingsPage() {
   // Form fields
   const [form, setForm] = useState({
     business_name: '',
+    owner_name: '',
     business_type: 'sole_proprietorship',
     user_type: 'business',
     industry: 'Other',
@@ -77,6 +78,7 @@ export default function SettingsPage() {
         setProfile(data);
         setForm({
           business_name: data.name ?? '',
+          owner_name: data.owner_name ?? '',
           business_type: data.business_type ?? 'sole_proprietorship',
           user_type: data.user_type ?? 'business',
           industry: data.industry ? (data.industry.charAt(0).toUpperCase() + data.industry.slice(1)) : 'Other',
@@ -133,6 +135,7 @@ export default function SettingsPage() {
       const payload: OnboardingPayload = {
         user_type: form.user_type,
         business_name: form.business_name,
+        owner_name: form.owner_name.trim() || undefined,
         business_type: form.business_type,
         state: form.state,
         industry: form.industry,
@@ -354,16 +357,41 @@ export default function SettingsPage() {
                   </div>
 
                   <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
-                    <label className='space-y-2 text-sm font-semibold text-secondary-10 flex flex-col'>
-                      Business/Owner Name
-                      <input
-                        type='text'
-                        value={form.business_name}
-                        onChange={(e) => setForm({ ...form, business_name: e.target.value })}
-                        required
-                        className='mt-1 w-full rounded-2xl border border-grey-10 bg-grey-0 px-4 py-3 text-sm font-medium outline-none focus:border-primary-30 focus:bg-white transition-all'
-                      />
-                    </label>
+                    {form.user_type === 'business' ? (
+                      <>
+                        <label className='space-y-2 text-sm font-semibold text-secondary-10 flex flex-col'>
+                          Business Name
+                          <input
+                            type='text'
+                            value={form.business_name}
+                            onChange={(e) => setForm({ ...form, business_name: e.target.value })}
+                            required
+                            className='mt-1 w-full rounded-2xl border border-grey-10 bg-grey-0 px-4 py-3 text-sm font-medium outline-none focus:border-primary-30 focus:bg-white transition-all'
+                          />
+                        </label>
+                        <label className='space-y-2 text-sm font-semibold text-secondary-10 flex flex-col'>
+                          Owner Name
+                          <input
+                            type='text'
+                            value={form.owner_name}
+                            onChange={(e) => setForm({ ...form, owner_name: e.target.value })}
+                            required
+                            className='mt-1 w-full rounded-2xl border border-grey-10 bg-grey-0 px-4 py-3 text-sm font-medium outline-none focus:border-primary-30 focus:bg-white transition-all'
+                          />
+                        </label>
+                      </>
+                    ) : (
+                      <label className='space-y-2 text-sm font-semibold text-secondary-10 flex flex-col md:col-span-2'>
+                        Full Name / Trading Name
+                        <input
+                          type='text'
+                          value={form.business_name}
+                          onChange={(e) => setForm({ ...form, business_name: e.target.value, owner_name: e.target.value })}
+                          required
+                          className='mt-1 w-full rounded-2xl border border-grey-10 bg-grey-0 px-4 py-3 text-sm font-medium outline-none focus:border-primary-30 focus:bg-white transition-all'
+                        />
+                      </label>
+                    )}
 
                     <label className='space-y-2 text-sm font-semibold text-secondary-10 flex flex-col'>
                       Business Type

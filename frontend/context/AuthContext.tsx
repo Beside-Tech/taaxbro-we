@@ -46,8 +46,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     await auth.logout().catch(() => {});
     setUser(null);
-    router.push('/login');
-  }, [router]);
+    window.location.href = '/login';
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, loading, login, logout, setUser }}>
