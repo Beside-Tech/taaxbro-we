@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Icon } from '@iconify/react';
 import TopBar from '@/components/dashboard/TopBar';
 import GreetingHeading from '@/components/dashboard/GreetingHeading';
-import { dashboard, business, onboarding, type DashboardData } from '@/lib/api';
+import { dashboard, business, onboarding, type DashboardData, type BusinessProfile } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
@@ -88,6 +88,7 @@ const USER_TYPES = [
 export default function OverviewPage() {
   const { user, setUser } = useAuth();
   const [data, setData]       = useState<DashboardData | null>(null);
+  const [profile, setProfile] = useState<BusinessProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
   const [dismissBanner, setDismissBanner] = useState(false);
@@ -127,12 +128,44 @@ export default function OverviewPage() {
     (!user?.user_type || !user?.industry) &&
     !dismissBanner;
 
+  const getMissingSections = () => {
+    if (!profile) return [];
+    const missing = [];
+    if (!profile.tin) missing.push('Tax ID (TIN)');
+    if (profile.user_type === 'business' && !profile.rc_number) {
+      missing.push('CAC Registration (RC/BN)');
+    } else if (profile.user_type === 'freelancer' && !profile.nin) {
+      missing.push('National Identity Number (NIN)');
+    }
+    if (!profile.address || !profile.phone) {
+      missing.push('Invoice Contact Details');
+    }
+    if (!profile.bank_name || !profile.account_number || !profile.account_name) {
+      missing.push('Remittance Bank Details');
+    }
+    return missing;
+  };
+
+  const missingSections = getMissingSections();
+  const showMissingSectionsBanner =
+    user?.onboarding_completed &&
+    user?.user_type &&
+    user?.industry &&
+    profile &&
+    missingSections.length > 0 &&
+    !dismissBanner;
+
   useEffect(() => {
     dashboard
       .get()
       .then(setData)
       .catch((e) => setError(e.message ?? 'Failed to load dashboard'))
       .finally(() => setLoading(false));
+
+    business
+      .getProfile()
+      .then(setProfile)
+      .catch((e) => console.error('Failed to load profile:', e));
   }, []);
 
   const stats = data?.stats;
@@ -190,6 +223,47 @@ export default function OverviewPage() {
                 type='button'
                 onClick={() => setDismissBanner(true)}
                 className='bg-white/10 text-white hover:bg-white/20 text-sm font-semibold px-4 py-2.5 rounded-full transition'>
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Missing Sections Checklist Banner */}
+        {showMissingSectionsBanner && (
+          <div className='relative overflow-hidden bg-white border border-secondary-40/30 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-5 transition-all animate-fade-in'>
+            <div className='absolute left-0 top-0 bottom-0 w-1.5 bg-amber-500' />
+            
+            <div className='flex items-start gap-4 z-10'>
+              <div className='w-12 h-12 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center shrink-0 shadow-inner'>
+                <Icon icon='ph:clipboard-text-bold' className='text-2xl text-amber-600' />
+              </div>
+              <div>
+                <h3 className='font-bold text-lg text-secondary-10 leading-snug'>Complete Your Account Setup</h3>
+                <p className='text-sm text-secondary-30 mt-1 max-w-xl leading-relaxed'>
+                  Some sections from onboarding were skipped. Add these now to enable professional invoices and FIRS compliance filings:
+                </p>
+                <div className='flex flex-wrap gap-x-4 gap-y-1.5 mt-3 text-xs font-semibold text-secondary-20'>
+                  {missingSections.map((sec) => (
+                    <span key={sec} className='flex items-center gap-1 bg-grey-0 border border-grey-10 px-2.5 py-1 rounded-full text-secondary-20'>
+                      <Icon icon='ph:warning-circle' className='text-amber-500 text-sm' />
+                      {sec}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className='flex items-center gap-3 shrink-0 z-10'>
+              <Link
+                href='/settings'
+                className='bg-primary-30 text-white text-sm font-semibold px-5 py-2.5 rounded-full hover:bg-primary-40 hover:scale-[1.02] active:scale-[0.98] transition shadow-sm'>
+                Complete in Settings
+              </Link>
+              <button
+                type='button'
+                onClick={() => setDismissBanner(true)}
+                className='bg-grey-0 text-secondary-30 hover:bg-grey-10 border border-grey-10 text-sm font-semibold px-4 py-2.5 rounded-full transition'>
                 Dismiss
               </button>
             </div>

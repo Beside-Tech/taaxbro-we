@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Icon } from '@iconify/react';
+import { useAuth } from '@/context/AuthContext';
 
 const navItems = [
   {
@@ -38,16 +39,19 @@ const bottomItems = [
     icon: 'ph:gear',
     iconFill: 'ph:gear-fill',
   },
-  {
-    label: 'Logout',
-    href: '/login',
-    icon: 'ph:sign-out',
-    iconFill: 'ph:sign-out-fill',
-  },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { logout } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (err) {
+      console.error('Failed to log out:', err);
+    }
+  };
 
   return (
     <aside className='fixed top-0 left-0 h-screen w-56 bg-white border-r border-r-secondary-40 flex flex-col py-6 px-4 z-40'>
@@ -98,6 +102,15 @@ export default function Sidebar() {
             </Link>
           );
         })}
+        <button
+          onClick={handleLogout}
+          className='flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-secondary-20 hover:bg-primary-50 text-left'>
+          <Icon
+            icon='ph:sign-out'
+            className='text-[1.2rem] shrink-0'
+          />
+          Logout
+        </button>
       </div>
     </aside>
   );

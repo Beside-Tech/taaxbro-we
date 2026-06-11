@@ -27,10 +27,14 @@ async function request<T>(
   options: RequestInit = {},
   retry = true,
 ): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...options.headers },
+    headers: { ...headers, ...options.headers },
   });
 
   // On 401: attempt one silent token refresh, then retry the original request.
@@ -216,10 +220,27 @@ export interface BusinessProfile {
   tin:           string | null;
   rc_number:     string | null;
   logo_url:      string | null;
+  nin:                  string | null;
+  vat_registered:       boolean;
+  vat_registration_no:  string | null;
+  address:              string | null;
+  phone:                string | null;
+  bank_name:            string | null;
+  account_number:       string | null;
+  account_name:         string | null;
+  user_type:            string | null;
 }
 
 export const business = {
   getProfile(): Promise<BusinessProfile> {
     return request<BusinessProfile>('/api/v1/business/me');
+  },
+  uploadLogo(file: File): Promise<{ logo_url: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return request<{ logo_url: string }>('/api/v1/business/logo', {
+      method: 'POST',
+      body: formData,
+    });
   },
 };
