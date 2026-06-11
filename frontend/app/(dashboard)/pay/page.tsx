@@ -5,7 +5,8 @@ import { Icon } from '@iconify/react';
 import TopBar from '@/components/dashboard/TopBar';
 import AddAccountModal from '@/components/dashboard/pay/AddAccountModal';
 import PaymentLinkModal from '@/components/dashboard/pay/PaymentLinkModal';
-import { dashboard, type DashboardData } from '@/lib/api';
+import { dashboard, integrations, type DashboardData } from '@/lib/api';
+import { useAuth } from '@/context/AuthContext';
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 
@@ -23,41 +24,8 @@ function formatDate(iso: string): { date: string; time: string } {
   };
 }
 
-const connectedAccounts = [
-  {
-    bank: 'GT Bank',
-    type: 'Current',
-    last4: '4523',
-    status: 'synced',
-    statusText: 'Synced 4 mins ago',
-  },
-  {
-    bank: 'Moniepoint MFB',
-    type: 'Current',
-    last4: '1564',
-    status: 'syncing',
-    statusText: 'Syncing',
-  },
-  {
-    bank: 'Zenith Bank',
-    type: 'Current',
-    last4: '1032',
-    status: 'error',
-    statusText: 'Error Syncing - Reconnect',
-  },
-];
-
-const statusConfig = {
-  synced: { icon: 'ph:circle-fill', color: 'text-success', label: 'Synced' },
-  syncing: {
-    icon: 'ph:arrows-clockwise',
-    color: 'text-primary-30',
-    label: 'Syncing',
-  },
-  error: { icon: 'ph:warning', color: 'text-orange-500', label: 'Error' },
-};
-
 export default function PayPage() {
+  const { user } = useAuth();
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [showPaymentLink, setShowPaymentLink] = useState(false);
   const [activeTab, setActiveTab] = useState('all');
@@ -68,13 +36,38 @@ export default function PayPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [accountsLoading, setAccountsLoading] = useState(true);
+
   useEffect(() => {
     dashboard
       .get()
       .then(setData)
       .catch((e) => setError(e.message ?? 'Failed to load dashboard data'))
       .finally(() => setLoading(false));
-  }, []);
+
+    if (user?.business_id) {
+      setAccountsLoading(true);
+      integrations
+        .getBankAccounts(user.business_id)
+        .then(setAccounts)
+        .catch((e) => console.error('Failed to load accounts:', e))
+        .finally(() => setAccountsLoading(false));
+    }
+  }, [user]);
+
+  const handleDisconnect = async (accountId: string) => {
+    if (!user?.business_id) return;
+    if (!confirm('Are you sure you want to disconnect this bank account? All associated transactions will be unlinked.')) return;
+    
+    try {
+      await integrations.disconnectBankAccount(user.business_id, accountId);
+      setAccounts(prev => prev.filter(acc => acc.id !== accountId));
+      window.location.reload();
+    } catch (err: any) {
+      alert(err.message ?? 'Failed to disconnect account');
+    }
+  };
 
   const stats = data?.stats;
   const recentTransactions = data?.recent_transactions ?? [];
@@ -208,29 +201,46 @@ export default function PayPage() {
             </button>
           </div>
           <div className='grid grid-cols-3 gap-4'>
-            {connectedAccounts.map((acc) => {
-              const sc = statusConfig[acc.status as keyof typeof statusConfig];
-              return (
-                <div
-                  key={acc.last4}
-                  className='border border-grey-10 rounded-xl p-4'>
+            {accountsLoading ? (
+              [0, 1].map((i) => (
+                <div key={i} className='border border-grey-10 rounded-xl p-4 animate-pulse'>
+                  <div className='h-4 bg-grey-10 rounded w-24 mb-3' />
+                  <div className='h-3 bg-grey-10 rounded w-32' />
+                </div>
+              ))
+            ) : accounts.length === 0 ? (
+              <div className='col-span-3 text-center py-6 border border-dashed border-grey-10 rounded-xl bg-grey-10/10'>
+                <p className='text-sm text-secondary-30'>No connected bank accounts found.</p>
+                <button 
+                  onClick={() => setShowAddAccount(true)}
+                  className='text-sm text-primary-30 hover:underline mt-1 font-medium'
+                >
+                  Link your first account now
+                </button>
+              </div>
+            ) : (
+              accounts.map((acc) => (
+                <div key={acc.id} className='border border-grey-10 rounded-xl p-4 relative group hover:border-primary-20 transition-colors shadow-sm'>
+                  <button 
+                    onClick={() => handleDisconnect(acc.id)}
+                    className='absolute top-3 right-3 text-secondary-30 hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-lg hover:bg-red-50'
+                    title="Disconnect Account"
+                  >
+                    <Icon icon="ph:trash" className="text-base" />
+                  </button>
                   <p className='text-sm font-semibold text-secondary-10 mb-1'>
-                    {acc.bank}
+                    {acc.bank_name}
                   </p>
                   <p className='text-xs text-secondary-30 mb-3'>
-                    {acc.type} ****{acc.last4}
+                    {acc.account_type || 'Savings'} ****{(acc.account_number ?? '').slice(-4)}
                   </p>
-                  <p
-                    className={`text-xs flex items-center gap-1.5 ${sc.color}`}>
-                    <Icon
-                      icon={sc.icon}
-                      className={`text-sm ${acc.status === 'syncing' ? 'animate-spin' : ''}`}
-                    />
-                    {acc.statusText}
+                  <p className='text-xs flex items-center gap-1.5 text-success font-medium'>
+                    <Icon icon='ph:circle-fill' className='text-[8px]' />
+                    Connected via {acc.provider || 'Mono'}
                   </p>
                 </div>
-              );
-            })}
+              ))
+            )}
           </div>
         </div>
 

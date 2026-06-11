@@ -68,6 +68,7 @@ export default function AddAccountModal({ onClose }: Props) {
   const [country, setCountry] = useState('');
   const [selectedBank, setSelectedBank] = useState('');
   const [search, setSearch] = useState('');
+  const [provider, setProvider] = useState<'mono' | 'okra'>('mono');
 
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
@@ -121,6 +122,25 @@ export default function AddAccountModal({ onClose }: Props) {
         });
     }
   }, []);
+
+  const connectSandbox = async () => {
+    if (!user?.business_id) {
+      setConnectError("No business connected. Please complete onboarding.");
+      return;
+    }
+    setConnecting(true);
+    setConnectError(null);
+    try {
+      const mockCode = `sandbox_${provider}_${Date.now()}`;
+      await integrations.connectMonoAccount(user.business_id, mockCode, selectedBankRef.current);
+      onClose();
+      window.location.reload();
+    } catch (err: any) {
+      setConnectError(err.message ?? "Failed to connect sandbox account.");
+    } finally {
+      setConnecting(false);
+    }
+  };
 
   const filteredBanks = banks.filter((b) =>
     b.name.toLowerCase().includes(search.toLowerCase())
@@ -245,12 +265,32 @@ export default function AddAccountModal({ onClose }: Props) {
 
         {step === 3 && (
           <>
+            <div className='mb-5'>
+              <label className='block text-sm font-medium text-secondary-10 mb-2'>Integration Provider</label>
+              <div className='grid grid-cols-2 gap-3'>
+                {(['mono', 'okra'] as const).map((prov) => (
+                  <button
+                    key={prov}
+                    type='button'
+                    onClick={() => setProvider(prov)}
+                    className={`py-2.5 rounded-xl border text-xs font-semibold capitalize transition-colors ${
+                      provider === prov
+                        ? 'border-primary-30 bg-primary-50/50 text-primary-30 font-bold'
+                        : 'border-grey-10 hover:border-primary-20 text-secondary-20 bg-white font-normal'
+                    }`}
+                  >
+                    {prov}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className='border border-grey-10 rounded-xl overflow-hidden mb-5'>
               {[
                 { label: 'Country', value: country },
                 { label: 'Bank', value: selectedBank },
                 { label: 'Currency', value: 'Nigerian Naira (₦)' },
-                { label: 'Connected Via', value: 'Mono' },
+                { label: 'Connected Via', value: provider === 'mono' ? 'Mono' : 'Okra' },
               ].map((row, i) => (
                 <div
                   key={row.label}
@@ -292,7 +332,7 @@ export default function AddAccountModal({ onClose }: Props) {
             <div className='flex items-start gap-3 bg-grey-10/40 rounded-xl p-4 mb-6'>
               <Icon icon='ph:lock-simple' className='text-lg text-secondary-30 shrink-0 mt-0.5' />
               <p className='text-xs text-secondary-30 leading-relaxed'>
-                You will be redirected to Mono&apos;s secure page to log in with your bank
+                You will be redirected to {provider === 'mono' ? 'Mono' : 'Okra'}&apos;s secure page to log in with your bank
                 credentials. Taaxbro never sees or stores your password.
               </p>
             </div>
@@ -304,23 +344,41 @@ export default function AddAccountModal({ onClose }: Props) {
               </div>
             )}
 
-            <div className='flex gap-3'>
+            <div className='flex flex-col gap-3'>
+              <div className='flex gap-3'>
+                <button
+                  type='button'
+                  disabled={connecting}
+                  onClick={() => setStep(2)}
+                  className='flex-1 py-3.5 rounded-full border border-grey-10 text-sm font-medium text-secondary-10 hover:bg-primary-50 transition-colors disabled:opacity-50'
+                >
+                  Back
+                </button>
+                <button
+                  type='button'
+                  disabled={connecting || (provider === 'mono' && !monoInstance)}
+                  onClick={() => {
+                    if (provider === 'mono') {
+                      monoInstance?.open();
+                    } else {
+                      connectSandbox();
+                    }
+                  }}
+                  className='flex-[2] py-3.5 rounded-full bg-primary-30 text-white text-sm font-medium hover:bg-primary-40 transition-colors disabled:opacity-50 flex items-center justify-center gap-2'
+                >
+                  {connecting && <Icon icon='ph:circle-notch' className='animate-spin' />}
+                  Connect Live via {provider === 'mono' ? 'Mono' : 'Okra'}
+                </button>
+              </div>
+
               <button
                 type='button'
                 disabled={connecting}
-                onClick={() => setStep(2)}
-                className='flex-1 py-3 rounded-full border border-grey-10 text-sm font-medium text-secondary-10 hover:bg-primary-50 transition-colors disabled:opacity-50'
+                onClick={connectSandbox}
+                className='w-full py-3.5 rounded-full border border-dashed border-primary-30 text-primary-30 bg-primary-50/50 hover:bg-primary-50 text-sm font-semibold transition-colors flex items-center justify-center gap-2'
               >
-                Back
-              </button>
-              <button
-                type='button'
-                disabled={connecting || !monoInstance}
-                onClick={() => monoInstance?.open()}
-                className='flex-[2] py-3 rounded-full bg-primary-30 text-white text-sm font-medium hover:bg-primary-40 transition-colors disabled:opacity-50 flex items-center justify-center gap-2'
-              >
-                {connecting && <Icon icon='ph:circle-notch' className='animate-spin' />}
-                Connect Via Mono
+                <Icon icon="ph:flask" className="text-base" />
+                Connect in Sandbox Mode (Simulation)
               </button>
             </div>
           </>

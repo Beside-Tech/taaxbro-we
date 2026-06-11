@@ -439,10 +439,18 @@ export default function OverviewPage() {
               ))}
             </div>
           ) : txs.length === 0 ? (
-            <div className='flex flex-col items-center justify-center py-16 text-secondary-30'>
-              <Icon icon='ph:receipt' className='text-4xl mb-3' />
-              <p className='text-sm'>No transactions yet</p>
-              <p className='text-xs mt-1'>Connect a bank account to see your transactions here.</p>
+            <div className='flex flex-col items-center justify-center py-16 text-secondary-30 gap-2'>
+              <Icon icon='ph:receipt' className='text-4xl mb-1' />
+              <p className='text-sm font-semibold'>No transactions yet</p>
+              <p className='text-xs text-secondary-40 max-w-sm text-center'>
+                Connect a bank account via Mono or Okra to sync your bank transactions dynamically.
+              </p>
+              <Link 
+                href="/pay"
+                className="mt-2 px-5 py-2 rounded-full bg-primary-30 text-white text-xs font-semibold hover:bg-primary-40 transition-all shadow-sm"
+              >
+                Connect Bank Account
+              </Link>
             </div>
           ) : (
             <table className='w-full text-sm'>

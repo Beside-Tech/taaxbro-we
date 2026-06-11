@@ -308,4 +308,12 @@ export const integrations = {
       body: JSON.stringify({ code, bank_name: bankName }),
     });
   },
+  getBankAccounts(businessId: string): Promise<any[]> {
+    return request<any[]>(`/api/v1/integrations/bank-accounts?business_id=${businessId}`);
+  },
+  disconnectBankAccount(businessId: string, accountId: string): Promise<any> {
+    return request<any>(`/api/v1/integrations/bank-accounts/${accountId}?business_id=${businessId}`, {
+      method: 'DELETE',
+    });
+  },
 };
