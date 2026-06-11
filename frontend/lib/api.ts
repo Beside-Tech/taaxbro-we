@@ -285,4 +285,27 @@ export const integrations = {
       method: 'POST',
     });
   },
+  sendWhatsAppOtp(businessId: string, phoneNumber: string): Promise<{ message: string }> {
+    return request<{ message: string }>(`/api/v1/integrations/whatsapp/otp/send?business_id=${businessId}`, {
+      method: 'POST',
+      body: JSON.stringify({ phone_number: phoneNumber }),
+    });
+  },
+  verifyWhatsAppOtp(businessId: string, phoneNumber: string, code: string): Promise<WhatsAppSettings> {
+    return request<WhatsAppSettings>(`/api/v1/integrations/whatsapp/otp/verify?business_id=${businessId}`, {
+      method: 'POST',
+      body: JSON.stringify({ phone_number: phoneNumber, code }),
+    });
+  },
+  disconnectWhatsApp(businessId: string): Promise<{ status: string; message: string }> {
+    return request<{ status: string; message: string }>(`/api/v1/integrations/whatsapp?business_id=${businessId}`, {
+      method: 'DELETE',
+    });
+  },
+  connectMonoAccount(businessId: string, code: string, bankName: string): Promise<any> {
+    return request<any>(`/api/v1/integrations/mono/connect?business_id=${businessId}`, {
+      method: 'POST',
+      body: JSON.stringify({ code, bank_name: bankName }),
+    });
+  },
 };

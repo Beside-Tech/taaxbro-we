@@ -53,16 +53,16 @@ export default function SettingsPage() {
   // WhatsApp settings state
   const [waSettings, setWaSettings] = useState<WhatsAppSettings | null>(null);
   const [waLoading, setWaLoading] = useState(false);
-  const [waSaving, setWaSaving] = useState(false);
-  const [waTestLoading, setWaTestLoading] = useState(false);
-  const [waTestMessage, setWaTestMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
   const [waPhoneNumber, setWaPhoneNumber] = useState('');
-  const [waEnabled, setWaEnabled] = useState(false);
-  const [waNotificationsEnabled, setWaNotificationsEnabled] = useState(true);
-  const [waOcrMode, setWaOcrMode] = useState<'manual' | 'auto'>('manual');
-  const [waAutoReplyEnabled, setWaAutoReplyEnabled] = useState(false);
-  const [waAutoReplyText, setWaAutoReplyText] = useState('');
+
+  // OTP flow state
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '', '', '']);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState(0);
+
+  const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   // Form fields
   const [form, setForm] = useState({
@@ -116,21 +116,11 @@ export default function SettingsPage() {
             .then((waData) => {
               setWaSettings(waData);
               setWaPhoneNumber(waData.phone_number ?? '');
-              setWaEnabled(waData.enabled ?? false);
-              setWaNotificationsEnabled(waData.notifications_enabled ?? true);
-              setWaOcrMode(waData.ocr_mode ?? 'manual');
-              setWaAutoReplyEnabled(waData.auto_reply_enabled ?? false);
-              setWaAutoReplyText(waData.auto_reply_text ?? '');
             })
             .catch((e) => {
               console.log('No WhatsApp integration configured yet:', e.message);
-              // Setup default values when integration is missing
+              setWaSettings(null);
               setWaPhoneNumber('');
-              setWaEnabled(false);
-              setWaNotificationsEnabled(true);
-              setWaOcrMode('manual');
-              setWaAutoReplyEnabled(false);
-              setWaAutoReplyText('');
             })
             .finally(() => setWaLoading(false));
         }
@@ -168,7 +158,6 @@ export default function SettingsPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (activeTab === 'whatsapp') {
-      await handleWhatsAppSave();
       return;
     }
     setSaving(true);
@@ -240,41 +229,143 @@ export default function SettingsPage() {
     }
   };
 
-  const handleWhatsAppSave = async () => {
-    if (!profile?.business_id) return;
-    setWaSaving(true);
-    setError(null);
-    setSaveSuccess(false);
+  // OTP flow timers and events
+  useEffect(() => {
+    if (cooldown > 0) {
+      const timer = setInterval(() => {
+        setCooldown((prev) => prev - 1);
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [cooldown]);
+
+  // Trigger verify if 6 digits are filled
+  useEffect(() => {
+    const code = otpDigits.join('');
+    if (code.length === 6 && otpSent && !otpLoading) {
+      handleVerifyOtp();
+    }
+  }, [otpDigits]);
+
+  const handleSendOtp = async (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
+    if (!profile?.business_id || !waPhoneNumber.trim()) {
+      setOtpError('Please enter a valid phone number');
+      return;
+    }
+    
+    setOtpLoading(true);
+    setOtpError(null);
     try {
-      const waData = await integrations.updateWhatsAppSettings(profile.business_id, {
-        phone_number: waPhoneNumber.trim() || undefined,
-        enabled: waEnabled,
-        notifications_enabled: waNotificationsEnabled,
-        ocr_mode: waOcrMode,
-        auto_reply_enabled: waAutoReplyEnabled,
-        auto_reply_text: waAutoReplyText.trim() || undefined,
-      });
-      setWaSettings(waData);
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      await integrations.sendWhatsAppOtp(profile.business_id, waPhoneNumber.trim());
+      setOtpSent(true);
+      setCooldown(60);
+      // Reset code inputs
+      setOtpDigits(['', '', '', '', '', '']);
+      setTimeout(() => {
+        otpRefs.current[0]?.focus();
+      }, 50);
     } catch (err: any) {
-      setError(err instanceof ApiError ? err.message : 'Failed to update WhatsApp settings.');
+      setOtpError(err instanceof ApiError ? err.message : 'Failed to send verification code.');
     } finally {
-      setWaSaving(false);
+      setOtpLoading(false);
     }
   };
 
-  const handleWhatsAppTest = async () => {
+  const handleVerifyOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const code = otpDigits.join('');
+    if (code.length < 6) {
+      setOtpError('Please enter the 6-digit code');
+      return;
+    }
+    
     if (!profile?.business_id) return;
-    setWaTestLoading(true);
-    setWaTestMessage(null);
+    
+    setOtpLoading(true);
+    setOtpError(null);
     try {
-      const res = await integrations.testWhatsAppIntegration(profile.business_id);
-      setWaTestMessage({ type: 'success', text: res.message || 'Test message sent successfully!' });
+      const waData = await integrations.verifyWhatsAppOtp(profile.business_id, waPhoneNumber.trim(), code);
+      setWaSettings(waData);
+      setWaPhoneNumber(waData.phone_number ?? '');
+      setOtpSent(false);
+      setOtpDigits(['', '', '', '', '', '']);
     } catch (err: any) {
-      setWaTestMessage({ type: 'error', text: err.message || 'Failed to send test message.' });
+      setOtpError(err instanceof ApiError ? err.message : 'Verification failed.');
     } finally {
-      setWaTestLoading(false);
+      setOtpLoading(false);
+    }
+  };
+
+  const handleOtpChange = (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
+    const val = e.target.value.replace(/[^0-9]/g, '');
+    if (!val) {
+      const newDigits = [...otpDigits];
+      newDigits[index] = '';
+      setOtpDigits(newDigits);
+      return;
+    }
+    
+    const newDigits = [...otpDigits];
+    const valDigits = val.split('').slice(0, 6 - index);
+    valDigits.forEach((d, i) => {
+      newDigits[index + i] = d;
+    });
+    setOtpDigits(newDigits);
+    
+    const nextIndex = Math.min(index + valDigits.length, 5);
+    if (nextIndex !== index) {
+      otpRefs.current[nextIndex]?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
+    if (e.key === 'Backspace') {
+      if (!otpDigits[index] && index > 0) {
+        const newDigits = [...otpDigits];
+        newDigits[index - 1] = '';
+        setOtpDigits(newDigits);
+        otpRefs.current[index - 1]?.focus();
+      } else if (otpDigits[index]) {
+        const newDigits = [...otpDigits];
+        newDigits[index] = '';
+        setOtpDigits(newDigits);
+      }
+    }
+  };
+
+  const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, 6);
+    if (pastedData) {
+      const newDigits = [...otpDigits];
+      for (let i = 0; i < pastedData.length; i++) {
+        newDigits[i] = pastedData[i];
+      }
+      setOtpDigits(newDigits);
+      const focusIndex = Math.min(pastedData.length, 5);
+      otpRefs.current[focusIndex]?.focus();
+    }
+  };
+
+  const handleDisconnect = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!profile?.business_id) return;
+    
+    if (!confirm('Are you sure you want to disconnect WhatsApp integration?')) {
+      return;
+    }
+    
+    setWaLoading(true);
+    setError(null);
+    try {
+      await integrations.disconnectWhatsApp(profile.business_id);
+      setWaSettings(null);
+      setWaPhoneNumber('');
+    } catch (err: any) {
+      setError(err instanceof ApiError ? err.message : 'Failed to disconnect WhatsApp.');
+    } finally {
+      setWaLoading(false);
     }
   };
 
@@ -704,7 +795,7 @@ export default function SettingsPage() {
                   <div>
                     <h2 className='text-xl font-bold text-secondary-10'>WhatsApp Integration</h2>
                     <p className='text-sm text-secondary-30 mt-1'>
-                      Manage your WhatsApp bot connection, receipt scanning modes, and notification parameters.
+                      Manage your WhatsApp bot connection for receipt scanning and tax assistance.
                     </p>
                   </div>
 
@@ -713,164 +804,216 @@ export default function SettingsPage() {
                       <Icon icon='ph:circle-notch' className='animate-spin text-3xl text-primary-30' />
                       <p className='text-xs text-secondary-30 mt-2'>Fetching WhatsApp settings...</p>
                     </div>
-                  ) : (
-                    <div className='space-y-6'>
-                      {/* Live WhatsApp Status Switch */}
-                      <div className='flex items-center justify-between p-5 bg-grey-0 rounded-2xl border border-grey-10'>
-                        <div>
-                          <h4 className='font-bold text-sm text-secondary-10'>WhatsApp Bot Status</h4>
-                          <p className='text-xs text-secondary-30 mt-0.5'>
-                            Turn the WhatsApp conversational tax assistant on or off for your business.
-                          </p>
-                        </div>
-                        <button
-                          type='button'
-                          onClick={() => setWaEnabled(!waEnabled)}
-                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out outline-none ${
-                            waEnabled ? 'bg-primary-30' : 'bg-secondary-40'
-                          }`}
-                        >
-                          <span
-                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                              waEnabled ? 'translate-x-5' : 'translate-x-0'
-                            }`}
-                          />
-                        </button>
-                      </div>
+                  ) : waSettings?.phone_number && waSettings?.enabled ? (
+                    /* Connected View */
+                    <div className="space-y-6">
+                      <div className="bg-white rounded-3xl p-8 border border-grey-10 shadow-sm flex flex-col items-center text-center space-y-6 animate-fade-in relative overflow-hidden">
+                        <div className="absolute -top-20 -right-20 w-48 h-48 bg-emerald-50 rounded-full blur-3xl opacity-60 pointer-events-none" />
+                        <div className="absolute -bottom-20 -left-20 w-48 h-48 bg-emerald-50 rounded-full blur-3xl opacity-60 pointer-events-none" />
 
-                      {/* Phone and OCR Mode */}
-                      <div className='grid gap-4 md:grid-cols-2'>
-                        <label className='space-y-2 text-sm font-semibold text-secondary-10 flex flex-col'>
-                          WhatsApp Business Phone Number
-                          <input
-                            type='text'
-                            value={waPhoneNumber}
-                            onChange={(e) => setWaPhoneNumber(e.target.value)}
-                            placeholder='+234 800 000 0000'
-                            className='mt-1 w-full rounded-2xl border border-grey-10 bg-grey-0 px-4 py-3 text-sm font-medium outline-none focus:border-primary-30 focus:bg-white transition-all'
-                          />
-                        </label>
-
-                        <label className='space-y-2 text-sm font-semibold text-secondary-10 flex flex-col'>
-                          OCR Processing Mode
-                          <select
-                            value={waOcrMode}
-                            onChange={(e) => setWaOcrMode(e.target.value as 'manual' | 'auto')}
-                            className='mt-1 w-full rounded-2xl border border-grey-10 bg-grey-0 px-4 py-3 text-sm font-medium outline-none focus:border-primary-30 focus:bg-white transition-all'
-                          >
-                            <option value='manual'>Verify before saving (Manual Audit)</option>
-                            <option value='auto'>Save immediately (Auto Expense)</option>
-                          </select>
-                        </label>
-                      </div>
-
-                      {/* Notifications switch */}
-                      <div className='flex items-center justify-between p-5 bg-grey-0 rounded-2xl border border-grey-10'>
-                        <div>
-                          <h4 className='font-bold text-sm text-secondary-10'>WhatsApp Notifications</h4>
-                          <p className='text-xs text-secondary-30 mt-0.5'>
-                            Receive automated filing deadline updates and tax payment confirmation receipts.
-                          </p>
-                        </div>
-                        <button
-                          type='button'
-                          onClick={() => setWaNotificationsEnabled(!waNotificationsEnabled)}
-                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out outline-none ${
-                            waNotificationsEnabled ? 'bg-primary-30' : 'bg-secondary-40'
-                          }`}
-                        >
-                          <span
-                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                              waNotificationsEnabled ? 'translate-x-5' : 'translate-x-0'
-                            }`}
-                          />
-                        </button>
-                      </div>
-
-                      {/* Auto Reply switch */}
-                      <div className='p-5 bg-grey-0 rounded-2xl border border-grey-10 space-y-4'>
-                        <div className='flex items-center justify-between'>
-                          <div>
-                            <h4 className='font-bold text-sm text-secondary-10'>Custom Auto-Reply</h4>
-                            <p className='text-xs text-secondary-30 mt-0.5'>
-                              Send an automated greeting message whenever customers message the WhatsApp bot.
-                            </p>
+                        <div className="relative">
+                          <div className="absolute inset-0 bg-emerald-500/20 rounded-full animate-ping scale-110" />
+                          <div className="relative w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                            <Icon icon="logos:whatsapp-icon" className="text-4xl text-white brightness-0 invert" />
                           </div>
+                          <div className="absolute bottom-0 right-0 w-6 h-6 bg-emerald-400 border-4 border-white rounded-full flex items-center justify-center">
+                            <div className="w-2.5 h-2.5 bg-white rounded-full animate-pulse" />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 max-w-md">
+                          <h3 className="text-xl font-bold text-secondary-10">WhatsApp Connected</h3>
+                          <p className="text-emerald-600 font-semibold text-sm flex items-center justify-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                            Linked to {waSettings.phone_number}
+                          </p>
+                          <p className="text-xs text-secondary-30 leading-relaxed pt-2">
+                            Your business is connected to the Taaxbro WhatsApp assistant. You can scan receipts, ask tax questions, and receive automated filing deadline updates directly from WhatsApp.
+                          </p>
+                        </div>
+
+                        <div className="pt-4 border-t border-grey-10 w-full flex justify-center">
                           <button
-                            type='button'
-                            onClick={() => setWaAutoReplyEnabled(!waAutoReplyEnabled)}
-                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out outline-none ${
-                              waAutoReplyEnabled ? 'bg-primary-30' : 'bg-secondary-40'
-                            }`}
+                            type="button"
+                            onClick={handleDisconnect}
+                            disabled={waLoading}
+                            className="px-6 py-3 border border-red-200 hover:bg-red-50 text-red-600 hover:text-red-700 transition rounded-full text-xs font-bold flex items-center gap-2 shadow-sm"
                           >
-                            <span
-                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                                waAutoReplyEnabled ? 'translate-x-5' : 'translate-x-0'
-                              }`}
-                            />
+                            {waLoading ? (
+                              <Icon icon="ph:circle-notch" className="animate-spin text-sm" />
+                            ) : (
+                              <Icon icon="ph:trash" className="text-sm" />
+                            )}
+                            Disconnect WhatsApp
                           </button>
                         </div>
+                      </div>
+                    </div>
+                  ) : otpSent ? (
+                    /* OTP (Verification Code) View */
+                    <div className="space-y-6 animate-fade-in">
+                      <div className="bg-white rounded-3xl p-8 border border-grey-10 shadow-sm space-y-6 relative">
+                        <div className="flex items-center gap-4">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOtpSent(false);
+                              setOtpError(null);
+                              setOtpDigits(['', '', '', '', '', '']);
+                            }}
+                            className="w-10 h-10 rounded-full border border-grey-10 hover:border-primary-30 hover:text-primary-30 transition flex items-center justify-center bg-white shadow-sm shrink-0"
+                          >
+                            <Icon icon="ph:arrow-left" className="text-lg" />
+                          </button>
+                          <div>
+                            <h3 className="text-lg font-bold text-secondary-10">Enter Verification Code</h3>
+                            <p className="text-xs text-secondary-30 mt-0.5">
+                              We sent a 6-digit code to <span className="font-semibold text-secondary-10">{waPhoneNumber}</span>
+                            </p>
+                          </div>
+                        </div>
 
-                        {waAutoReplyEnabled && (
-                          <label className='space-y-2 text-sm font-semibold text-secondary-10 flex flex-col pt-3 border-t border-grey-10 animate-fade-in'>
-                            Auto-Reply Message Content
-                            <textarea
-                              rows={3}
-                              value={waAutoReplyText}
-                              onChange={(e) => setWaAutoReplyText(e.target.value)}
-                              placeholder='Welcome to Taaxbro! Please upload a receipt or type your query...'
-                              className='mt-1 w-full rounded-2xl border border-grey-10 bg-white px-4 py-3 text-sm font-medium outline-none resize-none focus:border-primary-30 transition-all'
-                            />
+                        <div className="flex flex-col items-center space-y-4 pt-4">
+                          <div className="flex gap-2 sm:gap-3 justify-center">
+                            {otpDigits.map((digit, index) => (
+                              <input
+                                key={index}
+                                ref={(el) => {
+                                  otpRefs.current[index] = el;
+                                }}
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                maxLength={1}
+                                value={digit}
+                                onChange={(e) => handleOtpChange(e, index)}
+                                onKeyDown={(e) => handleOtpKeyDown(e, index)}
+                                onPaste={handleOtpPaste}
+                                className="w-12 h-14 sm:w-14 sm:h-16 text-center text-xl sm:text-2xl font-bold rounded-2xl border-2 border-grey-10 bg-grey-0 focus:border-primary-30 focus:bg-white focus:ring-4 focus:ring-primary-30/10 outline-none transition-all"
+                              />
+                            ))}
+                          </div>
+
+                          {otpError && (
+                            <p className="text-xs text-red-500 font-medium flex items-center gap-1.5">
+                              <Icon icon="ph:warning-circle" className="text-sm" />
+                              {otpError}
+                            </p>
+                          )}
+
+                          <div className="pt-2 text-center">
+                            {cooldown > 0 ? (
+                              <p className="text-xs text-secondary-30">
+                                Resend code in <span className="font-semibold text-secondary-10">{cooldown}s</span>
+                              </p>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={handleSendOtp}
+                                className="text-xs text-primary-30 hover:text-primary-40 font-bold transition hover:underline"
+                              >
+                                Resend verification code
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="pt-6 border-t border-grey-10 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleVerifyOtp()}
+                            disabled={otpLoading || otpDigits.some(d => !d)}
+                            className="inline-flex items-center justify-center rounded-full bg-primary-30 px-6 py-3 text-sm font-bold text-white hover:bg-primary-40 transition-colors shadow-sm disabled:opacity-55 disabled:cursor-not-allowed"
+                          >
+                            {otpLoading && <Icon icon="ph:circle-notch" className="animate-spin mr-2 text-base" />}
+                            Verify & Connect
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Unconnected (Phone number input) View */
+                    <div className="space-y-6 animate-fade-in">
+                      <div className="bg-white rounded-3xl p-8 border border-grey-10 shadow-sm space-y-6 relative overflow-hidden">
+                        <div className="absolute -top-24 -right-24 w-56 h-56 bg-primary-30/5 rounded-full blur-3xl pointer-events-none" />
+
+                        <div className="flex items-start gap-4">
+                          <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center shrink-0 border border-emerald-100/60 shadow-sm">
+                            <Icon icon="logos:whatsapp-icon" className="text-2xl" />
+                          </div>
+                          <div className="space-y-1">
+                            <h3 className="text-lg font-bold text-secondary-10">Connect WhatsApp Assistant</h3>
+                            <p className="text-xs text-secondary-30 leading-relaxed">
+                              Link your WhatsApp account to enable receipts uploading, tax calculations, and real-time query resolution directly via chat.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-4 pt-2">
+                          <label className="space-y-2 text-sm font-semibold text-secondary-10 flex flex-col">
+                            WhatsApp Phone Number
+                            <div className="relative mt-1">
+                              <input
+                                type="tel"
+                                value={waPhoneNumber}
+                                onChange={(e) => setWaPhoneNumber(e.target.value)}
+                                placeholder="e.g. +234 803 123 4567"
+                                className="w-full rounded-2xl border border-grey-10 bg-grey-0 pl-4 pr-12 py-3.5 text-sm font-medium outline-none focus:border-primary-30 focus:bg-white focus:ring-4 focus:ring-primary-30/10 transition-all placeholder:text-secondary-40"
+                              />
+                              <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none text-secondary-40">
+                                <Icon icon="ph:phone" className="text-lg" />
+                              </div>
+                            </div>
                           </label>
-                        )}
-                      </div>
 
-                      {/* Test Connection Button and message feedback */}
-                      <div className='p-5 bg-[#faf5ff] border border-purple-100 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4'>
-                        <div className='space-y-1'>
-                          <h4 className='font-bold text-sm text-purple-900'>Test WhatsApp Connection</h4>
-                          <p className='text-xs text-purple-700 leading-relaxed max-w-2xl'>
-                            Verify your credentials by sending a live test message from the platform to your WhatsApp device. Make sure the bot status is Enabled.
-                          </p>
-                        </div>
-                        <button
-                          type='button'
-                          disabled={waTestLoading || !waEnabled}
-                          onClick={handleWhatsAppTest}
-                          className='inline-flex items-center justify-center rounded-full bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-5 py-3 transition shadow-sm disabled:opacity-40 disabled:cursor-not-allowed shrink-0'
-                        >
-                          {waTestLoading && <Icon icon='ph:circle-notch' className='animate-spin mr-2 text-sm' />}
-                          Send Test Message
-                        </button>
-                      </div>
+                          {otpError && (
+                            <p className="text-xs text-red-500 font-medium flex items-center gap-1.5">
+                              <Icon icon="ph:warning-circle" className="text-sm" />
+                              {otpError}
+                            </p>
+                          )}
 
-                      {/* WhatsApp test results feedback */}
-                      {waTestMessage && (
-                        <div className={`p-4 rounded-xl text-xs font-medium border flex items-center gap-2 animate-fade-in ${
-                          waTestMessage.type === 'success' 
-                            ? 'bg-green-50 border-green-200 text-green-700' 
-                            : 'bg-red-50 border-red-200 text-red-700'
-                        }`}>
-                          <Icon icon={waTestMessage.type === 'success' ? 'ph:check-circle' : 'ph:warning-circle'} className='text-base shrink-0' />
-                          {waTestMessage.text}
+                          <div className="rounded-2xl bg-[#f8fafc] border border-blue-50/55 p-4 space-y-2">
+                            <span className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                              <Icon icon="ph:info" className="text-base text-blue-600" />
+                              Verification Code Required
+                            </span>
+                            <p className="text-[11px] text-blue-700 leading-relaxed">
+                              For security, we will send a 6-digit verification code to this phone number via WhatsApp. Ensure you can receive messages on this number.
+                            </p>
+                          </div>
                         </div>
-                      )}
+
+                        <div className="pt-6 border-t border-grey-10 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={handleSendOtp}
+                            disabled={otpLoading || !waPhoneNumber.trim()}
+                            className="inline-flex items-center justify-center rounded-full bg-primary-30 px-6 py-3 text-sm font-bold text-white hover:bg-primary-40 transition-colors shadow-sm disabled:opacity-55 disabled:cursor-not-allowed"
+                          >
+                            {otpLoading && <Icon icon="ph:circle-notch" className="animate-spin mr-2 text-base" />}
+                            Send Verification Code
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
               )}
 
               {/* Form Footer Save Button */}
-              <div className='pt-6 border-t border-grey-10 flex justify-end gap-3'>
-                <button
-                  type='submit'
-                  disabled={saving || waSaving}
-                  className='inline-flex items-center justify-center rounded-full bg-primary-30 px-6 py-3 text-sm font-bold text-white hover:bg-primary-40 transition-colors shadow-sm disabled:opacity-55 disabled:cursor-not-allowed'
-                >
-                  {(saving || waSaving) && <Icon icon='ph:circle-notch' className='animate-spin mr-2 text-base' />}
-                  Save Changes
-                </button>
-              </div>
+              {activeTab !== 'whatsapp' && (
+                <div className='pt-6 border-t border-grey-10 flex justify-end gap-3'>
+                  <button
+                    type='submit'
+                    disabled={saving}
+                    className='inline-flex items-center justify-center rounded-full bg-primary-30 px-6 py-3 text-sm font-bold text-white hover:bg-primary-40 transition-colors shadow-sm disabled:opacity-55 disabled:cursor-not-allowed'
+                  >
+                    {saving && <Icon icon='ph:circle-notch' className='animate-spin mr-2 text-base' />}
+                    Save Changes
+                  </button>
+                </div>
+              )}
             </form>
           </div>
         </div>

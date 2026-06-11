@@ -5,16 +5,11 @@ import { Icon } from '@iconify/react';
 
 interface Props {
   onClose: () => void;
+  initialRows: Array<{ category: string; vat: number; txns: number }>;
+  period: string;
 }
 
-const initialRows = [
-  { category: 'Good Sales', vat: 112875, txns: 57 },
-  { category: 'Good Sales', vat: 112875, txns: 57 },
-  { category: 'Good Sales', vat: 112875, txns: 57 },
-  { category: 'Good Sales', vat: 112875, txns: 57 },
-];
-
-export default function EditVATModal({ onClose }: Props) {
+export default function EditVATModal({ onClose, initialRows, period }: Props) {
   const [rows, setRows] = useState(initialRows.map((r) => ({ ...r, edited: false })));
 
   const total = rows.reduce((s, r) => s + r.vat, 0);
@@ -39,7 +34,7 @@ export default function EditVATModal({ onClose }: Props) {
           <Icon icon='ph:x' className='text-xl' />
         </button>
 
-        <h2 className='text-2xl font-bold text-secondary-10 mb-1'>Edit VAT Return - May 2026</h2>
+        <h2 className='text-2xl font-bold text-secondary-10 mb-1'>Edit VAT Return - {period}</h2>
         <p className='text-sm text-secondary-30 mb-5'>
           Changes trigger a re-computation. The result stays in draft until you re-approve
         </p>
@@ -84,7 +79,7 @@ export default function EditVATModal({ onClose }: Props) {
                 <p className='text-xs text-secondary-30 mt-0.5'>Updates as you edit values</p>
               </div>
               <span className='text-primary-30 font-bold text-base'>
-                ₦{total.toLocaleString()}.55
+                ₦{total.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
               </span>
             </div>
           </div>
@@ -98,7 +93,7 @@ export default function EditVATModal({ onClose }: Props) {
             <Icon icon='ph:arrows-counter-clockwise' />
             Cancel & Keep Changes
           </button>
-          <button className='flex-[1.5] py-3 rounded-full bg-primary-30 text-white text-sm font-medium hover:bg-primary-40 transition-colors flex items-center justify-center gap-1.5'>
+          <button onClick={onClose} className='flex-[1.5] py-3 rounded-full bg-primary-30 text-white text-sm font-medium hover:bg-primary-40 transition-colors flex items-center justify-center gap-1.5'>
             Save & Recompute <Icon icon='ph:arrows-counter-clockwise' />
           </button>
         </div>

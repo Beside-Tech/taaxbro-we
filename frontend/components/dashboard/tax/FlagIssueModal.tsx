@@ -5,16 +5,13 @@ import { Icon } from '@iconify/react';
 
 interface Props {
   onClose: () => void;
+  transactions: Array<{ id: string; date: string; desc: string; amount: string }>;
+  period: string;
+  authority: string;
 }
 
-const transactions = [
-  { id: 'TXN-2026-0412', date: 'May 19th', desc: 'Flutterwave Gateway Fee', amount: '₦12,500' },
-  { id: 'TXN-2026-0412', date: 'May 19th', desc: 'Flutterwave Gateway Fee', amount: '₦12,500' },
-  { id: 'TXN-2026-0412', date: 'May 19th', desc: 'Flutterwave Gateway Fee', amount: '₦12,500' },
-];
-
-export default function FlagIssueModal({ onClose }: Props) {
-  const [selected, setSelected] = useState<number[]>([0, 2]);
+export default function FlagIssueModal({ onClose, transactions, period, authority }: Props) {
+  const [selected, setSelected] = useState<number[]>([]);
   const [issueType, setIssueType] = useState('Wrong transaction included');
   const [description, setDescription] = useState('');
 
@@ -32,12 +29,12 @@ export default function FlagIssueModal({ onClose }: Props) {
         </button>
 
         <h2 className='text-2xl font-bold text-secondary-10 mb-0.5'>Flag an Issue</h2>
-        <p className='text-sm text-secondary-30 mb-5'>VAT Return 2026 | NRS</p>
+        <p className='text-sm text-secondary-30 mb-5'>VAT Return {period} | {authority}</p>
 
         <div className='bg-primary-50 border border-primary-10 rounded-xl p-4 flex gap-3 mb-6'>
           <Icon icon='ph:info' className='text-secondary-30 shrink-0 mt-0.5' />
           <p className='text-xs text-secondary-30 leading-relaxed'>
-            Flagging pauses this filing, it will not be submitted to NRS until the flag is resolved or
+            Flagging pauses this filing, it will not be submitted to {authority} until the flag is resolved or
             dismissed. Taaxbro will notify you to re-review once the issue is addressed.
           </p>
         </div>
@@ -65,16 +62,16 @@ export default function FlagIssueModal({ onClose }: Props) {
           </label>
           <div className='border border-grey-10 rounded-xl overflow-hidden'>
             <div className='bg-primary-40 text-white text-xs px-4 py-2.5 font-medium'>
-              58 transactions in this return
+              {transactions.length} transactions available to flag
             </div>
             {transactions.map((tx, i) => (
-              <label
+              <div
                 key={i}
+                onClick={() => toggle(i)}
                 className={`flex items-start gap-3 px-4 py-3.5 cursor-pointer transition-colors ${i > 0 ? 'border-t border-grey-10' : ''} ${selected.includes(i) ? 'bg-primary-50/50' : 'hover:bg-grey-10/20'}`}
               >
                 <div
                   className={`w-4 h-4 rounded border-2 shrink-0 mt-0.5 flex items-center justify-center transition-colors ${selected.includes(i) ? 'bg-primary-30 border-primary-30' : 'border-grey-10'}`}
-                  onClick={() => toggle(i)}
                 >
                   {selected.includes(i) && <Icon icon='ph:check-bold' className='text-white text-[10px]' />}
                 </div>
@@ -85,7 +82,7 @@ export default function FlagIssueModal({ onClose }: Props) {
                   <p className='text-xs text-secondary-30'>{tx.desc}</p>
                 </div>
                 <span className='text-sm text-secondary-10 font-medium shrink-0'>{tx.amount}</span>
-              </label>
+              </div>
             ))}
           </div>
         </div>
@@ -119,7 +116,7 @@ export default function FlagIssueModal({ onClose }: Props) {
           >
             Cancel
           </button>
-          <button className='flex-[2] py-3 rounded-full bg-primary-30 text-white text-sm font-medium hover:bg-primary-40 transition-colors'>
+          <button onClick={onClose} className='flex-[2] py-3 rounded-full bg-primary-30 text-white text-sm font-medium hover:bg-primary-40 transition-colors'>
             Submit Flag - Pause Filing
           </button>
         </div>

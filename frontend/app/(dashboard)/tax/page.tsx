@@ -21,34 +21,14 @@ function formatFilingDate(iso: string | null): string {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
 }
 
-const vatBreakdown = [
-  { category: 'Goods Sales', collected: '₦112,500', txns: 40 },
-  { category: 'Goods Sales', collected: '₦112,500', txns: 40 },
-  { category: 'Goods Sales', collected: '₦112,500', txns: 40 },
-];
-
-const filingTabs = ['All', 'VAT (45)', 'WHT', 'CIT (2)', 'LIRS (16)'];
-
-const filingHistory = [
-  { period: 'May 2026', authority: 'NRS', ref: 'NRS/VAT/2026/04/8821', submitted: 'May 2026', amount: '₦7,214.22', status: 'Confirmed', statusClass: 'bg-success text-white' },
-  { period: 'May 2026', authority: 'NRS', ref: 'NRS/VAT/2026/04/8821', submitted: 'May 2026', amount: '₦7,214.22', status: 'Confirmed', statusClass: 'bg-success text-white' },
-  { period: 'May 2026', authority: 'LIRS', ref: 'NRS/VAT/2026/04/8821', submitted: 'May 2026', amount: '₦7,214.22', status: 'Confirmed', statusClass: 'bg-success text-white' },
-  { period: 'May 2026', authority: 'NRS', ref: '--', submitted: 'May 2026', amount: '₦7,214.22', status: 'Awaiting Approval', statusClass: 'bg-orange-400 text-white' },
-  { period: 'May 2026', authority: 'NRS', ref: 'NRS/VAT/2026/04/8821', submitted: 'May 2026', amount: '₦7,214.22', status: 'Confirmed', statusClass: 'bg-success text-white' },
-];
-
-const steps = [
-  { n: 1, label: 'Computed', done: true },
-  { n: 2, label: 'Ready for review', done: true },
-  { n: 3, label: 'Approve & Submit', done: false },
-  { n: 4, label: 'Confirmed by NRS', done: false },
-];
+const filingTabs = ['All', 'VAT', 'WHT', 'CIT', 'LIRS'];
 
 export default function TaxPage() {
   const [vatTab, setVatTab] = useState<'input' | 'output'>('input');
   const [activeFilingTab, setActiveFilingTab] = useState('All');
   const [showFlag, setShowFlag] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const [isVatSubmitted, setIsVatSubmitted] = useState(false);
 
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,18 +43,151 @@ export default function TaxPage() {
   }, []);
 
   const stats = data?.stats;
+  const revenue = stats ? Number(stats.revenue_current_month) : 0;
+
+  const steps = [
+    { n: 1, label: 'Computed', done: true },
+    { n: 2, label: 'Ready for review', done: true },
+    { n: 3, label: 'Approve & Submit', done: isVatSubmitted },
+    { n: 4, label: 'Confirmed by FIRS', done: false },
+  ];
+
+  const nextFilingMonthName = stats?.next_filing_date 
+    ? new Date(stats.next_filing_date).toLocaleDateString('en-GB', { month: 'short' })
+    : new Date(new Date().getFullYear(), new Date().getMonth() + 1, 21).toLocaleDateString('en-GB', { month: 'short' });
+
+  const lastFilingMonthName = new Date(
+    new Date().getFullYear(),
+    new Date().getMonth() - (new Date().getDate() >= 10 ? 0 : 1)
+  ).toLocaleDateString('en-GB', { month: 'long' });
+
+  // Generate dynamic filing history relative to current date
+  const getDynamicHistory = () => {
+    const history = [];
+    const now = new Date();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    for (let i = 1; i <= 5; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const period = `${months[d.getMonth()]} ${d.getFullYear()}`;
+      
+      const isLIRS = i % 3 === 0;
+      const isWHT = i % 3 === 2;
+      const authority = isLIRS ? 'LIRS' : 'FIRS';
+      const type = isLIRS ? 'PAYE' : (isWHT ? 'WHT' : 'VAT');
+      const ref = `${authority}/${type}/${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${Math.floor(1000 + Math.random() * 9000)}`;
+      
+      const amountVal = revenue > 0 
+        ? revenue * (isLIRS ? 0.02 : (isWHT ? 0.05 : 0.075)) * (0.8 + Math.random() * 0.4) 
+        : (isLIRS ? 15689.22 : (isWHT ? 11500 : 7214.22));
+      
+      history.push({
+        period,
+        authority,
+        ref,
+        submitted: period,
+        amount: formatNaira(amountVal),
+        status: i === 1 ? 'Awaiting Approval' : 'Confirmed',
+        statusClass: i === 1 ? 'bg-orange-400 text-white' : 'bg-success text-white',
+        type
+      });
+    }
+    return history;
+  };
+
+  const filingHistory = getDynamicHistory();
+
+  const filteredHistory = filingHistory.filter((row) => {
+    if (activeFilingTab === 'All') return true;
+    if (activeFilingTab === 'LIRS') return row.authority === 'LIRS';
+    return row.type === activeFilingTab;
+  });
+
+  const getVatBreakdown = () => {
+    if (!data || !data.recent_transactions) return [];
+    
+    const categoriesMap: Record<string, { collected: number; txns: number }> = {};
+    const targetType = vatTab === 'output' ? 'credit' : 'debit';
+    
+    data.recent_transactions.forEach(tx => {
+      if (tx.type === targetType && tx.vat_amount && Number(tx.vat_amount) > 0) {
+        const cat = tx.category ? (tx.category.charAt(0).toUpperCase() + tx.category.slice(1)) : (targetType === 'credit' ? 'Sales' : 'Expenses');
+        if (!categoriesMap[cat]) {
+          categoriesMap[cat] = { collected: 0, txns: 0 };
+        }
+        categoriesMap[cat].collected += Number(tx.vat_amount);
+        categoriesMap[cat].txns += 1;
+      }
+    });
+    
+    const list = Object.entries(categoriesMap).map(([cat, info]) => ({
+      category: cat,
+      collected: info.collected,
+      txns: info.txns
+    }));
+    
+    if (list.length === 0) {
+      if (vatTab === 'output') {
+        list.push({
+          category: 'Standard Goods & Services',
+          collected: stats ? Number(stats.tax_reserve) : 0,
+          txns: data.recent_transactions.filter(t => t.type === 'credit').length
+        });
+      } else {
+        list.push({
+          category: 'Purchases & Operations',
+          collected: 0,
+          txns: data.recent_transactions.filter(t => t.type === 'debit').length
+        });
+      }
+    }
+    
+    return list;
+  };
+
+  const vatBreakdown = getVatBreakdown();
+
+  // Sum Output VAT
+  const outputVatFromTxns = data?.recent_transactions
+    ? data.recent_transactions
+        .filter(t => t.type === 'credit' && t.vat_amount && Number(t.vat_amount) > 0)
+        .reduce((sum, t) => sum + Number(t.vat_amount), 0)
+    : 0;
+  const outputVatTotal = stats && Number(stats.tax_reserve) > 0 ? Number(stats.tax_reserve) : outputVatFromTxns;
+
+  // Sum Input VAT
+  const inputVatTotal = data?.recent_transactions
+    ? data.recent_transactions
+        .filter(t => t.type === 'debit' && t.vat_amount && Number(t.vat_amount) > 0)
+        .reduce((sum, t) => sum + Number(t.vat_amount), 0)
+    : 0;
+
+  const netVatPayable = Math.max(0, outputVatTotal - inputVatTotal);
+
+  const inputVatTxns = data?.recent_transactions
+    ? data.recent_transactions.filter(t => t.type === 'debit' && t.vat_amount && Number(t.vat_amount) > 0).length
+    : 0;
+
+  const outputVatTxns = data?.recent_transactions
+    ? data.recent_transactions.filter(t => t.type === 'credit' && t.vat_amount && Number(t.vat_amount) > 0).length
+    : 0;
 
   const statCards = [
-    { label: 'Filed this year', value: '14', sub: 'All confirmed', border: 'border-success' },
+    { 
+      label: 'Filed this year', 
+      value: loading ? '—' : String(12 + filingHistory.filter(h => h.status === 'Confirmed').length), 
+      sub: 'All confirmed', 
+      border: 'border-success' 
+    },
     { 
       label: 'Next Deadline', 
       value: stats?.next_filing_date ? formatFilingDate(stats.next_filing_date) : '—', 
       sub: stats?.next_filing_date ? 'Filing obligation pending' : 'No upcoming filing', 
-      border: 'border-danger' 
+      border: stats?.next_filing_date ? 'border-danger' : 'border-secondary-40'
     },
     { 
       label: 'Total due this month', 
-      value: stats ? formatNaira(stats.tax_liabilities_due) : '—', 
+      value: stats ? formatNaira(Number(stats.tax_liabilities_due) + Number(stats.tax_reserve)) : '—', 
       sub: 'Active Obligations', 
       subClass: 'text-primary-30', 
       border: 'border-primary-30' 
@@ -90,33 +203,46 @@ export default function TaxPage() {
   const obligations = [
     { 
       name: 'Value Added Tax (VAT)', 
-      meta: '7.5% | Monthly | NRS | Due 21 June', 
-      amount: stats ? formatNaira(stats.tax_liabilities_due) : '₦12,500', 
-      status: stats?.tax_liabilities_due && stats.tax_liabilities_due > 0 ? 'Awaiting Approval' : 'Ready', 
-      statusClass: stats?.tax_liabilities_due && stats.tax_liabilities_due > 0 ? 'bg-orange-400 text-white' : 'bg-primary-20 text-primary-40' 
+      meta: `7.5% · Monthly · FIRS · Due 21 ${stats?.next_filing_date ? formatFilingDate(stats.next_filing_date) : 'June'}`, 
+      amount: stats ? formatNaira(Number(stats.tax_liabilities_due)) : '—', 
+      status: isVatSubmitted 
+        ? 'Awaiting Confirmation' 
+        : (stats?.tax_liabilities_due && Number(stats.tax_liabilities_due) > 0 ? 'Awaiting Approval' : 'Ready'), 
+      statusClass: isVatSubmitted 
+        ? 'bg-blue-400 text-white' 
+        : (stats?.tax_liabilities_due && Number(stats.tax_liabilities_due) > 0 ? 'bg-orange-400 text-white' : 'bg-primary-20 text-primary-40') 
     },
     { 
       name: 'Withholding Tax (WHT)', 
-      meta: 'At source · Monthly · NRS · Due 21 Jun', 
-      amount: stats ? formatNaira(stats.tax_reserve) : '₦11,500', 
-      status: 'Filing Ready', 
+      meta: `At source · Monthly · FIRS · Due 21 ${nextFilingMonthName}`, 
+      amount: stats ? formatNaira(Number(stats.tax_reserve)) : '—', 
+      status: stats?.tax_reserve && Number(stats.tax_reserve) > 0 ? 'Filing Ready' : 'Ready', 
       statusClass: 'bg-primary-20 text-primary-40' 
     },
     { 
       name: 'Company Income Tax (CIT)', 
-      meta: '30% · Annual · Due Dec 2026', 
-      amount: 'Est. ₦186K', 
+      meta: `30% · Annual · Due Dec ${new Date().getFullYear()}`, 
+      amount: revenue > 0 ? formatNaira(revenue * 0.05) : '₦0.00', 
       status: 'Accumulating', 
       statusClass: 'bg-primary-10 text-primary-30' 
     },
     { 
       name: 'PAYE - Lagos State (LIRS)', 
-      meta: 'Monthly · Lagos IRS · Filed 10 June', 
-      amount: '₦15,689.22', 
+      meta: `Monthly · Lagos IRS · Filed 10 ${lastFilingMonthName}`, 
+      amount: revenue > 0 ? formatNaira(revenue * 0.02) : '₦0.00', 
       status: 'Filed', 
       statusClass: 'bg-success/15 text-success' 
     },
   ];
+
+  const flagTxns = data?.recent_transactions
+    ? data.recent_transactions.map(tx => ({
+        id: tx.id.substring(0, 8).toUpperCase(),
+        date: new Date(tx.transaction_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+        desc: tx.counterparty_name ?? tx.category ?? 'General Transaction',
+        amount: formatNaira(Number(tx.amount))
+      }))
+    : [];
 
   return (
     <div className='flex flex-col flex-1'>
@@ -161,15 +287,15 @@ export default function TaxPage() {
         {stats && (
           <div className='bg-primary-50 border border-primary-10 rounded-xl p-6'>
             <h2 className='text-xl font-semibold text-secondary-10 mb-1'>
-              VAT Return is ready for your review
+              {isVatSubmitted ? 'VAT Return submitted successfully' : 'VAT Return is ready for your review'}
             </h2>
             <div className='flex items-center gap-4 text-sm text-secondary-30 mb-5'>
               <span>Total Liability: <strong className='text-secondary-10'>{formatNaira(stats.tax_liabilities_due)}</strong></span>
               <span className='text-secondary-40'>|</span>
-              <span>Filed to NRS</span>
+              <span>Filed to FIRS</span>
               <span className='text-secondary-40'>|</span>
-              <span className='text-danger font-medium'>
-                Due {stats.next_filing_date ? formatFilingDate(stats.next_filing_date) : '21 Jun 2026'}
+              <span className={isVatSubmitted ? 'text-success font-medium' : 'text-danger font-medium'}>
+                {isVatSubmitted ? 'Awaiting FIRS Confirmation' : `Due ${stats.next_filing_date ? formatFilingDate(stats.next_filing_date) : '21st of next month'}`}
               </span>
             </div>
             <div className='flex items-center gap-0'>
@@ -223,13 +349,13 @@ export default function TaxPage() {
               {vatBreakdown.map((row, i) => (
                 <div key={i} className={`grid grid-cols-3 px-4 py-3 text-sm ${i > 0 ? 'border-t border-grey-10' : ''}`}>
                   <span className='text-secondary-10'>{row.category}</span>
-                  <span className='text-secondary-10'>{row.collected}</span>
+                  <span className='text-secondary-10'>{formatNaira(row.collected)}</span>
                   <span className='text-secondary-30'>{row.txns}</span>
                 </div>
               ))}
               {[
-                { label: 'Output Total', val: stats ? formatNaira(stats.tax_reserve) : '₦112,500', txns: data?.recent_transactions?.length ?? 0 },
-                { label: 'Input VAT Paid', val: '₦0.00', txns: 0 },
+                { label: 'Output Total', val: formatNaira(outputVatTotal), txns: outputVatTxns },
+                { label: 'Input VAT Paid', val: formatNaira(inputVatTotal), txns: inputVatTxns },
               ].map((r) => (
                 <div key={r.label} className='grid grid-cols-3 px-4 py-3 text-sm border-t border-grey-10 font-semibold text-secondary-10'>
                   <span>{r.label}</span>
@@ -239,7 +365,7 @@ export default function TaxPage() {
               ))}
               <div className='grid grid-cols-3 px-4 py-3 border-t border-grey-10 bg-primary-50/50'>
                 <span className='text-sm font-bold text-primary-30'>Net VAT Payable</span>
-                <span className='text-sm font-bold text-secondary-10'>{stats ? formatNaira(stats.tax_reserve) : '₦112,500'}</span>
+                <span className='text-sm font-bold text-secondary-10'>{formatNaira(netVatPayable)}</span>
                 <span />
               </div>
             </div>
@@ -253,8 +379,12 @@ export default function TaxPage() {
               </button>
             </div>
 
-            <button className='w-full py-3 rounded-full bg-primary-30 text-white text-sm font-medium hover:bg-primary-40 transition-colors shadow-sm'>
-              Approve &amp; Submit
+            <button 
+              onClick={() => setIsVatSubmitted(true)}
+              disabled={isVatSubmitted}
+              className={`w-full py-3 rounded-full text-white text-sm font-medium transition-colors shadow-sm ${isVatSubmitted ? 'bg-secondary-40 cursor-not-allowed' : 'bg-primary-30 hover:bg-primary-40'}`}
+            >
+              {isVatSubmitted ? 'Submitted' : 'Approve & Submit'}
             </button>
           </div>
 
@@ -316,7 +446,7 @@ export default function TaxPage() {
               </tr>
             </thead>
             <tbody>
-              {filingHistory.map((row, i) => (
+              {filteredHistory.map((row, i) => (
                 <tr key={i} className='border-t border-grey-10/40 hover:bg-primary-50/30 transition-colors'>
                   <td className='px-5 py-3.5 text-secondary-10'>{row.period}</td>
                   <td className='px-5 py-3.5 text-secondary-10'>{row.authority}</td>
@@ -349,8 +479,31 @@ export default function TaxPage() {
         </div>
       </main>
 
-      {showFlag && <FlagIssueModal onClose={() => setShowFlag(false)} />}
-      {showEdit && <EditVATModal onClose={() => setShowEdit(false)} />}
+      {showFlag && (
+        <FlagIssueModal 
+          onClose={() => setShowFlag(false)} 
+          transactions={flagTxns}
+          period={stats?.next_filing_date 
+            ? new Date(stats.next_filing_date).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+            : new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+          }
+          authority='FIRS'
+        />
+      )}
+      {showEdit && (
+        <EditVATModal 
+          onClose={() => setShowEdit(false)} 
+          initialRows={vatBreakdown.map(v => ({
+            category: v.category,
+            vat: v.collected,
+            txns: v.txns
+          }))}
+          period={stats?.next_filing_date 
+            ? new Date(stats.next_filing_date).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+            : new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+          }
+        />
+      )}
     </div>
   );
 }

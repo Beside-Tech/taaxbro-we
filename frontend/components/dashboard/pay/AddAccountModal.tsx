@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Icon } from '@iconify/react';
+import { useAuth } from '@/context/AuthContext';
+import { integrations } from '@/lib/api';
 
 interface Props {
   onClose: () => void;
@@ -61,10 +63,64 @@ function StepIndicator({ current }: { current: Step }) {
 }
 
 export default function AddAccountModal({ onClose }: Props) {
+  const { user } = useAuth();
   const [step, setStep] = useState<Step>(1);
   const [country, setCountry] = useState('');
   const [selectedBank, setSelectedBank] = useState('');
   const [search, setSearch] = useState('');
+
+  const [connecting, setConnecting] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
+  const [monoInstance, setMonoInstance] = useState<any>(null);
+
+  const selectedBankRef = useRef(selectedBank);
+  useEffect(() => {
+    selectedBankRef.current = selectedBank;
+  }, [selectedBank]);
+
+  const handleSuccessRef = useRef<(code: string) => void>(() => {});
+
+  useEffect(() => {
+    handleSuccessRef.current = async (code: string) => {
+      if (!user?.business_id) {
+        setConnectError("No business connected. Please complete onboarding.");
+        return;
+      }
+      setConnecting(true);
+      setConnectError(null);
+      try {
+        await integrations.connectMonoAccount(user.business_id, code, selectedBankRef.current);
+        onClose();
+        window.location.reload();
+      } catch (err: any) {
+        setConnectError(err.message ?? "Failed to connect account.");
+      } finally {
+        setConnecting(false);
+      }
+    };
+  }, [user, onClose]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      import('@mono.co/connect.js')
+        .then((module) => {
+          const MonoConnectClass = module.MonoConnect;
+          const mono = new MonoConnectClass({
+            key: process.env.NEXT_PUBLIC_MONO_PUBLIC_KEY || '',
+            onSuccess: ({ code }: { code: string }) => {
+              handleSuccessRef.current(code);
+            },
+            onClose: () => {
+              console.log('Mono widget closed');
+            },
+          });
+          setMonoInstance(mono);
+        })
+        .catch((err) => {
+          console.error('Failed to load Mono Connect SDK', err);
+        });
+    }
+  }, []);
 
   const filteredBanks = banks.filter((b) =>
     b.name.toLowerCase().includes(search.toLowerCase())
@@ -241,17 +297,29 @@ export default function AddAccountModal({ onClose }: Props) {
               </p>
             </div>
 
+            {connectError && (
+              <div className='mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2'>
+                <Icon icon='ph:warning-circle' className='text-base shrink-0' />
+                {connectError}
+              </div>
+            )}
+
             <div className='flex gap-3'>
               <button
+                type='button'
+                disabled={connecting}
                 onClick={() => setStep(2)}
-                className='flex-1 py-3 rounded-full border border-grey-10 text-sm font-medium text-secondary-10 hover:bg-primary-50 transition-colors'
+                className='flex-1 py-3 rounded-full border border-grey-10 text-sm font-medium text-secondary-10 hover:bg-primary-50 transition-colors disabled:opacity-50'
               >
                 Back
               </button>
               <button
-                onClick={onClose}
-                className='flex-[2] py-3 rounded-full bg-primary-30 text-white text-sm font-medium hover:bg-primary-40 transition-colors'
+                type='button'
+                disabled={connecting || !monoInstance}
+                onClick={() => monoInstance?.open()}
+                className='flex-[2] py-3 rounded-full bg-primary-30 text-white text-sm font-medium hover:bg-primary-40 transition-colors disabled:opacity-50 flex items-center justify-center gap-2'
               >
+                {connecting && <Icon icon='ph:circle-notch' className='animate-spin' />}
                 Connect Via Mono
               </button>
             </div>
