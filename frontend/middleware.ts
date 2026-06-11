@@ -100,18 +100,26 @@ export function middleware(req: NextRequest) {
   // Root path
   if (pathname === '/') {
     if (isNextInternalFetch(req)) return NextResponse.next();
-    const marketingUrl = req.nextUrl.clone();
-    marketingUrl.host = req.nextUrl.host.replace(/^app\./, '');
-    return NextResponse.redirect(marketingUrl);
+    const currentHost = req.nextUrl.host;
+    if (currentHost.startsWith('app.')) {
+      const marketingUrl = req.nextUrl.clone();
+      marketingUrl.host = currentHost.replace(/^app\./, '');
+      return NextResponse.redirect(marketingUrl);
+    }
+    return NextResponse.next();
   }
 
   // Marketing-only paths
   const isMarketingOnly = MARKETING_ONLY_PATHS.some((p) => pathname.startsWith(p));
   if (isMarketingOnly) {
     if (isNextInternalFetch(req)) return NextResponse.next();
-    const marketingUrl = req.nextUrl.clone();
-    marketingUrl.host = req.nextUrl.host.replace(/^app\./, '');
-    return NextResponse.redirect(marketingUrl);
+    const currentHost = req.nextUrl.host;
+    if (currentHost.startsWith('app.')) {
+      const marketingUrl = req.nextUrl.clone();
+      marketingUrl.host = currentHost.replace(/^app\./, '');
+      return NextResponse.redirect(marketingUrl);
+    }
+    return NextResponse.next();
   }
 
   // Public auth paths — no token required (unless already logged in)
