@@ -111,7 +111,15 @@ export default function OverviewPage() {
         industry: modalForm.industry,
         tin: profile.tin ?? undefined,
         rc_number: profile.rc_number ?? undefined,
-        vat_registered: false,
+        vat_registered: profile.vat_registered ?? false,
+        vat_registration_no: profile.vat_registration_no ?? undefined,
+        owner_name: profile.owner_name ?? undefined,
+        nin: profile.nin ?? undefined,
+        address: profile.address ?? undefined,
+        phone: profile.phone ?? undefined,
+        bank_name: profile.bank_name ?? undefined,
+        account_number: profile.account_number ?? undefined,
+        account_name: profile.account_name ?? undefined,
       };
       const updatedUser = await onboarding.complete(payload);
       setUser(updatedUser);
