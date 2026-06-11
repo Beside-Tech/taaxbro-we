@@ -114,8 +114,15 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(marketingUrl);
   }
 
-  // Public auth paths — no token required
+  // Public auth paths — no token required (unless already logged in)
   if (APP_PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+    const token = req.cookies.get('access_token');
+    const redirectIfAuthPaths = ['/login', '/register', '/forgot-password', '/verify'];
+    if (token && redirectIfAuthPaths.some((p) => pathname.startsWith(p))) {
+      const overviewUrl = req.nextUrl.clone();
+      overviewUrl.pathname = '/overview';
+      return NextResponse.redirect(overviewUrl);
+    }
     return NextResponse.next();
   }
 
