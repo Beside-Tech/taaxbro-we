@@ -1,46 +1,27 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Icon } from '@iconify/react';
 import TopBar from '@/components/dashboard/TopBar';
 import AddAccountModal from '@/components/dashboard/pay/AddAccountModal';
 import PaymentLinkModal from '@/components/dashboard/pay/PaymentLinkModal';
+import { dashboard, type DashboardData } from '@/lib/api';
 
-const statCards = [
-  {
-    label: 'Total Received',
-    value: '₦4.82M',
-    footer: {
-      text: '18% vs April',
-      icon: 'ph:trend-up',
-      className: 'text-success',
-    },
-    border: 'border-success',
-    value_color: 'text-success',
-  },
-  {
-    label: 'Total Sent',
-    value: '₦4.00M',
-    footer: {
-      text: '18% vs April',
-      icon: 'ph:trend-down',
-      className: 'text-danger',
-    },
-    border: 'border-danger',
-    value_color: 'text-danger',
-  },
-  {
-    label: 'Net Flow',
-    value: '₦820K',
-    footer: {
-      text: '2 Unmatched Transactions',
-      icon: 'ph:warning',
-      className: 'text-orange-500',
-    },
-    border: 'border-primary-30',
-    value_color: 'text-primary-30',
-  },
-];
+// ─── Formatters ──────────────────────────────────────────────────────────────
+
+function formatNaira(value: number): string {
+  if (value >= 1_000_000) return `₦${(value / 1_000_000).toFixed(2)}M`;
+  if (value >= 1_000) return `₦${(value / 1_000).toFixed(0)}K`;
+  return `₦${value.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`;
+}
+
+function formatDate(iso: string): { date: string; time: string } {
+  const d = new Date(iso);
+  return {
+    date: d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+    time: d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true }),
+  };
+}
 
 const connectedAccounts = [
   {
@@ -66,87 +47,6 @@ const connectedAccounts = [
   },
 ];
 
-const tabs = [
-  { id: 'all', label: 'All' },
-  { id: 'inbound', label: 'Inbound (45)' },
-  { id: 'outbound', label: 'Outbound' },
-  { id: 'unmatched', label: 'Unmatched (2)' },
-  { id: 'tax', label: 'Tax Payment (16)' },
-];
-
-const transactions = [
-  {
-    date: '26-07-2026',
-    time: '9:14am',
-    source: 'GT Bank',
-    recipient: 'Eximps & Cloves',
-    amount: '+₦276,214',
-    invoice: 'INV-0041',
-    invoiceClass: 'bg-success text-white',
-    action: 'View',
-  },
-  {
-    date: '26-07-2026',
-    time: '9:14am',
-    source: 'Moniepoint',
-    recipient: 'Anthropic',
-    amount: '-₦30,214.44',
-    invoice: 'Not Recorded',
-    invoiceClass: 'bg-danger text-white',
-    action: 'Record',
-  },
-  {
-    date: '26-07-2026',
-    time: '9:14am',
-    source: 'GT Bank',
-    recipient: 'Amazon AWS',
-    amount: '-₦27,114.09',
-    invoice: 'VAT Filing - April',
-    invoiceClass: 'bg-orange-400 text-white',
-    action: 'View',
-  },
-  {
-    date: '26-07-2026',
-    time: '9:14am',
-    source: 'GT Bank',
-    recipient: 'Abuja Electric Disco',
-    amount: '-₦9,500.20',
-    invoice: 'Tax remittance',
-    invoiceClass: 'bg-orange-400 text-white',
-    action: 'View',
-  },
-  {
-    date: '26-07-2026',
-    time: '9:14am',
-    source: 'Amazon AWS',
-    recipient: 'Amazon AWS',
-    amount: '+₦276,214',
-    invoice: 'Tax remittance',
-    invoiceClass: 'bg-orange-400 text-white',
-    action: 'View',
-  },
-  {
-    date: '26-07-2026',
-    time: '9:14am',
-    source: 'Amazon AWS',
-    recipient: 'Amazon AWS',
-    amount: '+₦276,214',
-    invoice: 'Tax remittance',
-    invoiceClass: 'bg-orange-400 text-white',
-    action: 'View',
-  },
-  {
-    date: '26-07-2026',
-    time: '9:14am',
-    source: 'Amazon AWS',
-    recipient: 'Amazon AWS',
-    amount: '+₦276,214',
-    invoice: 'Tax remittance',
-    invoiceClass: 'bg-orange-400 text-white',
-    action: 'View',
-  },
-];
-
 const statusConfig = {
   synced: { icon: 'ph:circle-fill', color: 'text-success', label: 'Synced' },
   syncing: {
@@ -164,6 +64,90 @@ export default function PayPage() {
   const [search, setSearch] = useState('');
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    dashboard
+      .get()
+      .then(setData)
+      .catch((e) => setError(e.message ?? 'Failed to load dashboard data'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const stats = data?.stats;
+  const recentTransactions = data?.recent_transactions ?? [];
+
+  // Calculate sent/received from stats or recent txs
+  const totalReceived = stats?.revenue_current_month ?? 0;
+  const totalSent = recentTransactions
+    .filter((t) => t.type === 'debit')
+    .reduce((sum, t) => sum + t.amount, 0);
+  const netFlow = totalReceived - totalSent;
+
+  const statCards = [
+    {
+      label: 'Total Received',
+      value: formatNaira(totalReceived),
+      footer: {
+        text: stats?.revenue_change_pct != null 
+          ? `${Math.abs(stats.revenue_change_pct)}% vs last month`
+          : '18% vs April',
+        icon: stats?.revenue_change_pct != null && stats.revenue_change_pct >= 0 ? 'ph:trend-up' : 'ph:trend-down',
+        className: stats?.revenue_change_pct != null && stats.revenue_change_pct >= 0 ? 'text-success' : 'text-danger',
+      },
+      border: 'border-success',
+      value_color: 'text-success',
+    },
+    {
+      label: 'Total Sent',
+      value: formatNaira(totalSent),
+      footer: {
+        text: '6% vs April',
+        icon: 'ph:trend-up',
+        className: 'text-danger',
+      },
+      border: 'border-danger',
+      value_color: 'text-danger',
+    },
+    {
+      label: 'Net Flow',
+      value: formatNaira(netFlow),
+      footer: {
+        text: 'No Unmatched Transactions',
+        icon: 'ph:check-circle',
+        className: 'text-success',
+      },
+      border: 'border-primary-30',
+      value_color: 'text-primary-30',
+    },
+  ];
+
+  const tabs = [
+    { id: 'all', label: `All (${recentTransactions.length})` },
+    { id: 'inbound', label: `Inbound (${recentTransactions.filter(t => t.type === 'credit').length})` },
+    { id: 'outbound', label: `Outbound (${recentTransactions.filter(t => t.type === 'debit').length})` },
+    { id: 'unmatched', label: 'Unmatched (0)' },
+    { id: 'tax', label: 'Tax Payment (0)' },
+  ];
+
+  const filteredTransactions = recentTransactions.filter((tx) => {
+    // Search filter
+    if (search) {
+      const q = search.toLowerCase();
+      const matchesSource = tx.bank_name?.toLowerCase().includes(q) ?? false;
+      const matchesRecipient = tx.counterparty_name?.toLowerCase().includes(q) ?? false;
+      if (!matchesSource && !matchesRecipient) return false;
+    }
+
+    // Tab filter
+    if (activeTab === 'inbound') return tx.type === 'credit';
+    if (activeTab === 'outbound') return tx.type === 'debit';
+    if (activeTab === 'unmatched' || activeTab === 'tax') return false; // Placeholders
+    return true;
+  });
+
   return (
     <div className='flex flex-col flex-1'>
       <TopBar>
@@ -178,23 +162,39 @@ export default function PayPage() {
       </TopBar>
 
       <main className='flex-1 p-8 space-y-5 overflow-y-auto'>
+        {/* Error alert */}
+        {error && (
+          <div className='px-4 py-3 rounded-2xl bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2'>
+            <Icon icon='ph:warning-circle' className='text-lg shrink-0' />
+            {error}
+          </div>
+        )}
+
         {/* Stat cards */}
         <div className='grid grid-cols-3 gap-4'>
-          {statCards.map((card) => (
-            <div
-              key={card.label}
-              className={`bg-white rounded-xl border border-t-4  ${card.border} p-5`}>
-              <p className=' text-secondary-20 font-light mb-2'>{card.label}</p>
-              <p className={`text-2xl font-medium ${card.value_color} mb-3`}>
-                {card.value}
-              </p>
-              <p
-                className={`text-sm font-medium flex items-center gap-1 ${card.footer.className}`}>
-                <Icon icon={card.footer.icon} />
-                {card.footer.text}
-              </p>
-            </div>
-          ))}
+          {loading
+            ? [0, 1, 2].map((i) => (
+                <div key={i} className='bg-white rounded-xl border border-t-4 border-grey-10 p-5 animate-pulse'>
+                  <div className='h-3 bg-grey-10 rounded w-24 mb-3' />
+                  <div className='h-7 bg-grey-10 rounded w-32 mb-4' />
+                  <div className='h-3 bg-grey-10 rounded w-20' />
+                </div>
+              ))
+            : statCards.map((card) => (
+                <div
+                  key={card.label}
+                  className={`bg-white rounded-xl border border-t-4  ${card.border} p-5`}>
+                  <p className=' text-secondary-20 font-light mb-2'>{card.label}</p>
+                  <p className={`text-2xl font-medium ${card.value_color} mb-3`}>
+                    {card.value}
+                  </p>
+                  <p
+                    className={`text-sm font-medium flex items-center gap-1 ${card.footer.className}`}>
+                    <Icon icon={card.footer.icon} />
+                    {card.footer.text}
+                  </p>
+                </div>
+              ))}
         </div>
 
         {/* Connected Accounts */}
@@ -238,11 +238,11 @@ export default function PayPage() {
         <div className='flex gap-3 mt-6'>
           <button
             onClick={() => setShowPaymentLink(true)}
-            className='flex items-center gap-2 bg-primary-40 text-white rounded-full px-5 py-2.5 text-sm font-medium hover:bg-primary-40 transition-colors'>
+            className='flex items-center gap-2 bg-primary-40 text-white rounded-full px-5 py-2.5 text-sm font-medium hover:bg-primary-30 transition-colors shadow-sm'>
             New Payment Link{' '}
             <Icon className='text-2xl' icon='material-symbols:link-rounded' />
           </button>
-          <button className='flex items-center gap-2 bg-primary-40 text-white rounded-full px-5 py-2.5 text-sm font-medium hover:bg-primary-30 transition-colors'>
+          <button className='flex items-center gap-2 bg-primary-40 text-white rounded-full px-5 py-2.5 text-sm font-medium hover:bg-primary-30 transition-colors shadow-sm'>
             Make a Transfer{' '}
             <Icon className='text-2xl' icon='hugeicons:money-send-01' />
           </button>
@@ -298,107 +298,107 @@ export default function PayPage() {
           </div>
 
           {/* Table */}
-          <table className='w-full text-sm'>
-            <thead>
-              <tr className='bg-primary-40 text-white text-xs'>
-                <th className='text-left px-6 py-3 font-medium'>
-                  <span className='flex items-center gap-1.5'>
-                    <Icon icon='ph:calendar-blank' />
-                    Date
-                  </span>
-                </th>
-                <th className='text-left px-4 py-3 font-medium'>
-                  <span className='flex items-center gap-1.5'>
-                    <Icon icon='ph:git-branch' />
-                    Source
-                  </span>
-                </th>
-                <th className='text-left px-4 py-3 font-medium'>
-                  <span className='flex items-center gap-1.5'>
-                    <Icon icon='ph:user' />
-                    Sender/Recipient
-                  </span>
-                </th>
-                <th className='text-left px-4 py-3 font-medium'>
-                  <span className='flex items-center gap-1.5'>
-                    <Icon icon='ph:currency-circle-dollar' />
-                    Amount
-                  </span>
-                </th>
-                <th className='text-left px-4 py-3 font-medium'>
-                  <span className='flex items-center gap-1.5'>
-                    <Icon icon='ph:receipt' />
-                    Invoice
-                  </span>
-                </th>
-                <th className='text-left px-4 py-3 font-medium'>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {transactions
-                .filter(
-                  (tx) =>
-                    !search ||
-                    tx.source.toLowerCase().includes(search.toLowerCase()) ||
-                    tx.recipient.toLowerCase().includes(search.toLowerCase()),
-                )
-                .map((tx, i) => (
-                  <tr
-                    key={i}
-                    className='border-t border-grey-10/40 hover:bg-primary-50/30 transition-colors'>
-                    <td className='px-6 py-3.5 text-secondary-20'>
-                      <div className='text-sm'>{tx.date}</div>
-                      <div className='text-xs text-secondary-30'>{tx.time}</div>
-                    </td>
-                    <td className='px-4 py-3.5 text-sm text-secondary-20'>
-                      {tx.source}
-                    </td>
-                    <td className='px-4 py-3.5 text-sm text-secondary-20'>
-                      {tx.recipient}
-                    </td>
-                    <td
-                      className={`px-4 py-3.5 text-sm font-medium ${tx.amount.startsWith('+') ? 'text-success' : 'text-danger'}`}>
-                      {tx.amount}
-                    </td>
-                    <td className='px-4 py-3.5'>
-                      <span
-                        className={`text-xs px-2.5 py-1 rounded-full font-medium ${tx.invoiceClass}`}>
-                        {tx.invoice}
-                      </span>
-                    </td>
-                    <td className='px-4 py-3.5'>
-                      <button className='text-primary-30 text-sm font-medium hover:underline'>
-                        {tx.action}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
+          {loading ? (
+            <div className='p-6 space-y-3 animate-pulse'>
+              {[0, 1, 2].map((i) => (
+                <div key={i} className='flex gap-4'>
+                  <div className='h-4 bg-grey-10 rounded w-24' />
+                  <div className='h-4 bg-grey-10 rounded w-16' />
+                  <div className='h-4 bg-grey-10 rounded w-32' />
+                  <div className='h-4 bg-grey-10 rounded w-20' />
+                </div>
+              ))}
+            </div>
+          ) : filteredTransactions.length === 0 ? (
+            <div className='flex flex-col items-center justify-center py-16 text-secondary-30'>
+              <Icon icon='ph:receipt' className='text-4xl mb-3' />
+              <p className='text-sm'>No transactions found</p>
+            </div>
+          ) : (
+            <table className='w-full text-sm'>
+              <thead>
+                <tr className='bg-primary-40 text-white text-xs'>
+                  <th className='text-left px-6 py-3 font-medium'>
+                    <span className='flex items-center gap-1.5'>
+                      <Icon icon='ph:calendar-blank' />
+                      Date
+                    </span>
+                  </th>
+                  <th className='text-left px-4 py-3 font-medium'>
+                    <span className='flex items-center gap-1.5'>
+                      <Icon icon='ph:git-branch' />
+                      Source
+                    </span>
+                  </th>
+                  <th className='text-left px-4 py-3 font-medium'>
+                    <span className='flex items-center gap-1.5'>
+                      <Icon icon='ph:user' />
+                      Sender/Recipient
+                    </span>
+                  </th>
+                  <th className='text-left px-4 py-3 font-medium'>
+                    <span className='flex items-center gap-1.5'>
+                      <Icon icon='ph:currency-circle-dollar' />
+                      Amount
+                    </span>
+                  </th>
+                  <th className='text-left px-4 py-3 font-medium'>
+                    <span className='flex items-center gap-1.5'>
+                      <Icon icon='ph:receipt' />
+                      Category
+                    </span>
+                  </th>
+                  <th className='text-left px-4 py-3 font-medium'>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredTransactions.map((tx) => {
+                  const { date: d, time: t } = formatDate(tx.transaction_date);
+                  const isCredit = tx.type === 'credit';
+                  return (
+                    <tr
+                      key={tx.id}
+                      className='border-t border-grey-10/40 hover:bg-primary-50/30 transition-colors'>
+                      <td className='px-6 py-3.5 text-secondary-20'>
+                        <div className='text-sm'>{d}</div>
+                        <div className='text-xs text-secondary-30'>{t}</div>
+                      </td>
+                      <td className='px-4 py-3.5 text-sm text-secondary-20'>
+                        {tx.bank_name ?? '—'}
+                      </td>
+                      <td className='px-4 py-3.5 text-sm text-secondary-20'>
+                        {tx.counterparty_name ?? '—'}
+                      </td>
+                      <td
+                        className={`px-4 py-3.5 text-sm font-medium ${isCredit ? 'text-success' : 'text-danger'}`}>
+                        {isCredit ? '+' : '-'}{formatNaira(tx.amount)}
+                      </td>
+                      <td className='px-4 py-3.5'>
+                        <span
+                          className={`text-xs px-2.5 py-1 rounded-full font-medium ${isCredit ? 'bg-success text-white' : 'bg-danger/10 text-danger'}`}>
+                          {tx.category ?? 'Uncategorized'}
+                        </span>
+                      </td>
+                      <td className='px-4 py-3.5'>
+                        <button className='text-primary-30 text-sm font-medium hover:underline'>
+                          View
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
 
           {/* Pagination */}
           <div className='flex items-center justify-between px-6 py-4 border-t border-grey-10/60'>
-            <p className='text-xs text-secondary-30'>Showing 7 out of 268</p>
+            <p className='text-xs text-secondary-30'>
+              Showing {filteredTransactions.length} of {filteredTransactions.length}
+            </p>
             <div className='flex items-center gap-1'>
-              {[1, 2, 3].map((n) => (
-                <button
-                  key={n}
-                  className={`w-8 h-8 rounded-full text-sm flex items-center justify-center transition-colors ${
-                    n === 1
-                      ? 'bg-primary-30 text-white'
-                      : 'border border-grey-10 text-secondary-10 hover:bg-primary-50'
-                  }`}>
-                  {n}
-                </button>
-              ))}
-              <span className='w-8 h-8 flex items-center justify-center text-secondary-30 text-sm'>
-                ...
-              </span>
-              <button className='w-8 h-8 rounded-full border border-grey-10 text-sm text-secondary-10 flex items-center justify-center hover:bg-primary-50 transition-colors'>
-                12
-              </button>
-              <button className='w-8 h-8 rounded-full border border-grey-10 text-secondary-10 flex items-center justify-center hover:bg-primary-50 transition-colors'>
-                <Icon icon='ph:arrow-right' className='text-sm' />
+              <button className='w-8 h-8 rounded-full bg-primary-30 text-white text-sm flex items-center justify-center transition-colors'>
+                1
               </button>
             </div>
             <div className='flex items-center gap-2 text-xs text-secondary-30'>

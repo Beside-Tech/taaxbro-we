@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Icon } from '@iconify/react';
 import TopBar from '@/components/dashboard/TopBar';
 import { useAuth } from '@/context/AuthContext';
-import { business, onboarding, ApiError, type BusinessProfile, type OnboardingPayload } from '@/lib/api';
+import { business, onboarding, ApiError, integrations, type BusinessProfile, type OnboardingPayload, type WhatsAppSettings } from '@/lib/api';
 
 const NIGERIAN_STATES = [
   'Abia', 'Adamawa', 'Akwa Ibom', 'Anambra', 'Bauchi', 'Bayelsa', 'Benue', 'Borno',
@@ -50,6 +50,20 @@ export default function SettingsPage() {
   const [logoError, setLogoError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // WhatsApp settings state
+  const [waSettings, setWaSettings] = useState<WhatsAppSettings | null>(null);
+  const [waLoading, setWaLoading] = useState(false);
+  const [waSaving, setWaSaving] = useState(false);
+  const [waTestLoading, setWaTestLoading] = useState(false);
+  const [waTestMessage, setWaTestMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const [waPhoneNumber, setWaPhoneNumber] = useState('');
+  const [waEnabled, setWaEnabled] = useState(false);
+  const [waNotificationsEnabled, setWaNotificationsEnabled] = useState(true);
+  const [waOcrMode, setWaOcrMode] = useState<'manual' | 'auto'>('manual');
+  const [waAutoReplyEnabled, setWaAutoReplyEnabled] = useState(false);
+  const [waAutoReplyText, setWaAutoReplyText] = useState('');
+
   // Form fields
   const [form, setForm] = useState({
     business_name: '',
@@ -94,6 +108,32 @@ export default function SettingsPage() {
           account_number: data.account_number ?? '',
           account_name: data.account_name ?? '',
         });
+
+        if (data.business_id) {
+          setWaLoading(true);
+          integrations
+            .getWhatsAppSettings(data.business_id)
+            .then((waData) => {
+              setWaSettings(waData);
+              setWaPhoneNumber(waData.phone_number ?? '');
+              setWaEnabled(waData.enabled ?? false);
+              setWaNotificationsEnabled(waData.notifications_enabled ?? true);
+              setWaOcrMode(waData.ocr_mode ?? 'manual');
+              setWaAutoReplyEnabled(waData.auto_reply_enabled ?? false);
+              setWaAutoReplyText(waData.auto_reply_text ?? '');
+            })
+            .catch((e) => {
+              console.log('No WhatsApp integration configured yet:', e.message);
+              // Setup default values when integration is missing
+              setWaPhoneNumber('');
+              setWaEnabled(false);
+              setWaNotificationsEnabled(true);
+              setWaOcrMode('manual');
+              setWaAutoReplyEnabled(false);
+              setWaAutoReplyText('');
+            })
+            .finally(() => setWaLoading(false));
+        }
       })
       .catch((e) => setError(e.message ?? 'Failed to load business profile.'))
       .finally(() => setLoading(false));
@@ -127,6 +167,10 @@ export default function SettingsPage() {
   // Save profile changes
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (activeTab === 'whatsapp') {
+      await handleWhatsAppSave();
+      return;
+    }
     setSaving(true);
     setError(null);
     setSaveSuccess(false);
@@ -193,6 +237,44 @@ export default function SettingsPage() {
     // by triggering profile update or a clean reload. For visual consistency, we can update it in the profile state.
     if (profile) {
       setProfile({ ...profile, logo_url: null });
+    }
+  };
+
+  const handleWhatsAppSave = async () => {
+    if (!profile?.business_id) return;
+    setWaSaving(true);
+    setError(null);
+    setSaveSuccess(false);
+    try {
+      const waData = await integrations.updateWhatsAppSettings(profile.business_id, {
+        phone_number: waPhoneNumber.trim() || undefined,
+        enabled: waEnabled,
+        notifications_enabled: waNotificationsEnabled,
+        ocr_mode: waOcrMode,
+        auto_reply_enabled: waAutoReplyEnabled,
+        auto_reply_text: waAutoReplyText.trim() || undefined,
+      });
+      setWaSettings(waData);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err: any) {
+      setError(err instanceof ApiError ? err.message : 'Failed to update WhatsApp settings.');
+    } finally {
+      setWaSaving(false);
+    }
+  };
+
+  const handleWhatsAppTest = async () => {
+    if (!profile?.business_id) return;
+    setWaTestLoading(true);
+    setWaTestMessage(null);
+    try {
+      const res = await integrations.testWhatsAppIntegration(profile.business_id);
+      setWaTestMessage({ type: 'success', text: res.message || 'Test message sent successfully!' });
+    } catch (err: any) {
+      setWaTestMessage({ type: 'error', text: err.message || 'Failed to send test message.' });
+    } finally {
+      setWaTestLoading(false);
     }
   };
 
@@ -620,58 +702,175 @@ export default function SettingsPage() {
               {activeTab === 'whatsapp' && (
                 <div className='space-y-6 animate-fade-in'>
                   <div>
-                    <h2 className='text-xl font-bold text-secondary-10'>WhatsApp integration</h2>
-                    <p className='text-sm text-secondary-30 mt-1'>Connect your WhatsApp Business number so customers can reach you directly from Taaxbro.</p>
+                    <h2 className='text-xl font-bold text-secondary-10'>WhatsApp Integration</h2>
+                    <p className='text-sm text-secondary-30 mt-1'>
+                      Manage your WhatsApp bot connection, receipt scanning modes, and notification parameters.
+                    </p>
                   </div>
 
-                  <div className='space-y-6'>
-                    <div className='grid gap-4 md:grid-cols-2'>
-                      <label className='space-y-2 text-sm font-semibold text-secondary-10 flex flex-col'>
-                        WhatsApp business number
-                        <input
-                          type='text'
-                          placeholder='+234 800 000 0000'
-                          className='mt-1 w-full rounded-2xl border border-grey-10 bg-grey-0 px-4 py-3 text-sm font-medium outline-none focus:border-primary-30 focus:bg-white transition-all'
-                        />
-                      </label>
-
-                      <label className='space-y-2 text-sm font-semibold text-secondary-10 flex flex-col'>
-                        Display name
-                        <input
-                          type='text'
-                          placeholder='Taaxbro Support'
-                          className='mt-1 w-full rounded-2xl border border-grey-10 bg-grey-0 px-4 py-3 text-sm font-medium outline-none focus:border-primary-30 focus:bg-white transition-all'
-                        />
-                      </label>
+                  {waLoading ? (
+                    <div className='flex flex-col items-center justify-center py-12'>
+                      <Icon icon='ph:circle-notch' className='animate-spin text-3xl text-primary-30' />
+                      <p className='text-xs text-secondary-30 mt-2'>Fetching WhatsApp settings...</p>
                     </div>
+                  ) : (
+                    <div className='space-y-6'>
+                      {/* Live WhatsApp Status Switch */}
+                      <div className='flex items-center justify-between p-5 bg-grey-0 rounded-2xl border border-grey-10'>
+                        <div>
+                          <h4 className='font-bold text-sm text-secondary-10'>WhatsApp Bot Status</h4>
+                          <p className='text-xs text-secondary-30 mt-0.5'>
+                            Turn the WhatsApp conversational tax assistant on or off for your business.
+                          </p>
+                        </div>
+                        <button
+                          type='button'
+                          onClick={() => setWaEnabled(!waEnabled)}
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out outline-none ${
+                            waEnabled ? 'bg-primary-30' : 'bg-secondary-40'
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                              waEnabled ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </div>
 
-                    <div className='flex flex-col gap-4 sm:flex-row sm:items-start p-5 bg-grey-0 rounded-2xl border border-grey-10'>
-                      <button
-                        type='button'
-                        className='inline-flex items-center justify-center shrink-0 rounded-full bg-primary-30 px-6 py-3 text-sm font-bold text-white hover:bg-primary-40 transition shadow-sm'>
-                        Connect WhatsApp
-                      </button>
-                      <p className='text-xs text-secondary-30 leading-relaxed max-w-2xl'>
-                        Once connected, Taaxbro can send WhatsApp messages for onboarding, login, and support. You can also configure message templates in the WhatsApp flows section.
-                      </p>
+                      {/* Phone and OCR Mode */}
+                      <div className='grid gap-4 md:grid-cols-2'>
+                        <label className='space-y-2 text-sm font-semibold text-secondary-10 flex flex-col'>
+                          WhatsApp Business Phone Number
+                          <input
+                            type='text'
+                            value={waPhoneNumber}
+                            onChange={(e) => setWaPhoneNumber(e.target.value)}
+                            placeholder='+234 800 000 0000'
+                            className='mt-1 w-full rounded-2xl border border-grey-10 bg-grey-0 px-4 py-3 text-sm font-medium outline-none focus:border-primary-30 focus:bg-white transition-all'
+                          />
+                        </label>
+
+                        <label className='space-y-2 text-sm font-semibold text-secondary-10 flex flex-col'>
+                          OCR Processing Mode
+                          <select
+                            value={waOcrMode}
+                            onChange={(e) => setWaOcrMode(e.target.value as 'manual' | 'auto')}
+                            className='mt-1 w-full rounded-2xl border border-grey-10 bg-grey-0 px-4 py-3 text-sm font-medium outline-none focus:border-primary-30 focus:bg-white transition-all'
+                          >
+                            <option value='manual'>Verify before saving (Manual Audit)</option>
+                            <option value='auto'>Save immediately (Auto Expense)</option>
+                          </select>
+                        </label>
+                      </div>
+
+                      {/* Notifications switch */}
+                      <div className='flex items-center justify-between p-5 bg-grey-0 rounded-2xl border border-grey-10'>
+                        <div>
+                          <h4 className='font-bold text-sm text-secondary-10'>WhatsApp Notifications</h4>
+                          <p className='text-xs text-secondary-30 mt-0.5'>
+                            Receive automated filing deadline updates and tax payment confirmation receipts.
+                          </p>
+                        </div>
+                        <button
+                          type='button'
+                          onClick={() => setWaNotificationsEnabled(!waNotificationsEnabled)}
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out outline-none ${
+                            waNotificationsEnabled ? 'bg-primary-30' : 'bg-secondary-40'
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                              waNotificationsEnabled ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* Auto Reply switch */}
+                      <div className='p-5 bg-grey-0 rounded-2xl border border-grey-10 space-y-4'>
+                        <div className='flex items-center justify-between'>
+                          <div>
+                            <h4 className='font-bold text-sm text-secondary-10'>Custom Auto-Reply</h4>
+                            <p className='text-xs text-secondary-30 mt-0.5'>
+                              Send an automated greeting message whenever customers message the WhatsApp bot.
+                            </p>
+                          </div>
+                          <button
+                            type='button'
+                            onClick={() => setWaAutoReplyEnabled(!waAutoReplyEnabled)}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out outline-none ${
+                              waAutoReplyEnabled ? 'bg-primary-30' : 'bg-secondary-40'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                waAutoReplyEnabled ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        {waAutoReplyEnabled && (
+                          <label className='space-y-2 text-sm font-semibold text-secondary-10 flex flex-col pt-3 border-t border-grey-10 animate-fade-in'>
+                            Auto-Reply Message Content
+                            <textarea
+                              rows={3}
+                              value={waAutoReplyText}
+                              onChange={(e) => setWaAutoReplyText(e.target.value)}
+                              placeholder='Welcome to Taaxbro! Please upload a receipt or type your query...'
+                              className='mt-1 w-full rounded-2xl border border-grey-10 bg-white px-4 py-3 text-sm font-medium outline-none resize-none focus:border-primary-30 transition-all'
+                            />
+                          </label>
+                        )}
+                      </div>
+
+                      {/* Test Connection Button and message feedback */}
+                      <div className='p-5 bg-[#faf5ff] border border-purple-100 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4'>
+                        <div className='space-y-1'>
+                          <h4 className='font-bold text-sm text-purple-900'>Test WhatsApp Connection</h4>
+                          <p className='text-xs text-purple-700 leading-relaxed max-w-2xl'>
+                            Verify your credentials by sending a live test message from the platform to your WhatsApp device. Make sure the bot status is Enabled.
+                          </p>
+                        </div>
+                        <button
+                          type='button'
+                          disabled={waTestLoading || !waEnabled}
+                          onClick={handleWhatsAppTest}
+                          className='inline-flex items-center justify-center rounded-full bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-5 py-3 transition shadow-sm disabled:opacity-40 disabled:cursor-not-allowed shrink-0'
+                        >
+                          {waTestLoading && <Icon icon='ph:circle-notch' className='animate-spin mr-2 text-sm' />}
+                          Send Test Message
+                        </button>
+                      </div>
+
+                      {/* WhatsApp test results feedback */}
+                      {waTestMessage && (
+                        <div className={`p-4 rounded-xl text-xs font-medium border flex items-center gap-2 animate-fade-in ${
+                          waTestMessage.type === 'success' 
+                            ? 'bg-green-50 border-green-200 text-green-700' 
+                            : 'bg-red-50 border-red-200 text-red-700'
+                        }`}>
+                          <Icon icon={waTestMessage.type === 'success' ? 'ph:check-circle' : 'ph:warning-circle'} className='text-base shrink-0' />
+                          {waTestMessage.text}
+                        </div>
+                      )}
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
 
-              {/* Form Footer Save Button (Hidden for WhatsApp which is mock) */}
-              {activeTab !== 'whatsapp' && (
-                <div className='pt-6 border-t border-grey-10 flex justify-end gap-3'>
-                  <button
-                    type='submit'
-                    disabled={saving}
-                    className='inline-flex items-center justify-center rounded-full bg-primary-30 px-6 py-3 text-sm font-bold text-white hover:bg-primary-40 transition-colors shadow-sm disabled:opacity-55 disabled:cursor-not-allowed'
-                  >
-                    {saving && <Icon icon='ph:circle-notch' className='animate-spin mr-2 text-base' />}
-                    Save Changes
-                  </button>
-                </div>
-              )}
+              {/* Form Footer Save Button */}
+              <div className='pt-6 border-t border-grey-10 flex justify-end gap-3'>
+                <button
+                  type='submit'
+                  disabled={saving || waSaving}
+                  className='inline-flex items-center justify-center rounded-full bg-primary-30 px-6 py-3 text-sm font-bold text-white hover:bg-primary-40 transition-colors shadow-sm disabled:opacity-55 disabled:cursor-not-allowed'
+                >
+                  {(saving || waSaving) && <Icon icon='ph:circle-notch' className='animate-spin mr-2 text-base' />}
+                  Save Changes
+                </button>
+              </div>
             </form>
           </div>
         </div>

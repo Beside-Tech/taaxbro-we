@@ -246,3 +246,43 @@ export const business = {
     });
   },
 };
+
+// ─── Integrations ────────────────────────────────────────────────────────────
+
+export interface WhatsAppSettings {
+  id: string;
+  business_id: string;
+  phone_number: string;
+  enabled: boolean;
+  notifications_enabled: boolean;
+  ocr_mode: 'manual' | 'auto';
+  auto_reply_enabled: boolean;
+  auto_reply_text: string | null;
+  last_tested_at: string | null;
+}
+
+export interface WhatsAppSettingsUpdate {
+  phone_number?: string;
+  enabled?: boolean;
+  notifications_enabled?: boolean;
+  ocr_mode?: 'manual' | 'auto';
+  auto_reply_enabled?: boolean;
+  auto_reply_text?: string;
+}
+
+export const integrations = {
+  getWhatsAppSettings(businessId: string): Promise<WhatsAppSettings> {
+    return request<WhatsAppSettings>(`/api/v1/integrations/whatsapp?business_id=${businessId}`);
+  },
+  updateWhatsAppSettings(businessId: string, data: WhatsAppSettingsUpdate): Promise<WhatsAppSettings> {
+    return request<WhatsAppSettings>(`/api/v1/integrations/whatsapp?business_id=${businessId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+  testWhatsAppIntegration(businessId: string): Promise<{ status: string; message: string; message_id?: string }> {
+    return request<{ status: string; message: string; message_id?: string }>(`/api/v1/integrations/whatsapp/test?business_id=${businessId}`, {
+      method: 'POST',
+    });
+  },
+};
