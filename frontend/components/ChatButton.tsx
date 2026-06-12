@@ -101,24 +101,78 @@ function getPageName(pathname: string): string | undefined {
   return undefined;
 }
 
-// ── Markdown renderer ─────────────────────────────────────────────────────────
-
 function renderMarkdown(text: string): React.ReactNode {
   const lines = text.split('\n');
   return lines.map((line, i) => {
-    const parts = line.split(/(\*{1,2}[^*]+\*{1,2})/g);
-    const rendered = parts.map((part, j) => {
-      if (/^\*{1,2}[^*]+\*{1,2}$/.test(part)) {
-        return <strong key={j}>{part.replace(/\*/g, '')}</strong>;
-      }
-      return <span key={j}>{part}</span>;
-    });
     const isBullet = line.startsWith('• ') || line.startsWith('- ');
     const content = isBullet ? line.slice(2) : line;
-    const contentParts = content.split(/(\*{1,2}[^*]+\*{1,2})/g).map((p, j) => {
-      if (/^\*{1,2}[^*]+\*{1,2}$/.test(p)) return <strong key={j}>{p.replace(/\*/g, '')}</strong>;
-      return <span key={j}>{p}</span>;
-    });
+
+    // Helper to parse text, links, and bolding
+    const parseContent = (contentStr: string) => {
+      // 1. Split by Markdown links
+      const mdLinkRegex = /(\[[^\]]+\]\(https?:\/\/[^\s()<>[\]]+\))/g;
+      const parts = contentStr.split(mdLinkRegex);
+
+      return parts.map((part, j) => {
+        const match = part.match(/^\[([^\]]+)\]\((https?:\/\/[^\s()<>[\]]+)\)$/);
+        if (match) {
+          const anchorText = match[1];
+          const url = match[2];
+          
+          const textParts = anchorText.split(/(\*{1,2}[^*]+\*{1,2})/g).map((p, k) => {
+            if (/^\*{1,2}[^*]+\*{1,2}$/.test(p)) {
+              return <strong key={k}>{p.replace(/\*/g, '')}</strong>;
+            }
+            return p;
+          });
+
+          return (
+            <a
+              key={j}
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary-30 underline hover:text-primary-40 break-all font-medium inline-flex items-center gap-0.5"
+            >
+              {textParts}
+              <Icon icon="ph:arrow-square-out" className="text-[11px] shrink-0" />
+            </a>
+          );
+        }
+
+        // 2. Not a Markdown link: Split by raw URLs
+        const rawUrlRegex = /(https?:\/\/[^\s()<>[\]]+?(?=[.,;:!?]?(?:\s|$)))/g;
+        const subParts = part.split(rawUrlRegex);
+
+        return subParts.map((subPart, k) => {
+          if (/^https?:\/\//.test(subPart)) {
+            return (
+              <a
+                key={`${j}-${k}`}
+                href={subPart}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary-30 underline hover:text-primary-40 break-all font-medium inline-flex items-center gap-0.5"
+              >
+                {subPart}
+                <Icon icon="ph:arrow-square-out" className="text-[11px] shrink-0" />
+              </a>
+            );
+          }
+
+          // 3. Split by bold text
+          const boldParts = subPart.split(/(\*{1,2}[^*]+\*{1,2})/g);
+          return boldParts.map((boldPart, l) => {
+            if (/^\*{1,2}[^*]+\*{1,2}$/.test(boldPart)) {
+              return <strong key={`${j}-${k}-${l}`}>{boldPart.replace(/\*/g, '')}</strong>;
+            }
+            return <span key={`${j}-${k}-${l}`}>{boldPart}</span>;
+          });
+        });
+      });
+    };
+
+    const contentParts = parseContent(content);
 
     return (
       <span key={i}>
@@ -127,7 +181,7 @@ function renderMarkdown(text: string): React.ReactNode {
             {contentParts}
           </span>
         ) : (
-          rendered
+          contentParts
         )}
         {i < lines.length - 1 && !isBullet && <br />}
       </span>
