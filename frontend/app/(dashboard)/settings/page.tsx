@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Icon } from '@iconify/react';
 import TopBar from '@/components/dashboard/TopBar';
 import { useAuth } from '@/context/AuthContext';
-import { business, onboarding, ApiError, integrations, type BusinessProfile, type OnboardingPayload, type WhatsAppSettings } from '@/lib/api';
+import { business, onboarding, ApiError, integrations, auth, type BusinessProfile, type OnboardingPayload, type WhatsAppSettings, type UserSessionInfo } from '@/lib/api';
 
 const NIGERIAN_STATES = [
   'Abia', 'Adamawa', 'Akwa Ibom', 'Anambra', 'Bauchi', 'Bayelsa', 'Benue', 'Borno',
@@ -34,7 +34,7 @@ const USER_TYPES = [
   { value: 'tax_professional', label: 'Tax Professional',          icon: 'ph:scales' },
 ];
 
-type ActiveTab = 'profile' | 'tax' | 'invoicing' | 'whatsapp';
+type ActiveTab = 'profile' | 'tax' | 'invoicing' | 'whatsapp' | 'sessions';
 
 export default function SettingsPage() {
   const { user, setUser } = useAuth();
@@ -54,6 +54,11 @@ export default function SettingsPage() {
   const [waSettings, setWaSettings] = useState<WhatsAppSettings | null>(null);
   const [waLoading, setWaLoading] = useState(false);
   const [waPhoneNumber, setWaPhoneNumber] = useState('');
+
+  // Active sessions state
+  const [sessions, setSessions] = useState<UserSessionInfo[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
 
   // OTP flow state
   const [otpSent, setOtpSent] = useState(false);
@@ -239,6 +244,52 @@ export default function SettingsPage() {
       return () => clearInterval(timer);
     }
   }, [cooldown]);
+
+  // Load active sessions when tab changes to sessions
+  useEffect(() => {
+    if (activeTab === 'sessions') {
+      setSessionsLoading(true);
+      auth
+        .getSessions()
+        .then(setSessions)
+        .catch((e) => setError(e.message ?? 'Failed to load active sessions.'))
+        .finally(() => setSessionsLoading(false));
+    }
+  }, [activeTab]);
+
+  const handleRevokeSession = async (sessionId: string) => {
+    if (!confirm('Are you sure you want to revoke this session? The device will be logged out.')) {
+      return;
+    }
+    setRevokingId(sessionId);
+    try {
+      await auth.revokeSession(sessionId);
+      setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+      const target = sessions.find((s) => s.id === sessionId);
+      if (target?.is_current) {
+        window.location.href = '/login';
+      }
+    } catch (err: any) {
+      setError(err.message ?? 'Failed to revoke session.');
+    } finally {
+      setRevokingId(null);
+    }
+  };
+
+  const handleRevokeOtherSessions = async () => {
+    if (!confirm('Are you sure you want to revoke all other sessions? All other logged-in devices will be disconnected.')) {
+      return;
+    }
+    setSessionsLoading(true);
+    try {
+      await auth.revokeOtherSessions();
+      setSessions((prev) => prev.filter((s) => s.is_current));
+    } catch (err: any) {
+      setError(err.message ?? 'Failed to revoke other sessions.');
+    } finally {
+      setSessionsLoading(false);
+    }
+  };
 
   // Trigger verify if 6 digits are filled
   useEffect(() => {
@@ -445,20 +496,23 @@ export default function SettingsPage() {
 
             {/* Sidebar Tabs */}
             <nav className='bg-white rounded-3xl p-2.5 border border-grey-10 shadow-sm space-y-1'>
-              {(['profile', 'tax', 'invoicing', 'whatsapp'] as ActiveTab[]).map((tab) => {
+              {(['profile', 'tax', 'invoicing', 'whatsapp', 'sessions'] as ActiveTab[]).map((tab) => {
                 const isActive = activeTab === tab;
                 const label = 
                   tab === 'profile' ? 'Business Profile' :
                   tab === 'tax' ? 'Tax & Identity' :
-                  tab === 'invoicing' ? 'Invoices & Banking' : 'WhatsApp Bot';
+                  tab === 'invoicing' ? 'Invoices & Banking' :
+                  tab === 'whatsapp' ? 'WhatsApp Bot' : 'Active Sessions';
                 const icon = 
                   tab === 'profile' ? 'ph:user-gear' :
                   tab === 'tax' ? 'ph:scales' :
-                  tab === 'invoicing' ? 'ph:credit-card' : 'ph:whatsapp-logo';
+                  tab === 'invoicing' ? 'ph:credit-card' :
+                  tab === 'whatsapp' ? 'ph:whatsapp-logo' : 'ph:devices';
                 
                 return (
                   <button
                     key={tab}
+                    type='button'
                     onClick={() => { setActiveTab(tab); setError(null); }}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold transition-all ${
                       isActive 
@@ -1018,8 +1072,116 @@ export default function SettingsPage() {
                 </div>
               )}
 
+              {/* TAB 5: ACTIVE SESSIONS */}
+              {activeTab === 'sessions' && (
+                <div className='space-y-6 animate-fade-in'>
+                  <div className='flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4'>
+                    <div>
+                      <h2 className='text-xl font-bold text-secondary-10'>Active Sessions</h2>
+                      <p className='text-sm text-secondary-30 mt-1'>
+                        Devices and locations currently logged into your Taaxbro account.
+                      </p>
+                    </div>
+                    {sessions.length > 1 && (
+                      <button
+                        type='button'
+                        onClick={handleRevokeOtherSessions}
+                        className='px-4 py-2 border border-red-200 hover:bg-red-50 text-red-600 hover:text-red-700 transition rounded-full text-xs font-bold flex items-center gap-1.5 shadow-sm'
+                      >
+                        <Icon icon='ph:sign-out-bold' />
+                        Revoke Other Devices
+                      </button>
+                    )}
+                  </div>
+
+                  {sessionsLoading ? (
+                    <div className='flex flex-col items-center justify-center py-12'>
+                      <Icon icon='ph:circle-notch' className='animate-spin text-3xl text-primary-30' />
+                      <p className='text-xs text-secondary-30 mt-2'>Loading active sessions...</p>
+                    </div>
+                  ) : (
+                    <div className='space-y-4'>
+                      {sessions.map((session) => {
+                        const isMobile = session.device_info?.os === 'Android' || session.device_info?.os === 'iOS';
+                        const deviceIcon = isMobile ? 'ph:phone' : 'ph:desktop';
+                        const formattedDate = new Date(session.created_at).toLocaleDateString('en-NG', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        });
+
+                        return (
+                          <div
+                            key={session.id}
+                            className={`flex items-center justify-between p-5 rounded-2xl border transition-all ${
+                              session.is_current
+                                ? 'border-primary-30 bg-primary-50/20'
+                                : 'border-grey-10 bg-white hover:bg-grey-0/40'
+                            }`}
+                          >
+                            <div className='flex items-center gap-4'>
+                              <div
+                                className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border ${
+                                  session.is_current
+                                    ? 'bg-primary-30 text-white border-primary-30'
+                                    : 'bg-grey-0 text-secondary-30 border-grey-10'
+                                }`}
+                              >
+                                <Icon icon={deviceIcon} className='text-xl' />
+                              </div>
+
+                              <div className='space-y-1'>
+                                <div className='flex items-center gap-2 flex-wrap'>
+                                  <span className='font-bold text-sm text-secondary-10'>
+                                    {session.device_info?.os ?? 'Unknown OS'} • {session.device_info?.browser ?? 'Browser'}
+                                  </span>
+                                  {session.is_current && (
+                                    <span className='px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-primary-30 text-white flex items-center gap-1 shadow-sm shadow-primary-30/10'>
+                                      <span className='w-1.5 h-1.5 rounded-full bg-white animate-pulse' />
+                                      Current Device
+                                    </span>
+                                  )}
+                                </div>
+                                <p className='text-xs text-secondary-30 leading-none'>
+                                  IP Address: <span className='font-mono font-medium text-secondary-20'>{session.ip_address ?? 'Unknown'}</span>
+                                </p>
+                                <p className='text-[10px] text-secondary-40'>
+                                  Logged in: {formattedDate}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className='flex items-center'>
+                              <button
+                                type='button'
+                                onClick={() => handleRevokeSession(session.id)}
+                                disabled={revokingId === session.id}
+                                className={`px-4 py-2 border rounded-full text-xs font-bold transition flex items-center gap-1.5 ${
+                                  session.is_current
+                                    ? 'border-red-200 text-red-500 hover:bg-red-50 hover:text-red-600'
+                                    : 'border-grey-10 hover:border-red-200 hover:bg-red-50 hover:text-red-600 text-secondary-20'
+                                }`}
+                              >
+                                {revokingId === session.id ? (
+                                  <Icon icon='ph:circle-notch' className='animate-spin text-sm' />
+                                ) : (
+                                  <Icon icon='ph:trash' className='text-sm' />
+                                )}
+                                {session.is_current ? 'Log Out' : 'Revoke'}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Form Footer Save Button */}
-              {activeTab !== 'whatsapp' && (
+              {activeTab !== 'whatsapp' && activeTab !== 'sessions' && (
                 <div className='pt-6 border-t border-grey-10 flex justify-end gap-3'>
                   <button
                     type='submit'

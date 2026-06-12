@@ -7,6 +7,12 @@
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 
+let sessionExpiredCallback: (() => void) | null = null;
+
+export function onSessionExpired(cb: () => void) {
+  sessionExpiredCallback = cb;
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -49,6 +55,9 @@ async function request<T>(
     if (refreshed.ok) {
       return request<T>(path, options, false);
     }
+    if (sessionExpiredCallback) {
+      sessionExpiredCallback();
+    }
     throw new ApiError(401, 'Session expired. Please log in again.');
   }
 
@@ -76,6 +85,18 @@ export interface AuthUser {
   onboarding_completed: boolean;
   user_type?: string | null;
   industry?: string | null;
+}
+
+export interface UserSessionInfo {
+  id: string;
+  ip_address: string | null;
+  device_info: {
+    os: string;
+    browser: string;
+    raw: string;
+  } | null;
+  created_at: string;
+  is_current: boolean;
 }
 
 export const auth = {
@@ -113,6 +134,22 @@ export const auth = {
 
   me() {
     return request<AuthUser>('/api/v1/auth/me');
+  },
+
+  getSessions() {
+    return request<UserSessionInfo[]>('/api/v1/auth/sessions');
+  },
+
+  revokeSession(sessionId: string) {
+    return request<{ ok: boolean }>(`/api/v1/auth/sessions/${sessionId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  revokeOtherSessions() {
+    return request<{ ok: boolean }>('/api/v1/auth/sessions', {
+      method: 'DELETE',
+    });
   },
 
   forgotPassword(email: string) {
