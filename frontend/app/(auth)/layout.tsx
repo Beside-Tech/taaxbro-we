@@ -18,7 +18,7 @@ export default function AuthLayout({
         <div className='flex-1 flex flex-col justify-center w-full max-w-md mx-auto lg:mx-0 lg:ml-12 xl:ml-16 pt-14 pb-24'>
           {children}
         </div>
-        <p className='w-full max-w-md mx-auto lg:mx-0 lg:ml-12 xl:ml-16 text-center text-xs text-secondary-30 pb-2'>
+        <p className='w-full max-w-md mx-auto lg:mx-0 lg:ml-12 xl:ml-16 text-center text-xs text-secondary-30 dark:text-white/40 pb-2'>
           2026 Taaxbro All rights reserved
         </p>
       </div>

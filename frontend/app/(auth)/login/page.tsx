@@ -61,14 +61,14 @@ function LoginForm() {
 
   return (
     <>
-      <p className='text-sm text-secondary-30 mb-1'>Jump back in</p>
-      <h1 className='text-3xl md:text-4xl mb-7'>Sign In</h1>
+      <p className='text-sm text-secondary-30 dark:text-white/60 mb-1'>Jump back in</p>
+      <h1 className='text-3xl md:text-4xl mb-7 dark:text-white'>Sign In</h1>
 
       <button
         type='button'
         disabled={googleLoading || loading}
         onClick={handleGoogleLogin}
-        className='w-full flex items-center justify-center gap-2 border border-grey-10 rounded-full py-3 text-sm font-medium text-dark hover:bg-grey-10/30 transition-colors mb-5 disabled:opacity-60 disabled:cursor-not-allowed'>
+        className='w-full flex items-center justify-center gap-2 border border-grey-10 dark:border-white/10 rounded-full py-3 text-sm font-medium text-dark dark:text-white hover:bg-grey-10/30 dark:hover:bg-white/10 transition-colors mb-5 disabled:opacity-60 disabled:cursor-not-allowed'>
         {googleLoading
           ? <Icon icon='ph:circle-notch' className='animate-spin text-xl' />
           : <Icon icon='logos:google-icon' className='text-xl' />
@@ -77,9 +77,9 @@ function LoginForm() {
       </button>
 
       <div className='flex items-center gap-3 mb-5'>
-        <div className='flex-1 h-px bg-grey-10' />
-        <span className='text-xs text-secondary-30'>or</span>
-        <div className='flex-1 h-px bg-grey-10' />
+        <div className='flex-1 h-px bg-grey-10 dark:bg-white/10' />
+        <span className='text-xs text-secondary-30 dark:text-white/50'>or</span>
+        <div className='flex-1 h-px bg-grey-10 dark:bg-white/10' />
       </div>
 
       {error && (
@@ -91,20 +91,20 @@ function LoginForm() {
 
       <form onSubmit={handleSubmit} className='flex flex-col gap-4'>
         <div className='flex flex-col gap-1'>
-          <label className='text-sm'>Email Address</label>
+          <label className='text-sm dark:text-white'>Email Address</label>
           <input
             type='email'
             placeholder='example@example.com'
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className='border border-grey-10 rounded-lg px-4 py-3 text-sm outline-none focus:border-primary-30 transition-colors placeholder:text-secondary-40'
+            className='border border-grey-10 dark:border-white/10 rounded-lg px-4 py-3 text-sm dark:text-white dark:bg-transparent outline-none focus:border-primary-30 dark:focus:border-primary-30 transition-colors placeholder:text-secondary-40 dark:placeholder:text-white/30'
           />
         </div>
 
         <div className='flex flex-col gap-1'>
           <div className='flex items-center justify-between'>
-            <label className='text-sm'>Password</label>
+            <label className='text-sm dark:text-white'>Password</label>
             <Link href='/forgot-password' className='text-sm text-primary-30 hover:underline'>
               Forgot password?
             </Link>
@@ -116,12 +116,12 @@ function LoginForm() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className='w-full border border-grey-10 rounded-lg px-4 py-3 pr-11 text-sm outline-none focus:border-primary-30 transition-colors placeholder:text-secondary-40'
+              className='w-full border border-grey-10 dark:border-white/10 rounded-lg px-4 py-3 pr-11 text-sm dark:text-white dark:bg-transparent outline-none focus:border-primary-30 dark:focus:border-primary-30 transition-colors placeholder:text-secondary-40 dark:placeholder:text-white/30'
             />
             <button
               type='button'
               onClick={() => setShowPassword((v) => !v)}
-              className='absolute right-3 top-1/2 -translate-y-1/2 text-secondary-30 hover:text-dark transition-colors'>
+              className='absolute right-3 top-1/2 -translate-y-1/2 text-secondary-30 dark:text-white/50 hover:text-dark dark:hover:text-white transition-colors'>
               <Icon icon={showPassword ? 'ph:eye-slash' : 'ph:eye'} className='text-xl' />
             </button>
           </div>
@@ -135,7 +135,7 @@ function LoginForm() {
         </button>
       </form>
 
-      <p className='text-sm mt-5'>
+      <p className='text-sm mt-5 dark:text-white'>
         Don&apos;t have an account?{' '}
         <Link href='/register' className='text-primary-30 font-medium hover:underline'>
           Sign up

@@ -107,10 +107,10 @@ export default function VerifyPage() {
 
   return (
     <>
-      <p className='text-sm text-secondary-30 mb-1'>One last step</p>
-      <h1 className='text-3xl md:text-4xl mb-3'>Verify Your Email</h1>
-      <p className='text-sm text-secondary-30 mb-7'>
-        We sent a 6-digit code to <span className='font-medium text-dark'>{email}</span>.
+      <p className='text-sm text-secondary-30 dark:text-white/60 mb-1'>One last step</p>
+      <h1 className='text-3xl md:text-4xl mb-3 dark:text-white'>Verify Your Email</h1>
+      <p className='text-sm text-secondary-30 dark:text-white/60 mb-7'>
+        We sent a 6-digit code to <span className='font-medium text-dark dark:text-white'>{email}</span>.
         Check your inbox and spam folder.
       </p>
 
@@ -138,7 +138,7 @@ export default function VerifyPage() {
               onChange={(e) => handleDigitChange(index, e.target.value)}
               onKeyDown={(e) => handleKeyDown(index, e)}
               onPaste={index === 0 ? handlePaste : undefined}
-              className='flex-1 min-w-0 aspect-square border border-grey-10 rounded-lg text-center text-lg font-medium outline-none focus:border-primary-30 transition-colors'
+              className='flex-1 min-w-0 aspect-square border border-grey-10 dark:border-white/10 rounded-lg text-center text-lg font-medium dark:text-white dark:bg-transparent outline-none focus:border-primary-30 dark:focus:border-primary-30 transition-colors'
             />
           ))}
         </div>
@@ -151,7 +151,7 @@ export default function VerifyPage() {
         </button>
       </form>
 
-      <p className='text-sm mt-5 text-secondary-30'>
+      <p className='text-sm mt-5 text-secondary-30 dark:text-white/60'>
         Didn&apos;t receive it?{' '}
         <button
           type='button'
