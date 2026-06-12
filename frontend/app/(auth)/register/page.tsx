@@ -71,14 +71,14 @@ function RegisterForm() {
 
   return (
     <>
-      <p className='text-sm text-secondary-30 mb-1'>Get started for free</p>
-      <h1 className='text-3xl md:text-4xl mb-7'>Create an Account</h1>
+      <p className='text-sm text-secondary-30 dark:text-white/60 mb-1'>Get started for free</p>
+      <h1 className='text-3xl md:text-4xl mb-7 dark:text-white'>Create an Account</h1>
 
       <button
         type='button'
         disabled={googleLoading || loading}
         onClick={handleGoogleSignup}
-        className='w-full flex items-center justify-center gap-2 border border-grey-10 rounded-full py-3 text-sm font-medium text-dark hover:bg-grey-10/30 transition-colors mb-5 disabled:opacity-60 disabled:cursor-not-allowed'>
+        className='w-full flex items-center justify-center gap-2 border border-grey-10 dark:border-white/10 rounded-full py-3 text-sm font-medium text-dark dark:text-white hover:bg-grey-10/30 dark:hover:bg-white/10 transition-colors mb-5 disabled:opacity-60 disabled:cursor-not-allowed'>
         {googleLoading
           ? <Icon icon='ph:circle-notch' className='animate-spin text-xl' />
           : <Icon icon='logos:google-icon' className='text-xl' />
@@ -87,9 +87,9 @@ function RegisterForm() {
       </button>
 
       <div className='flex items-center gap-3 mb-5'>
-        <div className='flex-1 h-px bg-grey-10' />
-        <span className='text-xs text-secondary-30'>or</span>
-        <div className='flex-1 h-px bg-grey-10' />
+        <div className='flex-1 h-px bg-grey-10 dark:bg-white/10' />
+        <span className='text-xs text-secondary-30 dark:text-white/50'>or</span>
+        <div className='flex-1 h-px bg-grey-10 dark:bg-white/10' />
       </div>
 
       {error && (
@@ -101,31 +101,31 @@ function RegisterForm() {
 
       <form onSubmit={handleSubmit} className='flex flex-col gap-4'>
         <div className='flex flex-col gap-1'>
-          <label className='text-sm'>Full Name</label>
+          <label className='text-sm dark:text-white'>Full Name</label>
           <input
             type='text'
             placeholder='Surname First'
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             required
-            className='border border-grey-10 rounded-lg px-4 py-3 text-sm outline-none focus:border-primary-30 transition-colors placeholder:text-secondary-40'
+            className='border border-grey-10 dark:border-white/10 rounded-lg px-4 py-3 text-sm dark:text-white dark:bg-transparent outline-none focus:border-primary-30 dark:focus:border-primary-30 transition-colors placeholder:text-secondary-40 dark:placeholder:text-white/30'
           />
         </div>
 
         <div className='flex flex-col gap-1'>
-          <label className='text-sm'>Email Address</label>
+          <label className='text-sm dark:text-white'>Email Address</label>
           <input
             type='email'
             placeholder='example@example.com'
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className='border border-grey-10 rounded-lg px-4 py-3 text-sm outline-none focus:border-primary-30 transition-colors placeholder:text-secondary-40'
+            className='border border-grey-10 dark:border-white/10 rounded-lg px-4 py-3 text-sm dark:text-white dark:bg-transparent outline-none focus:border-primary-30 dark:focus:border-primary-30 transition-colors placeholder:text-secondary-40 dark:placeholder:text-white/30'
           />
         </div>
 
         <div className='flex flex-col gap-1'>
-          <label className='text-sm'>Password</label>
+          <label className='text-sm dark:text-white'>Password</label>
           <div className='relative'>
             <input
               type={showPassword ? 'text' : 'password'}
@@ -133,17 +133,17 @@ function RegisterForm() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className='w-full border border-grey-10 rounded-lg px-4 py-3 pr-11 text-sm outline-none focus:border-primary-30 transition-colors placeholder:text-secondary-40'
+              className='w-full border border-grey-10 dark:border-white/10 rounded-lg px-4 py-3 pr-11 text-sm dark:text-white dark:bg-transparent outline-none focus:border-primary-30 dark:focus:border-primary-30 transition-colors placeholder:text-secondary-40 dark:placeholder:text-white/30'
             />
             <button type='button' onClick={() => setShowPassword((v) => !v)}
-              className='absolute right-3 top-1/2 -translate-y-1/2 text-secondary-30 hover:text-dark transition-colors'>
+              className='absolute right-3 top-1/2 -translate-y-1/2 text-secondary-30 dark:text-white/50 hover:text-dark dark:hover:text-white transition-colors'>
               <Icon icon={showPassword ? 'ph:eye-slash' : 'ph:eye'} className='text-xl' />
             </button>
           </div>
         </div>
 
         <div className='flex flex-col gap-1'>
-          <label className='text-sm'>Confirm Password</label>
+          <label className='text-sm dark:text-white'>Confirm Password</label>
           <div className='relative'>
             <input
               type={showConfirm ? 'text' : 'password'}
@@ -151,10 +151,10 @@ function RegisterForm() {
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
               required
-              className='w-full border border-grey-10 rounded-lg px-4 py-3 pr-11 text-sm outline-none focus:border-primary-30 transition-colors placeholder:text-secondary-40'
+              className='w-full border border-grey-10 dark:border-white/10 rounded-lg px-4 py-3 pr-11 text-sm dark:text-white dark:bg-transparent outline-none focus:border-primary-30 dark:focus:border-primary-30 transition-colors placeholder:text-secondary-40 dark:placeholder:text-white/30'
             />
             <button type='button' onClick={() => setShowConfirm((v) => !v)}
-              className='absolute right-3 top-1/2 -translate-y-1/2 text-secondary-30 hover:text-dark transition-colors'>
+              className='absolute right-3 top-1/2 -translate-y-1/2 text-secondary-30 dark:text-white/50 hover:text-dark dark:hover:text-white transition-colors'>
               <Icon icon={showConfirm ? 'ph:eye-slash' : 'ph:eye'} className='text-xl' />
             </button>
           </div>
@@ -163,7 +163,7 @@ function RegisterForm() {
         <label className='flex items-start gap-2 cursor-pointer'>
           <input type='checkbox' checked={agreed} onChange={(e) => setAgreed(e.target.checked)}
             className='mt-0.5 accent-primary-30' />
-          <span className='text-sm text-secondary-30'>
+          <span className='text-sm text-secondary-30 dark:text-white/60'>
             I agree to the{' '}
             <Link href='/terms' className='text-primary-30 hover:underline'>Terms of Service</Link>
             {' '}and{' '}
@@ -179,7 +179,7 @@ function RegisterForm() {
         </button>
       </form>
 
-      <p className='text-sm mt-5'>
+      <p className='text-sm mt-5 dark:text-white'>
         Already have an account?{' '}
         <Link href='/login' className='text-primary-30 font-medium hover:underline'>
           Sign in
