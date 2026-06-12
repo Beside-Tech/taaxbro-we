@@ -1,13 +1,25 @@
+// =============================================================================
+// FILE:     ChatButton.tsx
+// REPO:     taaxbro-we-main
+// PLACE AT: frontend/components/ChatButton.tsx
+// ACTION:   Replace existing file entirely
+// =============================================================================
+
 'use client';
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { Icon } from '@iconify/react';
 import { useAuth } from '@/context/AuthContext';
 import { usePathname, useRouter } from 'next/navigation';
-import { useChat } from 'ai/react';
-import type { Message, ToolInvocation } from 'ai';
 import { useChatContext } from '@/context/ChatContext';
-import ToolResultCard from './chat/ToolResultCard';
+
+// ── Local message type ─────────────────────────────────────────────────────
+
+type Message = {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+};
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -143,22 +155,72 @@ export default function ChatButton() {
   const [voiceError, setVoiceError] = useState('');
   const [uploadingOcr, setUploadingOcr] = useState(false);
 
-  const { messages, input, setInput, handleInputChange, handleSubmit, append, isLoading, setMessages } = useChat({
-    api: '/api/chat',
-    body: {
-      page: dashboardPage || 'overview',
-      isLoggedIn,
-    },
-    onError: (err) => {
-      const errorText = err?.message?.includes('model output')
-        ? "I had a hiccup generating a response. Could you rephrase or try again?"
-        : "Sorry, something went wrong. Please try again in a moment.";
-      setMessages((prev: Message[]) => [
+  // ── Custom chat state (replaces useChat — backend is now the Taaxbro API) ──
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => setInput(e.target.value);
+
+  const sendMessage = async (text: string) => {
+    if (!text.trim() || isLoading) return;
+
+    const userMsg: Message = { id: mkId(), role: 'user', content: text };
+    setMessages((prev) => [...prev, userMsg]);
+    setInput('');
+    setIsLoading(true);
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          messages: [...messages, userMsg],
+          page: dashboardPage || 'overview',
+          isLoggedIn,
+          conversationId,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`${res.status}`);
+      }
+
+      const data = await res.json();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      if (data.conversation_id) {
+        setConversationId(data.conversation_id);
+      }
+
+      setMessages((prev) => [
         ...prev,
-        { id: mkId(), role: 'assistant' as const, content: errorText },
+        { id: mkId(), role: 'assistant', content: data.answer || 'No response received.' },
       ]);
-    },
-  });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '';
+      const errorText = msg.includes('model output')
+        ? 'I had a hiccup generating a response. Could you rephrase or try again?'
+        : 'Sorry, something went wrong. Please try again in a moment.';
+      setMessages((prev) => [...prev, { id: mkId(), role: 'assistant', content: errorText }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    sendMessage(input);
+  };
+
+  const append = (msg: { role: 'user' | 'assistant'; content: string }) => {
+    sendMessage(msg.content);
+  };
 
   // ── Auto-send prefilled message ───────────────────────────────────────────
   useEffect(() => {
@@ -382,13 +444,7 @@ export default function ChatButton() {
                   {msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content}
                 </div>
               </div>
-              
-              {/* Tool Invocations UI */}
-              {msg.toolInvocations?.map((invocation: ToolInvocation) => (
-                <div key={invocation.toolCallId} className="pl-8">
-                  <ToolResultCard invocation={invocation} />
-                </div>
-              ))}
+
             </div>
           ))}
 
