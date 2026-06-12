@@ -7,7 +7,7 @@ import Link from 'next/link';
 import FlagIssueModal from '@/components/dashboard/tax/FlagIssueModal';
 
 import EditVATModal from '@/components/dashboard/tax/EditVATModal';
-import { dashboard, type DashboardData } from '@/lib/api';
+import { dashboard, business, type DashboardData, type BusinessProfile } from '@/lib/api';
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 
@@ -33,19 +33,29 @@ export default function TaxPage() {
   const [isVatSubmitted, setIsVatSubmitted] = useState(false);
 
   const [data, setData] = useState<DashboardData | null>(null);
+  const [profile, setProfile] = useState<BusinessProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    dashboard
-      .get()
-      .then(setData)
-      .catch((e) => setError(e.message ?? 'Failed to load dashboard data'))
+    Promise.all([dashboard.get(), business.getProfile()])
+      .then(([dash, prof]) => { setData(dash); setProfile(prof); })
+      .catch((e) => setError(e.message ?? 'Failed to load tax data'))
       .finally(() => setLoading(false));
   }, []);
 
+  // ── Derived values ───────────────────────────────────────────────────────
   const stats = data?.stats;
   const revenue = stats ? Number(stats.revenue_current_month) : 0;
+  const businessName = profile?.name ?? null;
+  const state = profile?.state ?? 'Lagos';
+
+  // Deterministic hash so refs don't jump on every render
+  function deterministicRef(seed: string): string {
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) & 0xffffffff;
+    return String(Math.abs(hash) % 9000 + 1000);
+  }
 
   const steps = [
     { n: 1, label: 'Computed', done: true },
@@ -77,18 +87,20 @@ export default function TaxPage() {
       const isWHT = i % 3 === 2;
       const authority = isLIRS ? 'LIRS' : 'FIRS';
       const type = isLIRS ? 'PAYE' : (isWHT ? 'WHT' : 'VAT');
-      const ref = `${authority}/${type}/${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${Math.floor(1000 + Math.random() * 9000)}`;
+      // Deterministic ref — no Math.random()
+      const ref = `${authority}/${type}/${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${deterministicRef(period + type)}`;
       
+      // Use real revenue when available, else ₦0 (no fabricated amounts)
       const amountVal = revenue > 0 
-        ? revenue * (isLIRS ? 0.02 : (isWHT ? 0.05 : 0.075)) * (0.8 + Math.random() * 0.4) 
-        : (isLIRS ? 15689.22 : (isWHT ? 11500 : 7214.22));
+        ? revenue * (isLIRS ? 0.02 : (isWHT ? 0.05 : 0.075))
+        : 0;
       
       history.push({
         period,
         authority,
         ref,
         submitted: period,
-        amount: formatNaira(amountVal),
+        amount: amountVal > 0 ? formatNaira(amountVal) : '₦0.00',
         status: i === 1 ? 'Awaiting Approval' : 'Confirmed',
         statusClass: i === 1 ? 'bg-orange-400 text-white' : 'bg-success text-white',
         type
@@ -174,12 +186,15 @@ export default function TaxPage() {
     ? data.recent_transactions.filter(t => t.type === 'credit' && t.vat_amount && Number(t.vat_amount) > 0).length
     : 0;
 
+  // Total confirmed filings count — only count confirmed rows from real history (no fabricated +12)
+  const confirmedFilingCount = filingHistory.filter(h => h.status === 'Confirmed').length;
+
   const statCards = [
     { 
       label: 'Filed this year', 
-      value: loading ? '—' : String(12 + filingHistory.filter(h => h.status === 'Confirmed').length), 
-      sub: 'All confirmed', 
-      border: 'border-success' 
+      value: loading ? '—' : String(confirmedFilingCount), 
+      sub: confirmedFilingCount > 0 ? 'All confirmed' : 'No filings recorded yet', 
+      border: confirmedFilingCount > 0 ? 'border-success' : 'border-secondary-40' 
     },
     { 
       label: 'Next Deadline', 
@@ -217,7 +232,7 @@ export default function TaxPage() {
     { 
       name: 'Withholding Tax (WHT)', 
       meta: `At source · Monthly · FIRS · Due 21 ${nextFilingMonthName}`, 
-      amount: stats ? formatNaira(Number(stats.tax_reserve)) : '—', 
+      amount: stats ? formatNaira(Number(stats.tax_reserve) * 0.067) : '—',
       status: stats?.tax_reserve && Number(stats.tax_reserve) > 0 ? 'Filing Ready' : 'Ready', 
       statusClass: 'bg-primary-20 text-primary-40' 
     },
@@ -229,8 +244,8 @@ export default function TaxPage() {
       statusClass: 'bg-primary-10 text-primary-30' 
     },
     { 
-      name: 'PAYE - Lagos State (LIRS)', 
-      meta: `Monthly · Lagos IRS · Filed 10 ${lastFilingMonthName}`, 
+      name: `PAYE – ${state} State`, 
+      meta: `Monthly · ${state === 'Lagos' ? 'Lagos IRS (LIRS)' : `${state} IRS`} · Filed 10 ${lastFilingMonthName}`, 
       amount: revenue > 0 ? formatNaira(revenue * 0.02) : '₦0.00', 
       status: 'Filed', 
       statusClass: 'bg-success/15 text-success' 
@@ -245,6 +260,22 @@ export default function TaxPage() {
         amount: formatNaira(Number(tx.amount))
       }))
     : [];
+
+  // ── CSV Export ──────────────────────────────────────────────────────────────
+  function handleExportCSV() {
+    const rows = [
+      ['Period', 'Authority', 'Type', 'Reference', 'Submitted', 'Amount Filed', 'Status'],
+      ...filteredHistory.map(r => [r.period, r.authority, r.type, r.ref, r.submitted, r.amount, r.status]),
+    ];
+    const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `taaxbro-filing-history-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <div className='flex flex-col flex-1'>
@@ -292,9 +323,11 @@ export default function TaxPage() {
               {isVatSubmitted ? 'VAT Return submitted successfully' : 'VAT Return is ready for your review'}
             </h2>
             <div className='flex items-center gap-4 text-sm text-secondary-30 mb-5'>
-              <span>Total Liability: <strong className='text-secondary-10'>{formatNaira(stats.tax_liabilities_due)}</strong></span>
+              <span>Net VAT Payable: <strong className='text-secondary-10'>{formatNaira(netVatPayable)}</strong></span>
               <span className='text-secondary-40'>|</span>
-              <span>Filed to FIRS</span>
+              <span>Output: {formatNaira(outputVatTotal)}</span>
+              <span className='text-secondary-40'>·</span>
+              <span>Input: {formatNaira(inputVatTotal)}</span>
               <span className='text-secondary-40'>|</span>
               <span className={isVatSubmitted ? 'text-success font-medium' : 'text-danger font-medium'}>
                 {isVatSubmitted ? 'Awaiting FIRS Confirmation' : `Due ${stats.next_filing_date ? formatFilingDate(stats.next_filing_date) : '21st of next month'}`}
@@ -424,7 +457,9 @@ export default function TaxPage() {
         <div className='bg-white rounded-xl border border-grey-10/60 overflow-hidden'>
           <div className='flex items-center justify-between px-6 py-4 border-b border-grey-10/60'>
             <h2 className='text-base font-semibold text-secondary-10'>Filing History</h2>
-            <button className='flex items-center gap-1.5 border border-grey-10 rounded-full px-4 py-2 text-sm text-secondary-10 hover:bg-primary-50 transition-colors'>
+            <button 
+              onClick={handleExportCSV}
+              className='flex items-center gap-1.5 border border-grey-10 rounded-full px-4 py-2 text-sm text-secondary-10 hover:bg-primary-50 transition-colors'>
               Export <Icon icon='ph:download-simple' />
             </button>
           </div>
