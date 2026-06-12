@@ -5,7 +5,11 @@ import { Icon } from '@iconify/react';
 import TopBar from '@/components/dashboard/TopBar';
 import AddAccountModal from '@/components/dashboard/pay/AddAccountModal';
 import PaymentLinkModal from '@/components/dashboard/pay/PaymentLinkModal';
+import TransferModal from '@/components/dashboard/pay/TransferModal';
+import ViewTransactionModal from '@/components/dashboard/pay/ViewTransactionModal';
+
 import { dashboard, integrations, type DashboardData } from '@/lib/api';
+
 import { useAuth } from '@/context/AuthContext';
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
@@ -28,9 +32,15 @@ export default function PayPage() {
   const { user } = useAuth();
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [showPaymentLink, setShowPaymentLink] = useState(false);
+  const [showTransfer, setShowTransfer] = useState(false);
+  const [selectedTx, setSelectedTx] = useState<any | null>(null);
+
+
   const [activeTab, setActiveTab] = useState('all');
   const [search, setSearch] = useState('');
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [showCategoryFilters, setShowCategoryFilters] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState('all');
 
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -135,11 +145,46 @@ export default function PayPage() {
     }
 
     // Tab filter
-    if (activeTab === 'inbound') return tx.type === 'credit';
-    if (activeTab === 'outbound') return tx.type === 'debit';
-    if (activeTab === 'unmatched' || activeTab === 'tax') return false; // Placeholders
+    if (activeTab === 'inbound') {
+      if (tx.type !== 'credit') return false;
+    } else if (activeTab === 'outbound') {
+      if (tx.type !== 'debit') return false;
+    } else if (activeTab === 'unmatched' || activeTab === 'tax') {
+      return false; // Placeholders
+    }
+
+    // Category filter
+    if (selectedCategory !== 'all') {
+      if (tx.category?.toLowerCase() !== selectedCategory) return false;
+    }
+
     return true;
   });
+
+  const handleExport = () => {
+    const headers = ['Date', 'Type', 'Source', 'Sender/Recipient', 'Amount', 'Category'];
+    const rows = filteredTransactions.map(tx => {
+      const { date: d, time: t } = formatDate(tx.transaction_date);
+      const isCredit = tx.type === 'credit';
+      return [
+        `${d} ${t}`,
+        tx.type === 'credit' ? 'Credit' : 'Debit',
+        tx.bank_name ?? '—',
+        tx.counterparty_name ?? '—',
+        `${isCredit ? '+' : '-'}${tx.amount}`,
+        tx.category ?? 'Uncategorized'
+      ];
+    });
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(','), ...rows.map(e => e.map(val => `"${val.replace(/"/g, '""')}"`).join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `transactions_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
     <div className='flex flex-col flex-1'>
@@ -252,10 +297,14 @@ export default function PayPage() {
             New Payment Link{' '}
             <Icon className='text-2xl' icon='material-symbols:link-rounded' />
           </button>
-          <button className='flex items-center gap-2 bg-primary-40 text-white rounded-full px-5 py-2.5 text-sm font-medium hover:bg-primary-30 transition-colors shadow-sm'>
+          <button
+            onClick={() => setShowTransfer(true)}
+            className='flex items-center gap-2 bg-primary-40 text-white rounded-full px-5 py-2.5 text-sm font-medium hover:bg-primary-30 transition-colors shadow-sm'
+          >
             Make a Transfer{' '}
             <Icon className='text-2xl' icon='hugeicons:money-send-01' />
           </button>
+
         </div>
 
         {/* Transactions */}
@@ -265,14 +314,34 @@ export default function PayPage() {
               Transactions
             </h2>
             <div className='flex items-center gap-2'>
-              <button className='flex items-center gap-1.5 border border-grey-10 rounded-full px-4 py-2 text-sm text-secondary-10 hover:bg-primary-50 transition-colors'>
+              <button
+                onClick={() => setShowCategoryFilters(v => !v)}
+                className={`flex items-center gap-1.5 border rounded-full px-4 py-2 text-sm transition-colors ${showCategoryFilters ? 'bg-primary-30 border-primary-30 text-white' : 'border-grey-10 text-secondary-10 hover:bg-primary-50'}`}
+              >
                 Filter <Icon icon='ph:sliders-horizontal' />
               </button>
-              <button className='flex items-center gap-1.5 border border-grey-10 rounded-full px-4 py-2 text-sm text-secondary-10 hover:bg-primary-50 transition-colors'>
+              <button
+                onClick={handleExport}
+                className='flex items-center gap-1.5 border border-grey-10 rounded-full px-4 py-2 text-sm text-secondary-10 hover:bg-primary-50 transition-colors'
+              >
                 Export <Icon icon='ph:download-simple' />
               </button>
             </div>
           </div>
+
+          {showCategoryFilters && (
+            <div className='px-6 py-3 border-b border-grey-10/60 flex flex-wrap gap-2 animate-fade-in'>
+              {['all', 'utility', 'software', 'office', 'travel', 'tax_payment'].map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`text-xs px-3 py-1.5 rounded-full capitalize border transition-colors ${selectedCategory === cat ? 'bg-primary-40 border-primary-40 text-white' : 'border-grey-10 text-secondary-20 hover:bg-primary-50'}`}
+                >
+                  {cat.replace('_', ' ')}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Tabs */}
           <div className='flex items-center gap-2 px-6 py-3 border-b border-grey-10/60'>
@@ -389,11 +458,15 @@ export default function PayPage() {
                           {tx.category ?? 'Uncategorized'}
                         </span>
                       </td>
-                      <td className='px-4 py-3.5'>
-                        <button className='text-primary-30 text-sm font-medium hover:underline'>
+                       <td className='px-4 py-3.5'>
+                        <button
+                          onClick={() => setSelectedTx(tx)}
+                          className='text-primary-30 text-sm font-medium hover:underline'
+                        >
                           View
                         </button>
                       </td>
+
                     </tr>
                   );
                 })}
@@ -440,6 +513,14 @@ export default function PayPage() {
       {showPaymentLink && (
         <PaymentLinkModal onClose={() => setShowPaymentLink(false)} />
       )}
+      {showTransfer && (
+        <TransferModal onClose={() => setShowTransfer(false)} />
+      )}
+      {selectedTx && (
+        <ViewTransactionModal transaction={selectedTx} onClose={() => setSelectedTx(null)} />
+      )}
+
+
     </div>
   );
 }

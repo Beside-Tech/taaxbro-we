@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { Icon } from '@iconify/react';
 import TopBar from '@/components/dashboard/TopBar';
 import GreetingHeading from '@/components/dashboard/GreetingHeading';
+import ViewTransactionModal from '@/components/dashboard/pay/ViewTransactionModal';
+
 import { dashboard, business, onboarding, type DashboardData, type BusinessProfile } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 
@@ -96,6 +98,8 @@ export default function OverviewPage() {
   const [modalLoading, setModalLoading] = useState(false);
   const [modalError, setModalError] = useState('');
   const [modalForm, setModalForm] = useState({ user_type: '', industry: '' });
+  const [selectedTx, setSelectedTx] = useState<any | null>(null);
+
 
   async function handleModalSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -499,10 +503,14 @@ export default function OverviewPage() {
                         {tx.vat_amount != null ? `${formatNaira(tx.vat_amount)} (VAT)` : '—'}
                       </td>
                       <td className='px-4 py-3.5'>
-                        <button className='text-primary-30 text-sm font-medium hover:underline'>
+                        <button
+                          onClick={() => setSelectedTx(tx)}
+                          className='text-primary-30 text-sm font-medium hover:underline'
+                        >
                           View
                         </button>
                       </td>
+
                     </tr>
                   );
                 })}
@@ -610,6 +618,9 @@ export default function OverviewPage() {
           </div>
         </div>
       )}
+      {selectedTx && (
+        <ViewTransactionModal transaction={selectedTx} onClose={() => setSelectedTx(null)} />
+      )}
     </div>
   );
-}
+}

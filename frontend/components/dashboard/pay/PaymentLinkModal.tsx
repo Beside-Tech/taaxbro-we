@@ -1,21 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Icon } from '@iconify/react';
+import { useAuth } from '@/context/AuthContext';
+import { business, integrations } from '@/lib/api';
 
 interface Props {
   onClose: () => void;
 }
 
-const accounts = [
-  { id: '1', bank: 'First Bank', last4: '5818' },
-  { id: '2', bank: 'Opay Digital Services', last4: '1600' },
-  { id: '3', bank: 'Guarantee Trust Bank', last4: '5818' },
-];
-
 type Step = 'form' | 'preview' | 'ready';
 
+interface LocalAccount {
+  id: string;
+  bank: string;
+  last4: string;
+}
+
 export default function PaymentLinkModal({ onClose }: Props) {
+  const { user } = useAuth();
   const [step, setStep] = useState<Step>('form');
   const [description, setDescription] = useState('');
   const [payerName, setPayerName] = useState('');
@@ -24,14 +27,55 @@ export default function PaymentLinkModal({ onClose }: Props) {
   const [showAccountDrop, setShowAccountDrop] = useState(false);
   const [shareMode, setShareMode] = useState<'whatsapp' | 'email' | 'qr' | null>(null);
 
-  const selectedAccount = accounts.find((a) => a.id === accountId);
-  const paymentLink = 'https://taaxbro.com/payment/012233';
+  const [accounts, setAccounts] = useState<LocalAccount[]>([]);
+  const [accountsLoading, setAccountsLoading] = useState(true);
+  const [paymentLink, setPaymentLink] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const formValid = description && accountId && amount;
+  useEffect(() => {
+    setAccountsLoading(true);
+    business.getProfile().then((profile) => {
+      if (profile.bank_name && profile.account_number) {
+        const last4 = profile.account_number.slice(-4);
+        setAccounts([{
+          id: 'manual',
+          bank: profile.bank_name,
+          last4: last4
+        }]);
+        setAccountId('manual');
+      }
+    }).catch((err) => {
+      console.error('Failed to load manual bank profile:', err);
+    }).finally(() => {
+      setAccountsLoading(false);
+    });
+  }, []);
+
+  const selectedAccount = accounts.find((a) => a.id === accountId);
+  const formValid = description && accountId && amount && !generating;
+
+  const handleGenerateLink = async () => {
+    if (!user?.business_id) return;
+    setGenerating(true);
+    setError(null);
+    try {
+      const res = await integrations.createPaymentLink(user.business_id, {
+        amount: Number(amount),
+        description: description
+      });
+      setPaymentLink(res.url);
+      setStep('ready');
+    } catch (err: any) {
+      setError(err.message ?? 'Failed to generate payment link. Please ensure your bank details are configured in Settings.');
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   return (
     <div className='fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4'>
-      <div className='bg-white rounded-2xl p-8 w-full max-w-lg relative max-h-[90vh] overflow-y-auto'>
+      <div className='bg-white rounded-2xl p-8 w-full max-w-lg relative max-h-[90vh] overflow-y-auto shadow-xl border border-grey-10'>
         <button
           onClick={onClose}
           className='absolute top-6 right-6 text-secondary-30 hover:text-secondary-10 transition-colors'
@@ -78,16 +122,21 @@ export default function PaymentLinkModal({ onClose }: Props) {
                   <button
                     type='button'
                     onClick={() => setShowAccountDrop((v) => !v)}
-                    className='w-full border border-grey-10 rounded-xl px-4 py-3 text-sm outline-none text-left flex items-center justify-between focus:border-primary-30 transition-colors'
+                    disabled={accountsLoading || accounts.length === 0}
+                    className='w-full border border-grey-10 rounded-xl px-4 py-3 text-sm outline-none text-left flex items-center justify-between focus:border-primary-30 transition-colors disabled:bg-secondary-50 disabled:cursor-not-allowed'
                   >
                     <span className={selectedAccount ? 'text-secondary-10' : 'text-secondary-40'}>
-                      {selectedAccount
-                        ? `${selectedAccount.bank} ****${selectedAccount.last4}`
-                        : 'Select Account'}
+                      {accountsLoading 
+                        ? 'Loading bank details...' 
+                        : (selectedAccount
+                            ? `${selectedAccount.bank} ****${selectedAccount.last4}`
+                            : (accounts.length === 0 
+                                ? 'No bank details set in Settings' 
+                                : 'Select Account'))}
                     </span>
                     <Icon icon='ph:caret-down' className='text-secondary-30' />
                   </button>
-                  {showAccountDrop && (
+                  {showAccountDrop && accounts.length > 0 && (
                     <div className='absolute z-10 top-full left-0 right-0 border border-grey-10 rounded-xl bg-white shadow-sm mt-1 overflow-hidden'>
                       {accounts.map((acc) => (
                         <button
@@ -110,6 +159,12 @@ export default function PaymentLinkModal({ onClose }: Props) {
                     </div>
                   )}
                 </div>
+                {accounts.length === 0 && !accountsLoading && (
+                  <p className='text-xs text-danger mt-1.5 flex items-center gap-1'>
+                    <Icon icon='ph:warning' />
+                    Please save your bank details in Settings &gt; Profile to generate payment links.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -150,6 +205,13 @@ export default function PaymentLinkModal({ onClose }: Props) {
               Confirm payment details before generating link
             </p>
 
+            {error && (
+              <div className='mb-4 p-3 bg-red-50 border border-red-200 text-xs text-danger rounded-xl flex items-center gap-1.5'>
+                <Icon icon='ph:warning-circle' className='text-base shrink-0' />
+                {error}
+              </div>
+            )}
+
             <div className='border border-grey-10 rounded-xl overflow-hidden mb-8'>
               {[
                 { label: 'Description', value: description },
@@ -176,12 +238,22 @@ export default function PaymentLinkModal({ onClose }: Props) {
               ))}
             </div>
 
-            <button
-              onClick={() => setStep('ready')}
-              className='w-full py-3.5 rounded-full bg-primary-30 text-white text-sm font-medium hover:bg-primary-40 transition-colors flex items-center justify-center gap-2'
-            >
-              Generate Link <Icon icon='ph:link' />
-            </button>
+            <div className='flex gap-3'>
+              <button
+                onClick={() => setStep('form')}
+                disabled={generating}
+                className='flex-1 py-3.5 rounded-full border border-grey-10 text-secondary-20 text-sm font-medium hover:bg-secondary-50 transition-colors disabled:opacity-50'
+              >
+                Back
+              </button>
+              <button
+                onClick={handleGenerateLink}
+                disabled={generating}
+                className='flex-[2] py-3.5 rounded-full bg-primary-30 text-white text-sm font-medium hover:bg-primary-40 transition-colors flex items-center justify-center gap-2 disabled:bg-primary-20/50'
+              >
+                {generating ? 'Generating...' : 'Generate Link'} <Icon icon='ph:link' />
+              </button>
+            </div>
           </>
         )}
 
@@ -237,10 +309,7 @@ export default function PaymentLinkModal({ onClose }: Props) {
                     <Icon icon='ph:qr-code' className='text-8xl text-secondary-10' />
                   </div>
                   <p className='text-xs text-secondary-30'>
-                    Scan to pay |{' '}
-                    <button className='text-primary-30 font-medium hover:underline'>
-                      Download PNG
-                    </button>
+                    Scan to pay
                   </p>
                 </div>
               )}

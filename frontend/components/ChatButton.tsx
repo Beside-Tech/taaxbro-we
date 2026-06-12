@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Icon } from '@iconify/react';
+import { ai } from '@/lib/api';
 
 type Message = { from: 'user' | 'bot'; text: string };
 
@@ -47,23 +48,34 @@ export default function ChatButton() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
   const [typing, setTyping] = useState(false);
+  const [conversationId, setConversationId] = useState<string | undefined>(undefined);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (open) endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, open]);
 
-  function send(text: string) {
+  async function send(text: string) {
     const trimmed = text.trim();
     if (!trimmed || typing) return;
     setInput('');
     setMessages((prev) => [...prev, { from: 'user', text: trimmed }]);
     setTyping(true);
-    setTimeout(() => {
+    try {
+      const res = await ai.askAssistant(trimmed, conversationId);
+      if (res.conversation_id) {
+        setConversationId(res.conversation_id);
+      }
+      setMessages((prev) => [...prev, { from: 'bot', text: res.answer }]);
+    } catch (err: any) {
+      console.warn('Backend AI assistant offline or failed, using local offline bot:', err);
+      // Fallback
       setMessages((prev) => [...prev, { from: 'bot', text: getBotResponse(trimmed) }]);
+    } finally {
       setTyping(false);
-    }, 800);
+    }
   }
+
 
   return (
     <>

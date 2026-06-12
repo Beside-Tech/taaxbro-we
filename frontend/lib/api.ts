@@ -135,6 +135,9 @@ export interface DashboardStats {
   revenue_current_month: number;
   revenue_prev_month: number;
   revenue_change_pct: number | null;
+  expenses_current_month: number;
+  expenses_prev_month: number;
+  expenses_change_pct: number | null;
   tax_liabilities_due: number;
   tax_liabilities_status: 'At Risk' | 'On Track' | 'Overdue';
   outstanding_invoices_amount: number;
@@ -285,8 +288,8 @@ export const integrations = {
       method: 'POST',
     });
   },
-  sendWhatsAppOtp(businessId: string, phoneNumber: string): Promise<{ message: string }> {
-    return request<{ message: string }>(`/api/v1/integrations/whatsapp/otp/send?business_id=${businessId}`, {
+  sendWhatsAppOtp(businessId: string, phoneNumber: string): Promise<{ message: string; debug_code?: string }> {
+    return request<{ message: string; debug_code?: string }>(`/api/v1/integrations/whatsapp/otp/send?business_id=${businessId}`, {
       method: 'POST',
       body: JSON.stringify({ phone_number: phoneNumber }),
     });
@@ -316,4 +319,25 @@ export const integrations = {
       method: 'DELETE',
     });
   },
+  createPaymentLink(businessId: string, data: { amount: number; description: string; client_id?: string }): Promise<{ url: string }> {
+    return request<{ url: string }>(`/api/v1/pay/links?business_id=${businessId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  sendInvoiceViaWhatsApp(businessId: string, invoiceId: string, payload?: { client_phone?: string; message?: string }): Promise<any> {
+    return request<any>(`/api/v1/invoices/${invoiceId}/send-whatsapp?business_id=${businessId}`, {
+      method: 'POST',
+      body: JSON.stringify(payload ?? {}),
+    });
+  },
 };
+
+export const ai = {
+  askAssistant(message: string, conversationId?: string): Promise<{ answer: string; sources: any[]; conversation_id: string }> {
+    return request<{ answer: string; sources: any[]; conversation_id: string }>('/api/v1/ai/tax-assistant', {
+      method: 'POST',
+      body: JSON.stringify({ message, conversation_id: conversationId }),
+    });
+  },
+};

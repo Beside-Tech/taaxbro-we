@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react';
 import { Icon } from '@iconify/react';
 import TopBar from '@/components/dashboard/TopBar';
+import Link from 'next/link';
 import FlagIssueModal from '@/components/dashboard/tax/FlagIssueModal';
+
 import EditVATModal from '@/components/dashboard/tax/EditVATModal';
 import { dashboard, type DashboardData } from '@/lib/api';
 
@@ -203,7 +205,7 @@ export default function TaxPage() {
   const obligations = [
     { 
       name: 'Value Added Tax (VAT)', 
-      meta: `7.5% · Monthly · FIRS · Due 21 ${stats?.next_filing_date ? formatFilingDate(stats.next_filing_date) : 'June'}`, 
+      meta: `7.5% · Monthly · FIRS · Due ${stats?.next_filing_date ? formatFilingDate(stats.next_filing_date) : '21 June'}`, 
       amount: stats ? formatNaira(Number(stats.tax_liabilities_due)) : '—', 
       status: isVatSubmitted 
         ? 'Awaiting Confirmation' 
@@ -322,9 +324,10 @@ export default function TaxPage() {
           <div className='bg-white rounded-xl border border-grey-10/60 p-6'>
             <div className='flex items-center justify-between mb-4'>
               <h2 className='text-base font-semibold text-secondary-10'>VAT Breakdown</h2>
-              <button className='text-sm text-primary-30 hover:underline flex items-center gap-1'>
+              <Link href='/books' className='text-sm text-primary-30 hover:underline flex items-center gap-1'>
                 View Transactions <Icon icon='ph:arrow-right' />
-              </button>
+              </Link>
+
             </div>
 
             {/* Input/Output tabs */}
@@ -410,9 +413,10 @@ export default function TaxPage() {
                 </div>
               ))}
             </div>
-            <button className='w-full mt-4 py-3 rounded-full bg-primary-40 text-white text-sm font-medium hover:bg-primary-30 transition-colors shadow-sm'>
-              View Full List
-            </button>
+            <Link href='/settings' className='w-full mt-4 py-3 block text-center rounded-full bg-primary-40 text-white text-sm font-medium hover:bg-primary-30 transition-colors shadow-sm'>
+              Configure Obligations in Settings
+            </Link>
+
           </div>
         </div>
 

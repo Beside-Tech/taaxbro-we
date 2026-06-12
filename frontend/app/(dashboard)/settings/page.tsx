@@ -61,6 +61,7 @@ export default function SettingsPage() {
   const [otpLoading, setOtpLoading] = useState(false);
   const [otpError, setOtpError] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
+  const [debugCode, setDebugCode] = useState<string | null>(null);
 
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -256,8 +257,12 @@ export default function SettingsPage() {
     
     setOtpLoading(true);
     setOtpError(null);
+    setDebugCode(null);
     try {
-      await integrations.sendWhatsAppOtp(profile.business_id, waPhoneNumber.trim());
+      const res = await integrations.sendWhatsAppOtp(profile.business_id, waPhoneNumber.trim());
+      if (res.debug_code) {
+        setDebugCode(res.debug_code);
+      }
       setOtpSent(true);
       setCooldown(60);
       // Reset code inputs
@@ -872,6 +877,18 @@ export default function SettingsPage() {
                             </p>
                           </div>
                         </div>
+
+                        {debugCode && (
+                          <div className='w-full p-4 bg-orange-50 border border-orange-250 rounded-2xl flex gap-3 text-sm text-orange-800 animate-fade-in text-left'>
+                            <Icon icon='ph:info-bold' className='text-lg shrink-0 mt-0.5 text-orange-600' />
+                            <div>
+                              <p className='font-bold text-orange-900'>Demo Verification Code</p>
+                              <p className='text-xs text-orange-700 mt-1 leading-relaxed'>
+                                Taaxbro WhatsApp API is running in sandbox/mock mode. Enter the following code to link your account: <strong className='text-sm bg-orange-100 px-1.5 py-0.5 rounded text-orange-900 font-mono'>{debugCode}</strong>
+                              </p>
+                            </div>
+                          </div>
+                        )}
 
                         <div className="flex flex-col items-center space-y-4 pt-4">
                           <div className="flex gap-2 sm:gap-3 justify-center">
