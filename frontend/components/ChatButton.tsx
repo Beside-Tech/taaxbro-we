@@ -1,69 +1,21 @@
 'use client';
 
-/**
- * Elon Web Chat Widget — v2.0
- *
- * Connected to the same Elon AI agent as WhatsApp.
- * Context-aware:
- *   • Guest (not logged in)  → general Nigerian tax Q&A, product info. No account actions.
- *   • Logged-in              → full Elon: invoices, clients, tax calendar, P&L, OCR, voice
- *
- * New capabilities for logged-in users:
- *   • 📎 Image/PDF upload  → OCR extraction → expense logging via Elon
- *   • 🎤 Voice input       → browser MediaRecorder → Whisper transcription
- *   • 🧠 Page context      → tells Elon which dashboard tab is open
- *   • ✨ Markdown rendering → bold, bullets, line breaks
- */
-
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { Icon } from '@iconify/react';
 import { useAuth } from '@/context/AuthContext';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useChat } from 'ai/react';
+import type { Message, ToolInvocation } from 'ai';
+import { useChatContext } from '@/context/ChatContext';
+import ToolResultCard from './chat/ToolResultCard';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Sender = 'user' | 'bot';
 type MsgType = 'text' | 'ocr-preview' | 'voice-transcript';
-
-interface Message {
-  id: string;
-  from: Sender;
-  text: string;
-  type?: MsgType;
-  timestamp?: Date;
-}
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
-
-async function callElonAuthenticated(
-  message: string,
-  conversationId?: string,
-  dashboardPage?: string,
-): Promise<{ answer: string; conversation_id: string; mode: string }> {
-  const res = await fetch(`${BASE}/api/v1/ai/chat`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, conversation_id: conversationId, dashboard_page: dashboardPage }),
-  });
-  if (!res.ok) throw new Error(`${res.status}`);
-  return res.json();
-}
-
-async function callElonGuest(
-  message: string,
-  conversationId?: string,
-): Promise<{ answer: string; conversation_id: string; mode: string }> {
-  const res = await fetch(`${BASE}/api/v1/ai/chat/guest`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, conversation_id: conversationId }),
-  });
-  if (!res.ok) throw new Error(`${res.status}`);
-  return res.json();
-}
 
 async function uploadOCR(
   file: File,
@@ -120,7 +72,6 @@ const PAGE_SUGGESTIONS: Record<string, string[]> = {
 
 function getSuggestions(pathname: string, isLoggedIn: boolean): string[] {
   if (!isLoggedIn) return GUEST_SUGGESTIONS;
-  // Match by prefix
   for (const [prefix, qs] of Object.entries(PAGE_SUGGESTIONS)) {
     if (pathname.startsWith(prefix)) return qs;
   }
@@ -143,7 +94,6 @@ function getPageName(pathname: string): string | undefined {
 function renderMarkdown(text: string): React.ReactNode {
   const lines = text.split('\n');
   return lines.map((line, i) => {
-    // Bold: *text* or **text**
     const parts = line.split(/(\*{1,2}[^*]+\*{1,2})/g);
     const rendered = parts.map((part, j) => {
       if (/^\*{1,2}[^*]+\*{1,2}$/.test(part)) {
@@ -151,7 +101,6 @@ function renderMarkdown(text: string): React.ReactNode {
       }
       return <span key={j}>{part}</span>;
     });
-    // Bullet points
     const isBullet = line.startsWith('• ') || line.startsWith('- ');
     const content = isBullet ? line.slice(2) : line;
     const contentParts = content.split(/(\*{1,2}[^*]+\*{1,2})/g).map((p, j) => {
@@ -174,95 +123,97 @@ function renderMarkdown(text: string): React.ReactNode {
   });
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
-
 function mkId() { return Math.random().toString(36).slice(2); }
 
 export default function ChatButton() {
   const { user } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
   const isLoggedIn = !!user;
   const dashboardPage = getPageName(pathname);
 
-  const [open, setOpen] = useState(false);
-  const [input, setInput] = useState('');
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [typing, setTyping] = useState(false);
-  const [conversationId, setConversationId] = useState<string | undefined>();
-  const [recording, setRecording] = useState(false);
-  const [voiceError, setVoiceError] = useState('');
+  const { open, setOpen, prefilledMessage, setPrefilledMessage } = useChatContext();
 
-  const endRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const endRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
 
+  const [recording, setRecording] = useState(false);
+  const [voiceError, setVoiceError] = useState('');
+  const [uploadingOcr, setUploadingOcr] = useState(false);
+
+  const { messages, input, setInput, handleInputChange, handleSubmit, append, isLoading, setMessages } = useChat({
+    api: '/api/chat',
+    body: {
+      page: dashboardPage || 'overview',
+      isLoggedIn,
+    },
+    onError: (err) => {
+      const errorText = err?.message?.includes('model output')
+        ? "I had a hiccup generating a response. Could you rephrase or try again?"
+        : "Sorry, something went wrong. Please try again in a moment.";
+      setMessages((prev: Message[]) => [
+        ...prev,
+        { id: mkId(), role: 'assistant' as const, content: errorText },
+      ]);
+    },
+  });
+
+  // ── Auto-send prefilled message ───────────────────────────────────────────
+  useEffect(() => {
+    if (open && prefilledMessage) {
+      append({
+        role: 'user',
+        content: prefilledMessage,
+      });
+      setPrefilledMessage('');
+    }
+  }, [open, prefilledMessage, append, setPrefilledMessage]);
+
   // ── Initial greeting based on auth status ─────────────────────────────────
   useEffect(() => {
-    const greeting: Message = isLoggedIn
-      ? {
-          id: mkId(),
-          from: 'bot',
-          text: `Hi${user?.full_name ? ` ${user.full_name.split(' ')[0]}` : ''}! I'm Elon, your Taaxbro assistant. I can create invoices, log expenses, check your tax calendar, and more. What would you like to do?`,
-          timestamp: new Date(),
-        }
-      : {
-          id: mkId(),
-          from: 'bot',
-          text: "Hi! I'm Elon, Taaxbro's AI assistant. I can answer Nigerian tax questions and show you how Taaxbro works. Sign up to create invoices, log expenses, and auto-file taxes.",
-          timestamp: new Date(),
-        };
-    setMessages([greeting]);
-    setConversationId(undefined);
-  }, [isLoggedIn, user?.full_name]);
+    if (messages.length === 0) {
+      const greetingText = isLoggedIn
+        ? `Hi${user?.full_name ? ` ${user.full_name.split(' ')[0]}` : ''}! I'm Elon, your Taaxbro assistant. I can create invoices, log expenses, check your tax calendar, and navigate you around. What would you like to do?`
+        : "Hi! I'm Elon, Taaxbro's AI assistant. I can answer Nigerian tax questions and show you how Taaxbro works. Sign up to create invoices, log expenses, and auto-file taxes.";
+      
+      setMessages([
+        {
+          id: 'greeting',
+          role: 'assistant',
+          content: greetingText,
+        },
+      ]);
+    }
+  }, [isLoggedIn, user?.full_name, messages.length, setMessages]);
 
   // ── Auto-scroll ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (open) {
       setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
     }
-  }, [messages, open]);
+  }, [messages, open, uploadingOcr]);
 
-  // ── Reset greeting on new page ────────────────────────────────────────────
+  // ── Handle Client-side tool call resolutions (navigation & modal triggers) ─
   useEffect(() => {
-    if (open && isLoggedIn && dashboardPage) {
-      // Update greeting subtly (don't reset conversation, just useful context)
-    }
-  }, [pathname]);
+    const lastMessage = messages[messages.length - 1];
+    if (!lastMessage || !lastMessage.toolInvocations) return;
 
-  // ── Send text message ─────────────────────────────────────────────────────
-  const send = useCallback(async (text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed || typing) return;
-    setInput('');
-    setVoiceError('');
-
-    const userMsg: Message = { id: mkId(), from: 'user', text: trimmed, timestamp: new Date() };
-    setMessages((prev) => [...prev, userMsg]);
-    setTyping(true);
-
-    try {
-      let res;
-      if (isLoggedIn) {
-        res = await callElonAuthenticated(trimmed, conversationId, dashboardPage);
-      } else {
-        res = await callElonGuest(trimmed, conversationId);
+    for (const invocation of lastMessage.toolInvocations) {
+      if (invocation.state === 'result') {
+        const result = invocation.result;
+        const toolName = invocation.toolName;
+        if (result && !result.error) {
+          if (toolName === 'navigate_to' && result.page) {
+            router.push('/' + result.page);
+          } else if (toolName === 'open_modal' && result.modal) {
+            window.dispatchEvent(new CustomEvent('open-modal', { detail: { modal: result.modal } }));
+          }
+        }
       }
-      if (res.conversation_id) setConversationId(res.conversation_id);
-      setMessages((prev) => [
-        ...prev,
-        { id: mkId(), from: 'bot', text: res.answer, timestamp: new Date() },
-      ]);
-    } catch (err: unknown) {
-      // Offline fallback
-      const fallback = isLoggedIn
-        ? "I couldn't reach the server right now. Please try again in a moment."
-        : "I'm temporarily offline. Try: VAT is 7.5% in Nigeria, PAYE is deducted monthly, and CIT is 30% for large companies.";
-      setMessages((prev) => [...prev, { id: mkId(), from: 'bot', text: fallback, timestamp: new Date() }]);
-    } finally {
-      setTyping(false);
     }
-  }, [typing, isLoggedIn, conversationId, dashboardPage]);
+  }, [messages, router]);
 
   // ── OCR / file upload ─────────────────────────────────────────────────────
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -270,31 +221,42 @@ export default function ChatButton() {
     if (!file || !isLoggedIn) return;
     e.target.value = '';
 
-    const previewMsg: Message = {
-      id: mkId(), from: 'user',
-      text: `📎 ${file.name} (${(file.size / 1024).toFixed(0)} KB)`,
-      type: 'ocr-preview',
-      timestamp: new Date(),
-    };
-    setMessages((prev) => [...prev, previewMsg]);
-    setTyping(true);
+    setUploadingOcr(true);
+    setVoiceError('');
+
+    // Append mock user message for preview
+    setMessages((prev: Message[]) => [
+      ...prev,
+      {
+        id: mkId(),
+        role: 'user' as const,
+        content: `📎 Uploaded document: ${file.name} (${(file.size / 1024).toFixed(0)} KB)`,
+      },
+    ]);
 
     try {
-      const res = await uploadOCR(file, conversationId);
-      if (res.conversation_id) setConversationId(res.conversation_id);
-      setMessages((prev) => [
+      const res = await uploadOCR(file);
+      setMessages((prev: Message[]) => [
         ...prev,
-        { id: mkId(), from: 'bot', text: res.answer, timestamp: new Date() },
+        {
+          id: mkId(),
+          role: 'assistant' as const,
+          content: res.answer,
+        },
       ]);
     } catch {
-      setMessages((prev) => [
+      setMessages((prev: Message[]) => [
         ...prev,
-        { id: mkId(), from: 'bot', text: "I couldn't read that file. Please try a clearer image or PDF.", timestamp: new Date() },
+        {
+          id: mkId(),
+          role: 'assistant' as const,
+          content: "I couldn't read that file. Please try a clearer image or PDF.",
+        },
       ]);
     } finally {
-      setTyping(false);
+      setUploadingOcr(false);
     }
-  }, [isLoggedIn, conversationId]);
+  }, [isLoggedIn, setMessages]);
 
   // ── Voice recording ───────────────────────────────────────────────────────
   const startRecording = useCallback(async () => {
@@ -308,17 +270,15 @@ export default function ChatButton() {
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        setTyping(true);
+        setUploadingOcr(true); // show spinner during transcription
         try {
-          const res = await transcribeVoice(blob, conversationId);
-          if (res.conversation_id) setConversationId(res.conversation_id);
-          // Put the transcript in the input so user can review before sending
+          const res = await transcribeVoice(blob);
           setInput(res.transcript);
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : 'Voice unavailable';
           setVoiceError(msg.includes('503') ? 'Voice transcription is offline — please type.' : msg);
         } finally {
-          setTyping(false);
+          setUploadingOcr(false);
           setRecording(false);
         }
       };
@@ -328,15 +288,14 @@ export default function ChatButton() {
     } catch {
       setVoiceError('Microphone access denied.');
     }
-  }, [isLoggedIn, recording, conversationId]);
+  }, [isLoggedIn, recording, setInput]);
 
   const stopRecording = useCallback(() => {
     mediaRecorderRef.current?.stop();
   }, []);
 
-  // ── Suggestions ───────────────────────────────────────────────────────────
   const suggestions = getSuggestions(pathname, isLoggedIn);
-  const showSuggestions = messages.length <= 1 && !typing;
+  const showSuggestions = messages.length <= 1 && !isLoading && !uploadingOcr;
 
   return (
     <>
@@ -365,7 +324,17 @@ export default function ChatButton() {
           </div>
           <div className='flex items-center gap-1'>
             <button
-              onClick={() => { setMessages([]); setConversationId(undefined); }}
+              onClick={() => {
+                setMessages([
+                  {
+                    id: 'greeting',
+                    role: 'assistant',
+                    content: isLoggedIn
+                      ? "Hi! I'm Elon, your Taaxbro assistant. What can I do for you today?"
+                      : "Hi! I'm Elon. Sign up for full access to bookkeeping features.",
+                  },
+                ]);
+              }}
               title='Clear chat'
               className='p-1.5 rounded-lg hover:bg-white/10 transition text-white/60 hover:text-white'
             >
@@ -395,27 +364,36 @@ export default function ChatButton() {
 
         {/* Messages */}
         <div className='flex-1 overflow-y-auto p-4 flex flex-col gap-2.5 min-h-0 bg-[#fafafa]'>
-          {messages.map((msg) => (
-            <div key={msg.id} className={`flex ${msg.from === 'user' ? 'justify-end' : 'justify-start'}`}>
-              {msg.from === 'bot' && (
-                <div className='w-6 h-6 rounded-full bg-gradient-to-br from-primary-40 to-primary-20 flex items-center justify-center text-[10px] font-bold text-white shrink-0 mr-2 mt-1'>
-                  E
+          {messages.map((msg: Message) => (
+            <div key={msg.id} className="space-y-1.5">
+              <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                {msg.role === 'assistant' && (
+                  <div className='w-6 h-6 rounded-full bg-gradient-to-br from-primary-40 to-primary-20 flex items-center justify-center text-[10px] font-bold text-white shrink-0 mr-2 mt-1'>
+                    E
+                  </div>
+                )}
+                <div
+                  className={`max-w-[78%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed shadow-sm ${
+                    msg.role === 'user'
+                      ? 'bg-[#1a1a2e] text-white rounded-br-sm'
+                      : 'bg-white text-secondary-10 rounded-bl-sm border border-grey-10/50'
+                  }`}
+                >
+                  {msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content}
                 </div>
-              )}
-              <div
-                className={`max-w-[78%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed shadow-sm ${
-                  msg.from === 'user'
-                    ? 'bg-[#1a1a2e] text-white rounded-br-sm'
-                    : 'bg-white text-secondary-10 rounded-bl-sm border border-grey-10/50'
-                } ${msg.type === 'ocr-preview' ? 'bg-primary-50 border border-primary-10 text-primary-20' : ''}`}
-              >
-                {msg.from === 'bot' ? renderMarkdown(msg.text) : msg.text}
               </div>
+              
+              {/* Tool Invocations UI */}
+              {msg.toolInvocations?.map((invocation: ToolInvocation) => (
+                <div key={invocation.toolCallId} className="pl-8">
+                  <ToolResultCard invocation={invocation} />
+                </div>
+              ))}
             </div>
           ))}
 
           {/* Typing indicator */}
-          {typing && (
+          {(isLoading || uploadingOcr) && (
             <div className='flex justify-start items-end gap-2'>
               <div className='w-6 h-6 rounded-full bg-gradient-to-br from-primary-40 to-primary-20 flex items-center justify-center text-[10px] font-bold text-white shrink-0'>E</div>
               <div className='bg-white border border-grey-10/50 px-4 py-3 rounded-2xl rounded-bl-sm shadow-sm flex gap-1.5 items-center'>
@@ -437,7 +415,7 @@ export default function ChatButton() {
               {suggestions.map((q) => (
                 <button
                   key={q}
-                  onClick={() => send(q)}
+                  onClick={() => append({ role: 'user', content: q })}
                   className='text-left text-xs px-3.5 py-2 rounded-xl border border-grey-10 bg-white text-secondary-10 hover:border-primary-30/60 hover:bg-primary-50 transition-colors'
                 >
                   {q}
@@ -458,7 +436,7 @@ export default function ChatButton() {
         )}
 
         {/* Input bar */}
-        <div className='flex items-center gap-2 px-3 py-2.5 border-t border-grey-10 bg-white shrink-0'>
+        <form onSubmit={handleSubmit} className='flex items-center gap-2 px-3 py-2.5 border-t border-grey-10 bg-white shrink-0'>
           {/* OCR upload — logged-in only */}
           {isLoggedIn && (
             <>
@@ -470,9 +448,10 @@ export default function ChatButton() {
                 onChange={handleFileChange}
               />
               <button
+                type='button'
                 onClick={() => fileInputRef.current?.click()}
                 title='Upload receipt or document'
-                disabled={typing}
+                disabled={isLoading || uploadingOcr}
                 className='p-1.5 rounded-lg text-secondary-30 hover:text-primary-30 hover:bg-primary-50 transition disabled:opacity-40'
               >
                 <Icon icon='ph:paperclip' className='text-base' />
@@ -482,22 +461,22 @@ export default function ChatButton() {
 
           <input
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input); } }}
+            onChange={handleInputChange}
             placeholder={isLoggedIn ? 'Create invoice, ask about taxes…' : 'Ask about Nigerian tax…'}
             className='flex-1 text-sm bg-transparent outline-none text-secondary-10 placeholder:text-secondary-40 py-1'
-            disabled={typing || recording}
+            disabled={isLoading || recording || uploadingOcr}
           />
 
           {/* Voice input — logged-in only */}
           {isLoggedIn && (
             <button
+              type='button'
               onMouseDown={startRecording}
               onMouseUp={stopRecording}
               onTouchStart={startRecording}
               onTouchEnd={stopRecording}
               title={recording ? 'Release to transcribe' : 'Hold to record'}
-              disabled={typing}
+              disabled={isLoading || uploadingOcr}
               className={`p-1.5 rounded-lg transition disabled:opacity-40 ${
                 recording
                   ? 'text-red-500 bg-red-50 animate-pulse'
@@ -509,19 +488,19 @@ export default function ChatButton() {
           )}
 
           <button
-            onClick={() => send(input)}
-            disabled={!input.trim() || typing}
+            type='submit'
+            disabled={!input.trim() || isLoading || uploadingOcr}
             className='p-1.5 rounded-lg text-secondary-30 hover:text-primary-30 hover:bg-primary-50 transition disabled:opacity-30'
             aria-label='Send'
           >
             <Icon icon='ph:paper-plane-tilt-fill' className='text-base' />
           </button>
-        </div>
+        </form>
       </div>
 
       {/* ── FAB Button ────────────────────────────────────────────────────────── */}
       <button
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => setOpen(!open)}
         aria-label={open ? 'Close Elon assistant' : 'Open Elon assistant'}
         className='fixed bottom-4 md:bottom-6 right-4 md:right-6 z-50 w-14 h-14 rounded-full flex items-center justify-center shadow-xl transition-all duration-300 cursor-pointer bg-gradient-to-br from-[#1a1a2e] to-primary-30 text-white hover:scale-105 hover:shadow-2xl border-2 border-white/20'
       >
@@ -529,7 +508,6 @@ export default function ChatButton() {
           icon={open ? 'ph:x-bold' : 'ph:chats-teardrop-fill'}
           className='text-xl transition-all duration-200'
         />
-        {/* Notification dot if guest — encourage sign-up */}
         {!isLoggedIn && !open && (
           <span className='absolute top-0.5 right-0.5 w-3 h-3 bg-amber-400 rounded-full border-2 border-white' />
         )}

@@ -9,14 +9,18 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ai-sdk/google": "^0.0.55",
+    "@ai-sdk/react": "^3.0.204",
     "@iconify/react": "^6.0.2",
     "@mono.co/connect.js": "^2.2.0",
+    "ai": "^3.4.33",
     "gsap": "^3.15.0",
     "next": "16.2.7",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^3.8.1",
-    "swiper": "^12.2.0"
+    "swiper": "^12.2.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

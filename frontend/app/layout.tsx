@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Mona_Sans, Space_Grotesk } from 'next/font/google';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { AuthProvider } from '@/context/AuthContext';
+import { ChatProvider } from '@/context/ChatContext';
 import './globals.css';
 
 const monaSans = Mona_Sans({
@@ -34,7 +35,13 @@ export default function RootLayout({
       className={`${monaSans.variable} ${spaceGrotesk.variable}`}
       suppressHydrationWarning>
       <body>
-        <ThemeProvider><AuthProvider>{children}</AuthProvider></ThemeProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <ChatProvider>
+              {children}
+            </ChatProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
