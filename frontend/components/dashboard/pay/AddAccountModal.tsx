@@ -101,26 +101,42 @@ export default function AddAccountModal({ onClose }: Props) {
     };
   }, [user, onClose]);
 
+  // Load Mono Connect SDK from CDN to avoid TypeScript module resolution issues.
+  // The package '@mono.co/connect.js' is not published to npm under that name,
+  // so we load it via script tag and access it as (window as any).Connect.
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      import('@mono.co/connect.js')
-        .then((module) => {
-          const MonoConnectClass = module.MonoConnect;
-          const mono = new MonoConnectClass({
-            key: process.env.NEXT_PUBLIC_MONO_PUBLIC_KEY || '',
-            onSuccess: ({ code }: { code: string }) => {
-              handleSuccessRef.current(code);
-            },
-            onClose: () => {
-              console.log('Mono widget closed');
-            },
-          });
-          setMonoInstance(mono);
-        })
-        .catch((err) => {
-          console.error('Failed to load Mono Connect SDK', err);
-        });
+    if (typeof window === 'undefined') return;
+
+    const SCRIPT_ID = 'mono-connect-sdk';
+
+    function initMono() {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const MonoConnectClass = (window as any).Connect;
+      if (!MonoConnectClass) return;
+      const mono = new MonoConnectClass({
+        key: process.env.NEXT_PUBLIC_MONO_PUBLIC_KEY || '',
+        onSuccess: ({ code }: { code: string }) => {
+          handleSuccessRef.current(code);
+        },
+        onClose: () => {
+          console.log('Mono widget closed');
+        },
+      });
+      setMonoInstance(mono);
     }
+
+    if (document.getElementById(SCRIPT_ID)) {
+      initMono();
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = SCRIPT_ID;
+    script.src = 'https://connect.withmono.com/connect.js';
+    script.async = true;
+    script.onload = initMono;
+    script.onerror = () => console.error('Failed to load Mono Connect SDK');
+    document.body.appendChild(script);
   }, []);
 
   const connectSandbox = async () => {
