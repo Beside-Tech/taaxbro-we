@@ -142,6 +142,13 @@ function OverviewTab({ data, loading, onTabChange }: TabProps) {
 
   // Dynamic charts
   const generateChartData = () => {
+    if (data?.history && data.history.length > 0) {
+      return data.history.map((item) => ({
+        month: item.month,
+        Revenue: Number((item.revenue / 1000).toFixed(2)),
+        Expenses: Number((item.expenses / 1000).toFixed(2)),
+      }));
+    }
     const list = [];
     for (let i = 4; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -163,13 +170,10 @@ function OverviewTab({ data, loading, onTabChange }: TabProps) {
           Expenses: Number(((stats?.expenses_prev_month ?? 0) / 1000).toFixed(2))
         };
       }
-      const scale = 0.6 + Math.random() * 0.4;
-      const baseRev = totalReceived > 0 ? totalReceived / 1000 : 2500;
-      const baseExp = totalSent > 0 ? totalSent / 1000 : 1200;
       return {
         month: monthLabel,
-        Revenue: Number((baseRev * (0.5 + 0.1 * index) * scale).toFixed(2)),
-        Expenses: Number((baseExp * (0.4 + 0.1 * index) * scale).toFixed(2))
+        Revenue: 0,
+        Expenses: 0
       };
     });
   };

@@ -244,10 +244,17 @@ export interface DashboardCompliance {
   items: ComplianceItem[];
 }
 
+export interface MonthlyHistoryItem {
+  month: string;
+  revenue: number;
+  expenses: number;
+}
+
 export interface DashboardData {
   stats: DashboardStats;
   recent_transactions: DashboardTransaction[];
   compliance: DashboardCompliance | null;
+  history: MonthlyHistoryItem[];
 }
 
 export const dashboard = {
