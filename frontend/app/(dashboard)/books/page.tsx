@@ -13,7 +13,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import TopBar from '@/components/dashboard/TopBar';
-import { dashboard, type DashboardData } from '@/lib/api';
+import { dashboard, invoices, type DashboardData, type InvoiceResponse } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import PaymentLinkModal from '@/components/dashboard/pay/PaymentLinkModal';
 import ViewInvoiceModal from '@/components/dashboard/books/ViewInvoiceModal';
@@ -329,34 +329,50 @@ function OverviewTab({ data, loading, onTabChange }: TabProps) {
 
 // ─── Invoices Tab ─────────────────────────────────────────────────────────────
 
-interface InvoicesTabProps extends TabProps {
+interface InvoicesTabProps {
+  invoicesList: InvoiceResponse[];
+  loading: boolean;
   onNewInvoice: () => void;
   onViewInvoice: (invoice: any) => void;
 }
 
-function InvoicesTab({ data, loading, onNewInvoice, onViewInvoice }: InvoicesTabProps) {
+function getStatusClass(status: string): string {
+  switch (status.toLowerCase()) {
+    case 'paid':
+      return 'bg-success text-white';
+    case 'partial':
+      return 'bg-amber-500 text-white';
+    case 'overdue':
+      return 'bg-danger text-white';
+    case 'sent':
+      return 'bg-blue-500 text-white';
+    case 'draft':
+      return 'bg-grey-30 text-secondary-10';
+    default:
+      return 'bg-grey-10 text-secondary-10';
+  }
+}
+
+function InvoicesTab({ invoicesList, loading, onNewInvoice, onViewInvoice }: InvoicesTabProps) {
   const [search, setSearch] = useState('');
 
-  const recentTransactions = data?.recent_transactions ?? [];
-  const creditTransactions = recentTransactions.filter((tx) => tx.type === 'credit');
-
-  const filteredInvoices = creditTransactions.filter((tx) => {
+  const filteredInvoices = invoicesList.filter((inv) => {
     if (!search) return true;
     const q = search.toLowerCase();
     return (
-      (tx.counterparty_name?.toLowerCase().includes(q) ?? false) ||
-      (tx.bank_name?.toLowerCase().includes(q) ?? false)
+      (inv.client_name?.toLowerCase().includes(q) ?? false) ||
+      (inv.invoice_number?.toLowerCase().includes(q) ?? false)
     );
   });
 
   const handleExport = () => {
     const headers = ['Invoice ID', 'Issued Date', 'Client', 'Amount', 'Status'];
-    const rows = filteredInvoices.map(tx => [
-      `INV-${tx.id.substring(0, 4).toUpperCase()}`,
-      new Date(tx.transaction_date).toLocaleDateString('en-GB'),
-      tx.counterparty_name ?? tx.bank_name ?? '—',
-      tx.amount.toString(),
-      'Paid'
+    const rows = filteredInvoices.map(inv => [
+      inv.invoice_number,
+      new Date(inv.created_at).toLocaleDateString('en-GB'),
+      inv.client_name,
+      inv.total_amount.toString(),
+      inv.status
     ]);
     const csvContent = "data:text/csv;charset=utf-8," 
       + [headers.join(','), ...rows.map(e => e.map(val => `"${val.replace(/"/g, '""')}"`).join(','))].join('\n');
@@ -394,7 +410,7 @@ function InvoicesTab({ data, loading, onNewInvoice, onViewInvoice }: InvoicesTab
           <div className='relative'>
             <Icon icon='ph:magnifying-glass' className='absolute left-3.5 top-1/2 -translate-y-1/2 text-secondary-30' />
             <input
-              type='text' placeholder='Search by Client Name' value={search} onChange={(e) => setSearch(e.target.value)}
+              type='text' placeholder='Search by Client Name or Invoice #' value={search} onChange={(e) => setSearch(e.target.value)}
               className='w-full border border-grey-10 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:border-primary-30 transition-colors placeholder:text-secondary-40 bg-white'
             />
           </div>
@@ -420,20 +436,22 @@ function InvoicesTab({ data, loading, onNewInvoice, onViewInvoice }: InvoicesTab
                 </tr>
               </thead>
               <tbody>
-                {filteredInvoices.map((tx) => {
-                  const { date: d } = formatDate(tx.transaction_date);
+                {filteredInvoices.map((inv) => {
+                  const { date: d } = formatDate(inv.created_at);
                   return (
-                    <tr key={tx.id} className='border-t border-grey-10/40 hover:bg-primary-50/30 transition-colors'>
-                      <td className='px-5 py-3.5 text-secondary-10 font-medium'>INV-{tx.id.substring(0, 4).toUpperCase()}</td>
+                    <tr key={inv.id} className='border-t border-grey-10/40 hover:bg-primary-50/30 transition-colors'>
+                      <td className='px-5 py-3.5 text-secondary-10 font-medium'>{inv.invoice_number}</td>
                       <td className='px-4 py-3.5 text-secondary-30'>{d}</td>
-                      <td className='px-4 py-3.5 text-secondary-10'>{tx.counterparty_name ?? tx.bank_name ?? '—'}</td>
-                      <td className='px-4 py-3.5 text-secondary-10 font-semibold'>{formatNaira(tx.amount)}</td>
+                      <td className='px-4 py-3.5 text-secondary-10'>{inv.client_name}</td>
+                      <td className='px-4 py-3.5 text-secondary-10 font-semibold'>{formatNaira(inv.total_amount)}</td>
                       <td className='px-4 py-3.5'>
-                        <span className='text-xs bg-success text-white px-2.5 py-1 rounded-full font-medium'>Paid</span>
+                        <span className={`text-xs text-white px-2.5 py-1 rounded-full font-medium capitalize ${getStatusClass(inv.status)}`}>
+                          {inv.status}
+                        </span>
                       </td>
                       <td className='px-4 py-3.5'>
                         <button
-                          onClick={() => onViewInvoice(tx)}
+                          onClick={() => onViewInvoice(inv)}
                           className='flex items-center gap-1 text-primary-30 text-sm font-medium hover:underline'
                         >
                           <Icon icon='ph:eye-circle' /> View
@@ -716,8 +734,22 @@ export default function BooksPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [invoicesList, setInvoicesList] = useState<InvoiceResponse[]>([]);
+  const [invoicesLoading, setInvoicesLoading] = useState(true);
+
   const [showPaymentLink, setShowPaymentLink] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
+
+  const loadInvoices = () => {
+    if (user?.business_id) {
+      setInvoicesLoading(true);
+      invoices
+        .list(user.business_id)
+        .then(setInvoicesList)
+        .catch((e) => console.error('Failed to load invoices:', e))
+        .finally(() => setInvoicesLoading(false));
+    }
+  };
 
   useEffect(() => {
     dashboard
@@ -726,6 +758,12 @@ export default function BooksPage() {
       .catch((e) => setError(e.message ?? 'Failed to load books data'))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'Invoices') {
+      loadInvoices();
+    }
+  }, [activeTab, user?.business_id]);
 
   return (
     <div className='flex flex-col flex-1'>
@@ -751,8 +789,8 @@ export default function BooksPage() {
         {activeTab === 'Overview' && <OverviewTab data={data} loading={loading} onTabChange={setActiveTab} />}
         {activeTab === 'Invoices' && (
           <InvoicesTab
-            data={data}
-            loading={loading}
+            invoicesList={invoicesList}
+            loading={invoicesLoading}
             onNewInvoice={() => setShowPaymentLink(true)}
             onViewInvoice={setSelectedInvoice}
           />

@@ -24,6 +24,13 @@ export default function ViewInvoiceModal({ invoice, businessId, onClose }: ViewI
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Mapped fields supporting both Transaction and Invoice shapes
+  const clientName = invoice.client_name ?? invoice.counterparty_name ?? invoice.bank_name ?? 'there';
+  const amount = invoice.total_amount ?? invoice.amount ?? 0;
+  const dateStr = invoice.created_at ?? invoice.transaction_date ?? new Date().toISOString();
+  const displayStatus = invoice.status ?? 'Paid';
+  const invoiceNum = invoice.invoice_number ?? `INV-${invoice.id.substring(0, 4).toUpperCase()}`;
+
   useEffect(() => {
     if (!businessId) return;
     setWaLoading(true);
@@ -33,15 +40,15 @@ export default function ViewInvoiceModal({ invoice, businessId, onClose }: ViewI
       .finally(() => setWaLoading(false));
 
     // Prefill phone and message
-    const initialPhone = invoice.counterparty_phone || '';
+    const initialPhone = invoice.client_phone ?? invoice.counterparty_phone ?? '';
     setPhone(initialPhone);
     
-    const initialMsg = `Hello ${invoice.counterparty_name ?? 'there'},\n\n` +
-      `Here is invoice INV-${invoice.id.substring(0, 4).toUpperCase()} from our transaction.\n` +
-      `Amount: ${formatNaira(invoice.amount)}\n\n` +
+    const initialMsg = `Hello ${clientName},\n\n` +
+      `Here is invoice ${invoiceNum}.\n` +
+      `Amount: ${formatNaira(amount)}\n\n` +
       `Thank you for your business!`;
     setMessage(initialMsg);
-  }, [invoice, businessId]);
+  }, [invoice, businessId, clientName, invoiceNum, amount]);
 
   const handleSend = async () => {
     if (!phone.trim()) {
@@ -65,8 +72,6 @@ export default function ViewInvoiceModal({ invoice, businessId, onClose }: ViewI
     }
   };
 
-  const invoiceNum = `INV-${invoice.id.substring(0, 4).toUpperCase()}`;
-
   return (
     <div className='fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4'>
       <div className='bg-white rounded-2xl p-8 w-full max-w-xl relative max-h-[90vh] overflow-y-auto shadow-xl border border-grey-10'>
@@ -76,7 +81,7 @@ export default function ViewInvoiceModal({ invoice, businessId, onClose }: ViewI
         >
           <Icon icon='ph:x' className='text-xl' />
         </button>
-
+ 
         <div className='flex items-center gap-3 mb-6'>
           <div className='w-12 h-12 rounded-xl bg-primary-50 text-primary-30 flex items-center justify-center shrink-0'>
             <Icon icon='ph:file-text' className='text-2xl' />
@@ -89,11 +94,11 @@ export default function ViewInvoiceModal({ invoice, businessId, onClose }: ViewI
 
         <div className='border border-grey-10 rounded-xl overflow-hidden mb-6 bg-grey-0/20 text-sm'>
           {[
-            { label: 'Client / Counterparty', value: invoice.counterparty_name ?? invoice.bank_name ?? '—' },
-            { label: 'Amount', value: formatNaira(invoice.amount), valCls: 'font-semibold text-secondary-10' },
-            { label: 'Date Issued', value: new Date(invoice.transaction_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) },
-            { label: 'Category', value: invoice.category ?? 'Uncategorized' },
-            { label: 'Payment Status', value: 'Paid', valCls: 'text-success font-medium' }
+            { label: 'Client / Counterparty', value: clientName },
+            { label: 'Amount', value: formatNaira(amount), valCls: 'font-semibold text-secondary-10' },
+            { label: 'Date Issued', value: new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) },
+            { label: 'Category', value: invoice.category ?? 'Services' },
+            { label: 'Payment Status', value: displayStatus.toUpperCase(), valCls: `${displayStatus.toLowerCase() === 'paid' ? 'text-success' : displayStatus.toLowerCase() === 'unpaid' ? 'text-amber-500' : 'text-danger'} font-medium` }
           ].map((item, idx) => (
             <div
               key={item.label}

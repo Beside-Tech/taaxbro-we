@@ -469,3 +469,34 @@ export const ai = {
     );
   },
 };
+
+// ─── Invoices ───────────────────────────────────────────────────────────────
+
+export interface InvoiceResponse {
+  id: string;
+  invoice_number: string;
+  client_name: string;
+  client_phone?: string | null;
+  total_amount: number;
+  due_date: string;
+  status: string;
+  created_at: string;
+}
+
+export const invoices = {
+  list(businessId: string): Promise<InvoiceResponse[]> {
+    return request<InvoiceResponse[]>(`/api/v1/invoices?business_id=${businessId}`);
+  },
+  create(businessId: string, data: {
+    client_name: string;
+    total_amount: number;
+    due_date?: string;
+    notes?: string;
+    items?: Array<{ description: string; quantity: number; unit_price: number }>;
+  }): Promise<InvoiceResponse> {
+    return request<InvoiceResponse>(`/api/v1/invoices?business_id=${businessId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+};
