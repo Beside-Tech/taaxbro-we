@@ -322,28 +322,28 @@ export default function TaxPage() {
             <h2 className='text-xl font-semibold text-secondary-10 mb-1'>
               {isVatSubmitted ? 'VAT Return submitted successfully' : 'VAT Return is ready for your review'}
             </h2>
-            <div className='flex items-center gap-4 text-sm text-secondary-30 mb-5'>
+            <div className='flex flex-wrap items-center gap-x-4 gap-y-2 text-xs sm:text-sm text-secondary-30 mb-5'>
               <span>Net VAT Payable: <strong className='text-secondary-10'>{formatNaira(netVatPayable)}</strong></span>
-              <span className='text-secondary-40'>|</span>
+              <span className='hidden md:inline text-secondary-40'>|</span>
               <span>Output: {formatNaira(outputVatTotal)}</span>
-              <span className='text-secondary-40'>·</span>
+              <span className='hidden md:inline text-secondary-40'>·</span>
               <span>Input: {formatNaira(inputVatTotal)}</span>
-              <span className='text-secondary-40'>|</span>
+              <span className='hidden md:inline text-secondary-40'>|</span>
               <span className={isVatSubmitted ? 'text-success font-medium' : 'text-danger font-medium'}>
                 {isVatSubmitted ? 'Awaiting FIRS Confirmation' : `Due ${stats.next_filing_date ? formatFilingDate(stats.next_filing_date) : '21st of next month'}`}
               </span>
             </div>
-            <div className='flex items-center gap-0'>
+            <div className='flex flex-wrap items-center gap-y-3 gap-x-4 sm:gap-x-6'>
               {steps.map((s, i) => (
-                <div key={s.n} className='flex items-center'>
+                <div key={s.n} className='flex items-center shrink-0'>
                   <div className='flex items-center gap-2'>
                     <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${s.done ? 'bg-primary-30 text-white' : 'bg-secondary-40 text-secondary-30'}`}>
                       {s.done ? <Icon icon='ph:check-bold' className='text-sm' /> : s.n}
                     </div>
-                    <span className={`text-sm ${s.done ? 'text-primary-30 font-medium' : 'text-secondary-30'}`}>{s.label}</span>
+                    <span className={`text-xs sm:text-sm ${s.done ? 'text-primary-30 font-medium' : 'text-secondary-30'}`}>{s.label}</span>
                   </div>
                   {i < steps.length - 1 && (
-                    <div className={`h-px w-12 mx-3 ${s.done ? 'bg-primary-30' : 'bg-secondary-40'}`} />
+                    <div className={`hidden lg:block h-px w-6 lg:w-12 mx-2 lg:mx-3 ${s.done ? 'bg-primary-30' : 'bg-secondary-40'}`} />
                   )}
                 </div>
               ))}

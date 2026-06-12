@@ -56,7 +56,11 @@ async function request<T>(
       return request<T>(path, options, false);
     }
     if (sessionExpiredCallback) {
-      sessionExpiredCallback();
+      const isProtectedRoute = typeof window !== 'undefined' &&
+        ['/overview', '/books', '/pay', '/tax', '/settings', '/onboarding'].some(p => window.location.pathname.startsWith(p));
+      if (isProtectedRoute) {
+        sessionExpiredCallback();
+      }
     }
     throw new ApiError(401, 'Session expired. Please log in again.');
   }
@@ -85,6 +89,7 @@ export interface AuthUser {
   onboarding_completed: boolean;
   user_type?: string | null;
   industry?: string | null;
+  two_fa_enabled?: boolean | null;
 }
 
 export interface UserSessionInfo {
@@ -122,7 +127,7 @@ export const auth = {
   },
 
   login(data: { email: string; password: string }) {
-    return request<AuthUser>('/api/v1/auth/login', {
+    return request<AuthUser | { requires_2fa: boolean; user_id: string }>('/api/v1/auth/login', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -161,6 +166,40 @@ export const auth = {
 
   resetPassword(data: { token: string; new_password: string }) {
     return request<{ message: string }>('/api/v1/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  setup2fa() {
+    return request<{ secret: string; qr_code_base64: string }>('/api/v1/auth/2fa/setup', {
+      method: 'POST',
+    });
+  },
+
+  enable2fa(code: string) {
+    return request<{ message: string }>('/api/v1/auth/2fa/enable', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    });
+  },
+
+  disable2fa(code: string) {
+    return request<{ message: string }>('/api/v1/auth/2fa/disable', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    });
+  },
+
+  verify2fa(userId: string, code: string) {
+    return request<AuthUser>('/api/v1/auth/2fa/verify', {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId, code }),
+    });
+  },
+
+  changePassword(data: { current_password: string; new_password: string }) {
+    return request<{ message: string }>('/api/v1/auth/change-password', {
       method: 'POST',
       body: JSON.stringify(data),
     });

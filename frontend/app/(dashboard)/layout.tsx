@@ -13,10 +13,13 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { logout, refreshSession } = useAuth();
+  const { logout, refreshSession, user } = useAuth();
   const [showWarningModal, setShowWarningModal] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  const email = user?.email ?? '';
+  const name = user?.full_name || email.split('@')[0] || '';
 
   const { reset } = useIdleTimeout({
     onWarning: () => setShowWarningModal(true),
@@ -24,7 +27,8 @@ export default function DashboardLayout({
       setShowWarningModal(false);
       logout();
     },
-    isActive: true, // Only track if logged in
+    onActive: () => setShowWarningModal(false),
+    isActive: !!user, // Only track if logged in
   });
 
   const handleStayLoggedIn = async () => {
@@ -50,15 +54,29 @@ export default function DashboardLayout({
     <div className='min-h-screen bg-[#fafafa] relative'>
       {/* Mobile Top Navigation Bar */}
       <header className='lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-b-secondary-40 flex items-center justify-between px-4 z-30 shadow-sm'>
-        <button
-          onClick={() => setIsSidebarOpen(true)}
-          className='p-2 -ml-2 text-secondary-10 hover:bg-grey-10/50 rounded-xl transition-colors'
-        >
-          <Icon icon='ph:list' className='text-2xl' />
-        </button>
-        <Link href='/overview' className='flex items-center mx-auto pr-6'>
-          <img src='/assets/StackedLogo.png' alt='Taaxbro' className='h-10 w-auto' />
-        </Link>
+        <div className='flex items-center gap-2'>
+          <button
+            onClick={() => setIsSidebarOpen(true)}
+            className='p-2 -ml-2 text-secondary-10 hover:bg-grey-10/50 rounded-xl transition-colors'
+          >
+            <Icon icon='ph:list' className='text-2xl' />
+          </button>
+          <Link href='/overview' className='flex items-center'>
+            <img src='/assets/StackedLogo.png' alt='Taaxbro' className='h-8 w-auto' />
+          </Link>
+        </div>
+
+        <div className='flex items-center gap-2'>
+          <button className='w-9 h-9 flex items-center justify-center rounded-full border border-grey-10 hover:bg-primary-50 transition-colors shrink-0'>
+            <Icon icon='ph:bell' className='text-lg text-secondary-10' />
+          </button>
+          <div className='flex items-center gap-2 border border-grey-10 rounded-full pl-1 pr-3 py-1 max-w-[120px] sm:max-w-xs'>
+            <div className='w-7 h-7 rounded-full bg-secondary-40 overflow-hidden flex items-center justify-center shrink-0'>
+              <Icon icon='ph:user-fill' className='text-white text-xs' />
+            </div>
+            <span className='text-xs sm:text-sm text-secondary-10 truncate font-medium max-w-[50px] sm:max-w-[100px]'>{name}</span>
+          </div>
+        </div>
       </header>
 
       {/* Sidebar Backdrop Overlay on Mobile */}

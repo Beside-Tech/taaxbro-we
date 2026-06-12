@@ -34,7 +34,7 @@ const USER_TYPES = [
   { value: 'tax_professional', label: 'Tax Professional',          icon: 'ph:scales' },
 ];
 
-type ActiveTab = 'profile' | 'tax' | 'invoicing' | 'whatsapp' | 'sessions';
+type ActiveTab = 'profile' | 'tax' | 'invoicing' | 'whatsapp' | 'security' | 'sessions';
 
 export default function SettingsPage() {
   const { user, setUser } = useAuth();
@@ -68,6 +68,23 @@ export default function SettingsPage() {
   const [cooldown, setCooldown] = useState(0);
   const [debugCode, setDebugCode] = useState<string | null>(null);
 
+  // 2FA state
+  const [twoFaSetupSecret, setTwoFaSetupSecret] = useState<string | null>(null);
+  const [twoFaQrCode, setTwoFaQrCode] = useState<string | null>(null);
+  const [twoFaCodeInput, setTwoFaCodeInput] = useState('');
+  const [twoFaModalOpen, setTwoFaModalOpen] = useState(false);
+  const [twoFaDisableModalOpen, setTwoFaDisableModalOpen] = useState(false);
+  const [twoFaDisableCode, setTwoFaDisableCode] = useState('');
+  const [twoFaStateLoading, setTwoFaStateLoading] = useState(false);
+  const [twoFaError, setTwoFaError] = useState<string | null>(null);
+
+  // Password change state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordChangeSaving, setPasswordChangeSaving] = useState(false);
+  const [passwordChangeError, setPasswordChangeError] = useState<string | null>(null);
+  const [passwordChangeSuccess, setPasswordChangeSuccess] = useState(false);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   // Form fields
@@ -425,6 +442,101 @@ export default function SettingsPage() {
     }
   };
 
+  // ── 2FA & Password Change Handlers ───────────────────────────────────────
+  
+  const handleSetup2FA = async () => {
+    setTwoFaStateLoading(true);
+    setTwoFaError(null);
+    try {
+      const res = await auth.setup2fa();
+      setTwoFaSetupSecret(res.secret);
+      setTwoFaQrCode(res.qr_code_base64);
+      setTwoFaCodeInput('');
+      setTwoFaModalOpen(true);
+    } catch (err: any) {
+      setTwoFaError(err.message ?? 'Failed to initiate 2FA setup.');
+    } finally {
+      setTwoFaStateLoading(false);
+    }
+  };
+
+  const handleEnable2FA = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!twoFaCodeInput || twoFaCodeInput.length !== 6) {
+      setTwoFaError('Please enter a valid 6-digit verification code.');
+      return;
+    }
+    setTwoFaStateLoading(true);
+    setTwoFaError(null);
+    try {
+      await auth.enable2fa(twoFaCodeInput);
+      setTwoFaModalOpen(false);
+      setTwoFaSetupSecret(null);
+      setTwoFaQrCode(null);
+      setTwoFaCodeInput('');
+      if (user) {
+        setUser({ ...user, two_fa_enabled: true });
+      }
+      alert('Two-Factor Authentication has been enabled successfully!');
+    } catch (err: any) {
+      setTwoFaError(err.message ?? 'Invalid code or failed to enable 2FA.');
+    } finally {
+      setTwoFaStateLoading(false);
+    }
+  };
+
+  const handleDisable2FA = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!twoFaDisableCode || twoFaDisableCode.length !== 6) {
+      setTwoFaError('Please enter a valid 6-digit verification code.');
+      return;
+    }
+    setTwoFaStateLoading(true);
+    setTwoFaError(null);
+    try {
+      await auth.disable2fa(twoFaDisableCode);
+      setTwoFaDisableModalOpen(false);
+      setTwoFaDisableCode('');
+      if (user) {
+        setUser({ ...user, two_fa_enabled: false });
+      }
+      alert('Two-Factor Authentication has been disabled successfully.');
+    } catch (err: any) {
+      setTwoFaError(err.message ?? 'Invalid code or failed to disable 2FA.');
+    } finally {
+      setTwoFaStateLoading(false);
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordChangeError(null);
+    setPasswordChangeSuccess(false);
+
+    if (newPassword !== confirmPassword) {
+      setPasswordChangeError('New passwords do not match.');
+      return;
+    }
+
+    setPasswordChangeSaving(true);
+    try {
+      await auth.changePassword({
+        current_password: currentPassword,
+        new_password: newPassword,
+      });
+      setPasswordChangeSuccess(true);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setTimeout(() => setPasswordChangeSuccess(false), 5000);
+    } catch (err: any) {
+      setPasswordChangeError(err.message ?? 'Failed to change password.');
+    } finally {
+      setPasswordChangeSaving(false);
+    }
+  };
+
+
   if (loading) {
     return (
       <div className='flex flex-col flex-1 h-screen items-center justify-center bg-grey-0'>
@@ -496,18 +608,20 @@ export default function SettingsPage() {
 
             {/* Sidebar Tabs */}
             <nav className='bg-white rounded-3xl p-2.5 border border-grey-10 shadow-sm space-y-1'>
-              {(['profile', 'tax', 'invoicing', 'whatsapp', 'sessions'] as ActiveTab[]).map((tab) => {
+              {(['profile', 'tax', 'invoicing', 'whatsapp', 'security', 'sessions'] as ActiveTab[]).map((tab) => {
                 const isActive = activeTab === tab;
                 const label = 
                   tab === 'profile' ? 'Business Profile' :
                   tab === 'tax' ? 'Tax & Identity' :
                   tab === 'invoicing' ? 'Invoices & Banking' :
-                  tab === 'whatsapp' ? 'WhatsApp Bot' : 'Active Sessions';
+                  tab === 'whatsapp' ? 'WhatsApp Bot' :
+                  tab === 'security' ? 'Security & 2FA' : 'Active Sessions';
                 const icon = 
                   tab === 'profile' ? 'ph:user-gear' :
                   tab === 'tax' ? 'ph:scales' :
                   tab === 'invoicing' ? 'ph:credit-card' :
-                  tab === 'whatsapp' ? 'ph:whatsapp-logo' : 'ph:devices';
+                  tab === 'whatsapp' ? 'ph:whatsapp-logo' :
+                  tab === 'security' ? 'ph:shield-check' : 'ph:devices';
                 
                 return (
                   <button
@@ -1072,6 +1186,282 @@ export default function SettingsPage() {
                 </div>
               )}
 
+              {/* TAB 5: SECURITY & 2FA */}
+              {activeTab === 'security' && (
+                <div className='space-y-8 animate-fade-in'>
+                  <div>
+                    <h2 className='text-xl font-bold text-secondary-10'>Security Settings</h2>
+                    <p className='text-sm text-secondary-30 mt-1'>
+                      Protect your financial database by configuring Two-Factor Authentication and updating passwords.
+                    </p>
+                  </div>
+
+                  {/* Two-Factor Authentication (2FA) */}
+                  <div className='bg-white rounded-2xl border border-grey-10 p-6 shadow-sm space-y-4'>
+                    <div className='flex items-start justify-between gap-4'>
+                      <div className='space-y-1'>
+                        <h3 className='font-bold text-base text-secondary-10 flex items-center gap-2'>
+                          <Icon icon='ph:shield-check' className='text-xl text-primary-30' />
+                          Two-Factor Authentication (2FA)
+                        </h3>
+                        <p className='text-xs text-secondary-30 max-w-lg leading-relaxed'>
+                          Add an extra layer of security to your account. Logins will require a verification code from an authenticator app (like Google Authenticator or 1Password) in addition to your password.
+                        </p>
+                      </div>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold shrink-0 ${
+                        user?.two_fa_enabled 
+                          ? 'bg-green-50 text-green-700 border border-green-200' 
+                          : 'bg-grey-0 text-secondary-30 border border-grey-10'
+                      }`}>
+                        {user?.two_fa_enabled ? 'Enabled' : 'Disabled'}
+                      </span>
+                    </div>
+
+                    <div className='pt-4 border-t border-grey-10/40 flex justify-end'>
+                      {user?.two_fa_enabled ? (
+                        <button
+                          type='button'
+                          onClick={() => {
+                            setTwoFaDisableCode('');
+                            setTwoFaError(null);
+                            setTwoFaDisableModalOpen(true);
+                          }}
+                          className='px-5 py-2.5 border border-red-200 hover:bg-red-50 text-red-600 hover:text-red-700 rounded-full text-xs font-bold transition flex items-center gap-1.5 shadow-sm'
+                        >
+                          <Icon icon='ph:shield-warning' className='text-sm' />
+                          Disable 2FA
+                        </button>
+                      ) : (
+                        <button
+                          type='button'
+                          onClick={handleSetup2FA}
+                          disabled={twoFaStateLoading}
+                          className='px-5 py-2.5 bg-primary-30 hover:bg-primary-40 disabled:opacity-55 disabled:cursor-not-allowed text-white rounded-full text-xs font-bold transition flex items-center gap-1.5 shadow-sm'
+                        >
+                          {twoFaStateLoading ? (
+                            <Icon icon='ph:circle-notch' className='animate-spin text-sm' />
+                          ) : (
+                            <Icon icon='ph:shield-plus' className='text-sm' />
+                          )}
+                          Enable 2FA
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Change Password Form */}
+                  <div className='bg-white rounded-2xl border border-grey-10 p-6 shadow-sm space-y-6'>
+                    <div>
+                      <h3 className='font-bold text-base text-secondary-10 flex items-center gap-2'>
+                        <Icon icon='ph:key' className='text-xl text-primary-30' />
+                        Change Password
+                      </h3>
+                      <p className='text-xs text-secondary-30 mt-0.5'>
+                        Change your password. Updating your password will disconnect all other active devices.
+                      </p>
+                    </div>
+
+                    {passwordChangeError && (
+                      <div className='px-4 py-3 rounded-2xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2 animate-fade-in'>
+                        <Icon icon='ph:warning-circle' className='text-base shrink-0' />
+                        {passwordChangeError}
+                      </div>
+                    )}
+
+                    {passwordChangeSuccess && (
+                      <div className='px-4 py-3 rounded-2xl bg-green-50 border border-green-200 text-xs text-green-700 flex items-center gap-2 animate-fade-in'>
+                        <Icon icon='ph:check-circle' className='text-base shrink-0' />
+                        Password updated successfully and other sessions revoked!
+                      </div>
+                    )}
+
+                    <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
+                      <label className='space-y-2 text-sm font-semibold text-secondary-10 flex flex-col'>
+                        Current Password
+                        <input
+                          type='password'
+                          value={currentPassword}
+                          onChange={(e) => setCurrentPassword(e.target.value)}
+                          placeholder='••••••••'
+                          required
+                          className='mt-1 w-full rounded-2xl border border-grey-10 bg-grey-0 px-4 py-3 text-sm font-medium outline-none focus:border-primary-30 focus:bg-white transition-all'
+                        />
+                      </label>
+
+                      <label className='space-y-2 text-sm font-semibold text-secondary-10 flex flex-col'>
+                        New Password
+                        <input
+                          type='password'
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          placeholder='••••••••'
+                          required
+                          className='mt-1 w-full rounded-2xl border border-grey-10 bg-grey-0 px-4 py-3 text-sm font-medium outline-none focus:border-primary-30 focus:bg-white transition-all'
+                        />
+                      </label>
+
+                      <label className='space-y-2 text-sm font-semibold text-secondary-10 flex flex-col'>
+                        Confirm New Password
+                        <input
+                          type='password'
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          placeholder='••••••••'
+                          required
+                          className='mt-1 w-full rounded-2xl border border-grey-10 bg-grey-0 px-4 py-3 text-sm font-medium outline-none focus:border-primary-30 focus:bg-white transition-all'
+                        />
+                      </label>
+                    </div>
+
+                    <div className='flex justify-end pt-2'>
+                      <button
+                        type='button'
+                        onClick={handleChangePassword}
+                        disabled={passwordChangeSaving || !currentPassword || !newPassword || !confirmPassword}
+                        className='px-6 py-3 bg-primary-30 hover:bg-primary-40 disabled:opacity-55 disabled:cursor-not-allowed text-white text-sm font-bold transition rounded-full flex items-center justify-center gap-2 shadow-sm'
+                      >
+                        {passwordChangeSaving && <Icon icon='ph:circle-notch' className='animate-spin text-base' />}
+                        Update Password
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Enable 2FA Modal */}
+                  {twoFaModalOpen && (
+                    <div className='fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in'>
+                      <div className='bg-white rounded-3xl p-8 max-w-md w-full mx-4 border border-grey-10 shadow-2xl space-y-6 text-center animate-scale-up'>
+                        <div className='space-y-2'>
+                          <h3 className='text-xl font-bold text-secondary-10'>Scan QR Code</h3>
+                          <p className='text-xs text-secondary-30 leading-relaxed'>
+                            Scan this QR code with your authenticator app to set up Two-Factor Authentication.
+                          </p>
+                        </div>
+
+                        {twoFaQrCode && (
+                          <div className='mx-auto w-48 h-48 bg-white border border-grey-10 rounded-2xl flex items-center justify-center overflow-hidden shadow-sm p-2'>
+                            <img src={twoFaQrCode} alt='TOTP QR Code' className='w-full h-full object-contain' />
+                          </div>
+                        )}
+
+                        {twoFaSetupSecret && (
+                          <div className='p-3 bg-grey-0 rounded-2xl border border-grey-10 text-center space-y-1.5'>
+                            <span className='text-[10px] text-secondary-40 font-bold uppercase tracking-wider block'>Manual Secret Key</span>
+                            <code className='text-xs font-mono font-bold text-secondary-10 select-all block'>{twoFaSetupSecret}</code>
+                          </div>
+                        )}
+
+                        {twoFaError && (
+                          <p className='text-xs text-red-500 font-medium flex items-center justify-center gap-1.5'>
+                            <Icon icon='ph:warning-circle' className='text-sm' />
+                            {twoFaError}
+                          </p>
+                        )}
+
+                        <form onSubmit={handleEnable2FA} className='space-y-4'>
+                          <label className='space-y-2 text-xs font-bold text-secondary-10 flex flex-col text-left'>
+                            Enter Verification Code
+                            <input
+                              type='text'
+                              maxLength={6}
+                              inputMode='numeric'
+                              pattern='[0-9]*'
+                              value={twoFaCodeInput}
+                              onChange={(e) => setTwoFaCodeInput(e.target.value.replace(/[^0-9]/g, ''))}
+                              placeholder='000000'
+                              className='mt-1 w-full rounded-2xl border border-grey-10 bg-grey-0 px-4 py-3 text-center text-lg font-bold tracking-widest outline-none focus:border-primary-30 focus:bg-white transition-all placeholder:text-secondary-40'
+                            />
+                          </label>
+
+                          <div className='flex gap-3 pt-2'>
+                            <button
+                              type='button'
+                              onClick={() => {
+                                setTwoFaModalOpen(false);
+                                setTwoFaQrCode(null);
+                                setTwoFaSetupSecret(null);
+                              }}
+                              className='w-1/3 px-4 py-3 border border-grey-10 hover:bg-grey-0 text-sm font-bold text-secondary-20 transition rounded-full'
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type='submit'
+                              disabled={twoFaStateLoading || twoFaCodeInput.length !== 6}
+                              className='w-2/3 px-6 py-3 bg-primary-30 hover:bg-primary-40 disabled:opacity-55 disabled:cursor-not-allowed text-sm font-bold text-white transition rounded-full flex items-center justify-center gap-2 shadow-md'
+                            >
+                              {twoFaStateLoading && <Icon icon='ph:circle-notch' className='animate-spin text-base' />}
+                              Verify & Enable
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Disable 2FA Modal */}
+                  {twoFaDisableModalOpen && (
+                    <div className='fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in'>
+                      <div className='bg-white rounded-3xl p-8 max-w-md w-full mx-4 border border-grey-10 shadow-2xl space-y-6 text-center animate-scale-up'>
+                        <div className='mx-auto w-16 h-16 bg-red-50 border border-red-100 rounded-2xl flex items-center justify-center text-red-500 shadow-sm'>
+                          <Icon icon='ph:shield-warning-bold' className='text-3xl' />
+                        </div>
+
+                        <div className='space-y-2'>
+                          <h3 className='text-xl font-bold text-secondary-10'>Disable Two-Factor Auth</h3>
+                          <p className='text-xs text-secondary-30 leading-relaxed'>
+                            For security, please enter the current 6-digit code from your authenticator app to disable Two-Factor Authentication.
+                          </p>
+                        </div>
+
+                        {twoFaError && (
+                          <p className='text-xs text-red-500 font-medium flex items-center justify-center gap-1.5'>
+                            <Icon icon='ph:warning-circle' className='text-sm' />
+                            {twoFaError}
+                          </p>
+                        )}
+
+                        <form onSubmit={handleDisable2FA} className='space-y-4'>
+                          <label className='space-y-2 text-xs font-bold text-secondary-10 flex flex-col text-left'>
+                            Enter Verification Code
+                            <input
+                              type='text'
+                              maxLength={6}
+                              inputMode='numeric'
+                              pattern='[0-9]*'
+                              value={twoFaDisableCode}
+                              onChange={(e) => setTwoFaDisableCode(e.target.value.replace(/[^0-9]/g, ''))}
+                              placeholder='000000'
+                              className='mt-1 w-full rounded-2xl border border-grey-10 bg-grey-0 px-4 py-3 text-center text-lg font-bold tracking-widest outline-none focus:border-primary-30 focus:bg-white transition-all placeholder:text-secondary-40'
+                            />
+                          </label>
+
+                          <div className='flex gap-3 pt-2'>
+                            <button
+                              type='button'
+                              onClick={() => {
+                                setTwoFaDisableModalOpen(false);
+                                setTwoFaDisableCode('');
+                              }}
+                              className='w-1/3 px-4 py-3 border border-grey-10 hover:bg-grey-0 text-sm font-bold text-secondary-20 transition rounded-full'
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type='submit'
+                              disabled={twoFaStateLoading || twoFaDisableCode.length !== 6}
+                              className='w-2/3 px-6 py-3 bg-red-600 hover:bg-red-700 disabled:opacity-55 disabled:cursor-not-allowed text-sm font-bold text-white transition rounded-full flex items-center justify-center gap-2 shadow-md shadow-red-500/10'
+                            >
+                              {twoFaStateLoading && <Icon icon='ph:circle-notch' className='animate-spin text-base' />}
+                              Disable 2FA
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* TAB 5: ACTIVE SESSIONS */}
               {activeTab === 'sessions' && (
                 <div className='space-y-6 animate-fade-in'>
@@ -1181,7 +1571,7 @@ export default function SettingsPage() {
               )}
 
               {/* Form Footer Save Button */}
-              {activeTab !== 'whatsapp' && activeTab !== 'sessions' && (
+              {activeTab !== 'whatsapp' && activeTab !== 'sessions' && activeTab !== 'security' && (
                 <div className='pt-6 border-t border-grey-10 flex justify-end gap-3'>
                   <button
                     type='submit'

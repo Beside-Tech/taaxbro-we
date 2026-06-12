@@ -62,15 +62,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     auth
       .me()
-      .then(setUser)
+      .then((u) => {
+        setUser(u);
+        if (typeof window !== 'undefined') {
+          const isAuthRoute = ['/login', '/register', '/forgot-password', '/reset-password', '/verify'].some(p => window.location.pathname.startsWith(p));
+          if (isAuthRoute) {
+            router.push(u.onboarding_completed ? '/overview' : '/onboarding');
+          }
+        }
+      })
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
-  }, []);
+  }, [router]);
 
   const logout = useCallback(async () => {
     await auth.logout().catch(() => {});
     setUser(null);
-    window.location.href = '/login';
+    if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+      window.location.href = '/login';
+    }
   }, []);
 
   // Keep ref in sync so the visibility handler always calls the latest logout
@@ -153,9 +163,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ── Login ────────────────────────────────────────────────────────────────
   const login = useCallback(async (email: string, password: string) => {
-    const loggedInUser = await auth.login({ email, password });
-    setUser(loggedInUser);
-    router.push(loggedInUser.onboarding_completed ? '/overview' : '/onboarding');
+    const res = await auth.login({ email, password });
+    if ('requires_2fa' in res && res.requires_2fa) {
+      router.push(`/login/2fa?user_id=${res.user_id}`);
+    } else {
+      const loggedInUser = res as AuthUser;
+      setUser(loggedInUser);
+      router.push(loggedInUser.onboarding_completed ? '/overview' : '/onboarding');
+    }
   }, [router]);
 
   return (

@@ -1,5 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// ─── Token expiration helper ───────────────────────────────────────────────
+
+function isTokenExpired(token: string): boolean {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return true;
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    const payload = JSON.parse(jsonPayload);
+    if (!payload.exp) return true;
+    return payload.exp * 1000 < Date.now();
+  } catch {
+    return true;
+  }
+}
+
 // ─── Hostname classification ────────────────────────────────────────────────
 
 function getPortal(req: NextRequest): 'marketing' | 'app' | 'accountant' | 'admin' {
@@ -122,11 +144,14 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  const tokenCookie = req.cookies.get('access_token');
+  const token = tokenCookie?.value;
+  const isTokenValid = token && !isTokenExpired(token);
+
   // Public auth paths — no token required (unless already logged in)
   if (APP_PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
-    const token = req.cookies.get('access_token');
     const redirectIfAuthPaths = ['/login', '/register', '/forgot-password', '/verify'];
-    if (token && redirectIfAuthPaths.some((p) => pathname.startsWith(p))) {
+    if (isTokenValid && redirectIfAuthPaths.some((p) => pathname.startsWith(p))) {
       const overviewUrl = req.nextUrl.clone();
       overviewUrl.pathname = '/overview';
       return NextResponse.redirect(overviewUrl);
@@ -134,9 +159,8 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Protect dashboard routes — require access_token cookie
-  const token = req.cookies.get('access_token');
-  if (!token) {
+  // Protect dashboard routes — require valid access_token cookie
+  if (!isTokenValid) {
     const loginUrl = req.nextUrl.clone();
     loginUrl.pathname = '/login';
     loginUrl.searchParams.set('next', pathname);

@@ -15,7 +15,7 @@ export default function TopBar({ children }: TopBarProps) {
   return (
     <header className='flex flex-wrap items-center justify-between gap-4 px-4 sm:px-8 py-4'>
       <div className='flex-1 min-w-[200px]'>{children}</div>
-      <div className='flex items-center gap-3 shrink-0 ml-auto'>
+      <div className='hidden lg:flex items-center gap-3 shrink-0 ml-auto'>
         <button className='w-9 h-9 flex items-center justify-center rounded-full border border-grey-10 hover:bg-primary-50 transition-colors shrink-0'>
           <Icon icon='ph:bell' className='text-lg text-secondary-10' />
         </button>
