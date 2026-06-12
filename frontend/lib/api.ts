@@ -334,10 +334,62 @@ export const integrations = {
 };
 
 export const ai = {
-  askAssistant(message: string, conversationId?: string): Promise<{ answer: string; sources: any[]; conversation_id: string }> {
-    return request<{ answer: string; sources: any[]; conversation_id: string }>('/api/v1/ai/tax-assistant', {
+  /** Legacy — kept for backwards compatibility. New code: use ai.chat() */
+  askAssistant(message: string, conversationId?: string): Promise<{ answer: string; sources: unknown[]; conversation_id: string }> {
+    return request<{ answer: string; sources: unknown[]; conversation_id: string }>('/api/v1/ai/tax-assistant', {
       method: 'POST',
       body: JSON.stringify({ message, conversation_id: conversationId }),
     });
   },
-};
+
+  /** Unified endpoint — works for both guests and logged-in users */
+  chat(
+    message: string,
+    conversationId?: string,
+    dashboardPage?: string,
+  ): Promise<{ answer: string; sources: unknown[]; conversation_id: string; mode: string }> {
+    return request<{ answer: string; sources: unknown[]; conversation_id: string; mode: string }>('/api/v1/ai/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message, conversation_id: conversationId, dashboard_page: dashboardPage }),
+    });
+  },
+
+  /** Public guest endpoint — no auth required */
+  chatGuest(
+    message: string,
+    conversationId?: string,
+  ): Promise<{ answer: string; sources: unknown[]; conversation_id: string; mode: string }> {
+    return request<{ answer: string; sources: unknown[]; conversation_id: string; mode: string }>('/api/v1/ai/chat/guest', {
+      method: 'POST',
+      body: JSON.stringify({ message, conversation_id: conversationId }),
+    });
+  },
+
+  /** Image/PDF upload → OCR extraction → Elon response (logged-in only) */
+  chatOCR(
+    file: File,
+    conversationId?: string,
+  ): Promise<{ answer: string; conversation_id: string; extracted_text?: string; amount_detected?: string }> {
+    const fd = new FormData();
+    fd.append('file', file);
+    if (conversationId) fd.append('conversation_id', conversationId);
+    return request<{ answer: string; conversation_id: string; extracted_text?: string; amount_detected?: string }>(
+      '/api/v1/ai/chat/ocr',
+      { method: 'POST', body: fd },
+    );
+  },
+
+  /** Audio blob → Whisper transcription (logged-in only) */
+  chatVoice(
+    blob: Blob,
+    conversationId?: string,
+  ): Promise<{ transcript: string; conversation_id: string }> {
+    const fd = new FormData();
+    fd.append('audio', blob, 'recording.webm');
+    if (conversationId) fd.append('conversation_id', conversationId);
+    return request<{ transcript: string; conversation_id: string }>(
+      '/api/v1/ai/chat/voice',
+      { method: 'POST', body: fd },
+    );
+  },
+};
