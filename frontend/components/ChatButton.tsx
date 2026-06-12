@@ -10,7 +10,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { Icon } from '@iconify/react';
 import { useAuth } from '@/context/AuthContext';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useChatContext } from '@/context/ChatContext';
 
 // ── Local message type ─────────────────────────────────────────────────────
@@ -140,7 +140,6 @@ function mkId() { return Math.random().toString(36).slice(2); }
 export default function ChatButton() {
   const { user } = useAuth();
   const pathname = usePathname();
-  const router = useRouter();
   const isLoggedIn = !!user;
   const dashboardPage = getPageName(pathname);
 
@@ -257,25 +256,8 @@ export default function ChatButton() {
     }
   }, [messages, open, uploadingOcr]);
 
-  // ── Handle Client-side tool call resolutions (navigation & modal triggers) ─
-  useEffect(() => {
-    const lastMessage = messages[messages.length - 1];
-    if (!lastMessage || !lastMessage.toolInvocations) return;
-
-    for (const invocation of lastMessage.toolInvocations) {
-      if (invocation.state === 'result') {
-        const result = invocation.result;
-        const toolName = invocation.toolName;
-        if (result && !result.error) {
-          if (toolName === 'navigate_to' && result.page) {
-            router.push('/' + result.page);
-          } else if (toolName === 'open_modal' && result.modal) {
-            window.dispatchEvent(new CustomEvent('open-modal', { detail: { modal: result.modal } }));
-          }
-        }
-      }
-    }
-  }, [messages, router]);
+  // Navigation & modal triggers are handled by Elon's text response.
+  // No client-side tool dispatch needed with the backend-proxy architecture.
 
   // ── OCR / file upload ─────────────────────────────────────────────────────
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
