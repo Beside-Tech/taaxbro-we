@@ -1,8 +1,13 @@
 // =============================================================================
 // FILE:     ChatButton.tsx
-// REPO:     taaxbro-we-main
+// REPO:     taaxbro-web-main
 // PLACE AT: frontend/components/ChatButton.tsx
 // ACTION:   Replace existing file entirely
+//
+// FIX: Chat now routes through the local Next.js proxy (/api/chat) instead of
+//      calling the backend directly. This ensures the browser's httpOnly
+//      access_token cookie is forwarded server-side (same-origin), so the
+//      backend's get_optional_user correctly identifies logged-in users.
 // =============================================================================
 
 'use client';
@@ -12,6 +17,30 @@ import { Icon } from '@iconify/react';
 import { useAuth } from '@/context/AuthContext';
 import { usePathname } from 'next/navigation';
 import { useChatContext } from '@/context/ChatContext';
+
+// ── Chat via local proxy (preserves cookies for auth) ────────────────────────
+async function chatViaProxy(
+  message: string,
+  conversationId?: string | null,
+  dashboardPage?: string | null,
+): Promise<{ answer: string; conversation_id: string; mode: string; sources: unknown[] }> {
+  const res = await fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    // credentials: 'include' is NOT needed here — this is same-origin.
+    // The browser always sends cookies to same-origin routes.
+    body: JSON.stringify({
+      message,
+      conversation_id: conversationId ?? null,
+      dashboard_page: dashboardPage ?? null,
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Chat failed (${res.status})`);
+  }
+  return res.json();
+}
 
 // ── Local message type ─────────────────────────────────────────────────────
 
@@ -225,27 +254,13 @@ export default function ChatButton() {
     setIsLoading(true);
 
     try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          messages: [...messages, userMsg],
-          page: dashboardPage || 'overview',
-          isLoggedIn,
-          conversationId,
-        }),
-      });
-
-      if (!res.ok) {
-        throw new Error(`${res.status}`);
-      }
-
-      const data = await res.json();
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
+      // Route through local Next.js proxy so the httpOnly access_token cookie
+      // is forwarded to the backend. Direct cross-origin fetches lose cookies.
+      const data = await chatViaProxy(
+        text,
+        conversationId,
+        dashboardPage || 'overview',
+      );
 
       if (data.conversation_id) {
         setConversationId(data.conversation_id);
