@@ -288,7 +288,7 @@ export default function TaxPage() {
         </div>
       </TopBar>
 
-      <main className='flex-1 p-8 space-y-5 overflow-y-auto'>
+      <main className='flex-1 p-4 sm:p-8 space-y-5 overflow-y-auto'>
         {/* Error banner */}
         {error && (
           <div className='px-4 py-3 rounded-2xl bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2'>
@@ -298,7 +298,7 @@ export default function TaxPage() {
         )}
 
         {/* Stat cards */}
-        <div className='grid grid-cols-4 gap-4'>
+        <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4'>
           {loading
             ? [0, 1, 2, 3].map((i) => (
                 <div key={i} className='bg-white rounded-xl border border-grey-10 p-5 animate-pulse'>
@@ -352,7 +352,7 @@ export default function TaxPage() {
         )}
 
         {/* VAT Breakdown + Active Obligations */}
-        <div className='grid grid-cols-[1.1fr_1fr] gap-5'>
+        <div className='grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-5'>
           {/* VAT Breakdown */}
           <div className='bg-white rounded-xl border border-grey-10/60 p-6'>
             <div className='flex items-center justify-between mb-4'>
@@ -364,7 +364,7 @@ export default function TaxPage() {
             </div>
 
             {/* Input/Output tabs */}
-            <div className='flex gap-6 border-b border-grey-10 mb-4'>
+            <div className='flex flex-wrap gap-4 sm:gap-6 border-b border-grey-10 mb-4'>
               {(['input', 'output'] as const).map((t) => (
                 <button
                   key={t}
@@ -464,7 +464,7 @@ export default function TaxPage() {
             </button>
           </div>
 
-          <div className='flex items-center gap-2 px-6 py-3 border-b border-grey-10/60'>
+          <div className='flex flex-wrap items-center gap-2 px-6 py-3 border-b border-grey-10/60'>
             {filingTabs.map((t) => (
               <button
                 key={t}
@@ -476,29 +476,31 @@ export default function TaxPage() {
             ))}
           </div>
 
-          <table className='w-full text-sm'>
-            <thead>
-              <tr className='bg-primary-40 text-white text-xs'>
-                {['Period', 'Authority', 'Reference', 'Submitted', 'Amount Filed', 'Status'].map((h) => (
-                  <th key={h} className='text-left px-5 py-3 font-medium'>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredHistory.map((row, i) => (
-                <tr key={i} className='border-t border-grey-10/40 hover:bg-primary-50/30 transition-colors'>
-                  <td className='px-5 py-3.5 text-secondary-10'>{row.period}</td>
-                  <td className='px-5 py-3.5 text-secondary-10'>{row.authority}</td>
-                  <td className='px-5 py-3.5 text-secondary-30'>{row.ref}</td>
-                  <td className='px-5 py-3.5 text-secondary-10'>{row.submitted}</td>
-                  <td className='px-5 py-3.5 font-medium text-secondary-10'>{row.amount}</td>
-                  <td className='px-5 py-3.5'>
-                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${row.statusClass}`}>{row.status}</span>
-                  </td>
+          <div className='overflow-x-auto w-full'>
+            <table className='w-full text-sm min-w-[700px]'>
+              <thead>
+                <tr className='bg-primary-40 text-white text-xs'>
+                  {['Period', 'Authority', 'Reference', 'Submitted', 'Amount Filed', 'Status'].map((h) => (
+                    <th key={h} className='text-left px-5 py-3 font-medium'>{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredHistory.map((row, i) => (
+                  <tr key={i} className='border-t border-grey-10/40 hover:bg-primary-50/30 transition-colors'>
+                    <td className='px-5 py-3.5 text-secondary-10'>{row.period}</td>
+                    <td className='px-5 py-3.5 text-secondary-10'>{row.authority}</td>
+                    <td className='px-5 py-3.5 text-secondary-30'>{row.ref}</td>
+                    <td className='px-5 py-3.5 text-secondary-10'>{row.submitted}</td>
+                    <td className='px-5 py-3.5 font-medium text-secondary-10'>{row.amount}</td>
+                    <td className='px-5 py-3.5'>
+                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${row.statusClass}`}>{row.status}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           <div className='flex items-center justify-between px-6 py-4 border-t border-grey-10/60'>
             <p className='text-xs text-secondary-30'>Showing {filingHistory.length} of {filingHistory.length}</p>

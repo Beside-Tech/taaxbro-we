@@ -45,7 +45,7 @@ interface TabProps {
 function BooksTabs({ active, onChange }: { active: string; onChange: (t: string) => void }) {
   const tabs = ['Overview', 'Invoices', 'Expenses', 'Reports'];
   return (
-    <div className='flex gap-8 border-b border-grey-10'>
+    <div className='flex flex-wrap gap-4 sm:gap-8 border-b border-grey-10'>
       {tabs.map((t) => (
         <button
           key={t}
@@ -200,7 +200,7 @@ function OverviewTab({ data, loading, onTabChange }: TabProps) {
         </div>
       </div>
 
-      <div className='grid grid-cols-4 gap-4'>
+      <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4'>
         {loading
           ? [0, 1, 2, 3].map((i) => (
               <div key={i} className='bg-white rounded-xl border border-grey-10 p-5 animate-pulse'>
@@ -220,7 +220,7 @@ function OverviewTab({ data, loading, onTabChange }: TabProps) {
             ))}
       </div>
 
-      <div className='grid grid-cols-[1fr_1fr] gap-5'>
+      <div className='grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-5'>
         {/* P&L Snapshot */}
         <div className='bg-white rounded-xl border border-grey-10/60 p-6 shadow-sm'>
           <div className='flex items-center justify-between mb-4'>
@@ -280,26 +280,28 @@ function OverviewTab({ data, loading, onTabChange }: TabProps) {
           ) : creditTransactions.length === 0 ? (
             <div className='text-center py-8 text-xs text-secondary-30'>No inbound receipts yet</div>
           ) : (
-            <table className='w-full text-sm'>
-              <thead>
-                <tr className='bg-primary-40 text-white text-xs'>
-                  <th className='text-left px-4 py-2.5 font-medium'>Source / Client</th>
-                  <th className='text-left px-4 py-2.5 font-medium'>Amount</th>
-                  <th className='text-left px-4 py-2.5 font-medium'>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {creditTransactions.slice(0, 5).map((tx) => (
-                  <tr key={tx.id} className='border-t border-grey-10/40 hover:bg-primary-50/30 transition-colors'>
-                    <td className='px-4 py-2.5 text-secondary-10'>{tx.counterparty_name ?? tx.bank_name ?? '—'}</td>
-                    <td className='px-4 py-2.5 text-success font-medium'>+{formatNaira(tx.amount)}</td>
-                    <td className='px-4 py-2.5'>
-                      <span className='text-xs bg-success text-white px-2.5 py-1 rounded-full font-medium'>Paid</span>
-                    </td>
+            <div className='overflow-x-auto w-full'>
+              <table className='w-full text-sm min-w-[400px]'>
+                <thead>
+                  <tr className='bg-primary-40 text-white text-xs'>
+                    <th className='text-left px-4 py-2.5 font-medium'>Source / Client</th>
+                    <th className='text-left px-4 py-2.5 font-medium'>Amount</th>
+                    <th className='text-left px-4 py-2.5 font-medium'>Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {creditTransactions.slice(0, 5).map((tx) => (
+                    <tr key={tx.id} className='border-t border-grey-10/40 hover:bg-primary-50/30 transition-colors'>
+                      <td className='px-4 py-2.5 text-secondary-10'>{tx.counterparty_name ?? tx.bank_name ?? '—'}</td>
+                      <td className='px-4 py-2.5 text-success font-medium'>+{formatNaira(tx.amount)}</td>
+                      <td className='px-4 py-2.5'>
+                        <span className='text-xs bg-success text-white px-2.5 py-1 rounded-full font-medium'>Paid</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>
@@ -405,42 +407,44 @@ function InvoicesTab({ data, loading, onNewInvoice, onViewInvoice }: InvoicesTab
         ) : filteredInvoices.length === 0 ? (
           <div className='text-center py-12 text-sm text-secondary-30'>No invoices found</div>
         ) : (
-          <table className='w-full text-sm'>
-            <thead>
-              <tr className='bg-primary-40 text-white text-xs'>
-                <th className='text-left px-5 py-3 font-medium'>Invoice ID</th>
-                <th className='text-left px-4 py-3 font-medium'><span className='flex items-center gap-1.5'><Icon icon='ph:calendar-check' />Issued</span></th>
-                <th className='text-left px-4 py-3 font-medium'><span className='flex items-center gap-1.5'><Icon icon='ph:user' />Client</span></th>
-                <th className='text-left px-4 py-3 font-medium'><span className='flex items-center gap-1.5'><Icon icon='ph:currency-circle-dollar' />Amount</span></th>
-                <th className='text-left px-4 py-3 font-medium'>Status</th>
-                <th className='text-left px-4 py-3 font-medium'>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredInvoices.map((tx) => {
-                const { date: d } = formatDate(tx.transaction_date);
-                return (
-                  <tr key={tx.id} className='border-t border-grey-10/40 hover:bg-primary-50/30 transition-colors'>
-                    <td className='px-5 py-3.5 text-secondary-10 font-medium'>INV-{tx.id.substring(0, 4).toUpperCase()}</td>
-                    <td className='px-4 py-3.5 text-secondary-30'>{d}</td>
-                    <td className='px-4 py-3.5 text-secondary-10'>{tx.counterparty_name ?? tx.bank_name ?? '—'}</td>
-                    <td className='px-4 py-3.5 text-secondary-10 font-semibold'>{formatNaira(tx.amount)}</td>
-                    <td className='px-4 py-3.5'>
-                      <span className='text-xs bg-success text-white px-2.5 py-1 rounded-full font-medium'>Paid</span>
-                    </td>
-                    <td className='px-4 py-3.5'>
-                      <button
-                        onClick={() => onViewInvoice(tx)}
-                        className='flex items-center gap-1 text-primary-30 text-sm font-medium hover:underline'
-                      >
-                        <Icon icon='ph:eye-circle' /> View
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className='overflow-x-auto w-full'>
+            <table className='w-full text-sm min-w-[650px]'>
+              <thead>
+                <tr className='bg-primary-40 text-white text-xs'>
+                  <th className='text-left px-5 py-3 font-medium'>Invoice ID</th>
+                  <th className='text-left px-4 py-3 font-medium'><span className='flex items-center gap-1.5'><Icon icon='ph:calendar-check' />Issued</span></th>
+                  <th className='text-left px-4 py-3 font-medium'><span className='flex items-center gap-1.5'><Icon icon='ph:user' />Client</span></th>
+                  <th className='text-left px-4 py-3 font-medium'><span className='flex items-center gap-1.5'><Icon icon='ph:currency-circle-dollar' />Amount</span></th>
+                  <th className='text-left px-4 py-3 font-medium'>Status</th>
+                  <th className='text-left px-4 py-3 font-medium'>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredInvoices.map((tx) => {
+                  const { date: d } = formatDate(tx.transaction_date);
+                  return (
+                    <tr key={tx.id} className='border-t border-grey-10/40 hover:bg-primary-50/30 transition-colors'>
+                      <td className='px-5 py-3.5 text-secondary-10 font-medium'>INV-{tx.id.substring(0, 4).toUpperCase()}</td>
+                      <td className='px-4 py-3.5 text-secondary-30'>{d}</td>
+                      <td className='px-4 py-3.5 text-secondary-10'>{tx.counterparty_name ?? tx.bank_name ?? '—'}</td>
+                      <td className='px-4 py-3.5 text-secondary-10 font-semibold'>{formatNaira(tx.amount)}</td>
+                      <td className='px-4 py-3.5'>
+                        <span className='text-xs bg-success text-white px-2.5 py-1 rounded-full font-medium'>Paid</span>
+                      </td>
+                      <td className='px-4 py-3.5'>
+                        <button
+                          onClick={() => onViewInvoice(tx)}
+                          className='flex items-center gap-1 text-primary-30 text-sm font-medium hover:underline'
+                        >
+                          <Icon icon='ph:eye-circle' /> View
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
 
         <div className='flex items-center justify-between px-6 py-4 border-t border-grey-10/60'>
@@ -494,7 +498,7 @@ function ExpensesTab({ data, loading }: TabProps) {
   };
 
   return (
-    <div className='grid grid-cols-[1fr_360px] gap-5 items-start'>
+    <div className='grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5 items-start'>
       <div className='bg-white rounded-xl border border-grey-10/60 overflow-hidden shadow-sm'>
         <div className='flex items-center justify-between px-6 py-4 border-b border-grey-10/60'>
           <h2 className='text-base font-semibold text-secondary-10'>Expenses</h2>
@@ -734,7 +738,7 @@ export default function BooksPage() {
         </div>
       </TopBar>
 
-      <main className='flex-1 p-8 space-y-5 overflow-y-auto'>
+      <main className='flex-1 p-4 sm:p-8 space-y-5 overflow-y-auto'>
         {/* Error banner */}
         {error && (
           <div className='px-4 py-3 rounded-2xl bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2'>

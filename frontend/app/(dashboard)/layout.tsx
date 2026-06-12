@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import Sidebar from '@/components/dashboard/Sidebar';
 import ChatButton from '@/components/ChatButton';
 import { useAuth } from '@/context/AuthContext';
@@ -15,6 +16,7 @@ export default function DashboardLayout({
   const { logout, refreshSession } = useAuth();
   const [showWarningModal, setShowWarningModal] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const { reset } = useIdleTimeout({
     onWarning: () => setShowWarningModal(true),
@@ -46,8 +48,29 @@ export default function DashboardLayout({
 
   return (
     <div className='min-h-screen bg-[#fafafa] relative'>
-      <Sidebar />
-      <div className='ml-56 flex flex-col min-h-screen'>{children}</div>
+      {/* Mobile Top Navigation Bar */}
+      <header className='lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-b-secondary-40 flex items-center justify-between px-4 z-30 shadow-sm'>
+        <button
+          onClick={() => setIsSidebarOpen(true)}
+          className='p-2 -ml-2 text-secondary-10 hover:bg-grey-10/50 rounded-xl transition-colors'
+        >
+          <Icon icon='ph:list' className='text-2xl' />
+        </button>
+        <Link href='/overview' className='flex items-center mx-auto pr-6'>
+          <img src='/assets/StackedLogo.png' alt='Taaxbro' className='h-10 w-auto' />
+        </Link>
+      </header>
+
+      {/* Sidebar Backdrop Overlay on Mobile */}
+      {isSidebarOpen && (
+        <div
+          onClick={() => setIsSidebarOpen(false)}
+          className='fixed inset-0 z-40 bg-black/40 lg:hidden transition-opacity'
+        />
+      )}
+
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+      <div className='ml-0 lg:ml-56 pt-16 lg:pt-0 flex flex-col min-h-screen'>{children}</div>
       <ChatButton />
 
       {/* Inactivity Warning Modal */}

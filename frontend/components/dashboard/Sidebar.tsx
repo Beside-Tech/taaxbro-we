@@ -41,11 +41,17 @@ const bottomItems = [
   },
 ];
 
-export default function Sidebar() {
+interface SidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { logout } = useAuth();
 
   const handleLogout = async () => {
+    onClose?.();
     try {
       await logout();
     } catch (err) {
@@ -54,8 +60,8 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className='fixed top-0 left-0 h-screen w-56 bg-white border-r border-r-secondary-40 flex flex-col py-6 px-4 z-40'>
-      <Link href='/overview' className='flex items-center mb-10 px-2'>
+    <aside className={`fixed top-0 left-0 h-screen w-56 bg-white border-r border-r-secondary-40 flex flex-col py-6 px-4 z-50 transition-transform duration-300 ease-in-out lg:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <Link href='/overview' className='flex items-center mb-10 px-2' onClick={() => onClose?.()}>
         <img src='/assets/StackedLogo.png' alt='Taaxbro' className='h-16 w-auto' />
       </Link>
 
@@ -67,6 +73,7 @@ export default function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
+              onClick={() => onClose?.()}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                 isActive
                   ? 'bg-primary-40 text-white'
@@ -89,6 +96,7 @@ export default function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
+              onClick={() => onClose?.()}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                 isActive
                   ? 'bg-primary-30 text-white'

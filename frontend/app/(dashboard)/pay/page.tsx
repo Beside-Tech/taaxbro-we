@@ -199,7 +199,7 @@ export default function PayPage() {
         </div>
       </TopBar>
 
-      <main className='flex-1 p-8 space-y-5 overflow-y-auto'>
+      <main className='flex-1 p-4 sm:p-8 space-y-5 overflow-y-auto'>
         {/* Error alert */}
         {error && (
           <div className='px-4 py-3 rounded-2xl bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2'>
@@ -209,7 +209,7 @@ export default function PayPage() {
         )}
 
         {/* Stat cards */}
-        <div className='grid grid-cols-3 gap-4'>
+        <div className='grid grid-cols-1 sm:grid-cols-3 gap-4'>
           {loading
             ? [0, 1, 2].map((i) => (
                 <div key={i} className='bg-white rounded-xl border border-t-4 border-grey-10 p-5 animate-pulse'>
@@ -245,7 +245,7 @@ export default function PayPage() {
               Add Account <Icon icon='ph:plus' />
             </button>
           </div>
-          <div className='grid grid-cols-3 gap-4'>
+          <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>
             {accountsLoading ? (
               [0, 1].map((i) => (
                 <div key={i} className='border border-grey-10 rounded-xl p-4 animate-pulse'>
@@ -290,7 +290,7 @@ export default function PayPage() {
         </div>
 
         {/* Action buttons */}
-        <div className='flex gap-3 mt-6'>
+        <div className='flex flex-wrap gap-3 mt-6'>
           <button
             onClick={() => setShowPaymentLink(true)}
             className='flex items-center gap-2 bg-primary-40 text-white rounded-full px-5 py-2.5 text-sm font-medium hover:bg-primary-30 transition-colors shadow-sm'>
@@ -344,7 +344,7 @@ export default function PayPage() {
           )}
 
           {/* Tabs */}
-          <div className='flex items-center gap-2 px-6 py-3 border-b border-grey-10/60'>
+          <div className='flex flex-wrap items-center gap-2 px-6 py-3 border-b border-grey-10/60'>
             {tabs.map((tab) => (
               <button
                 key={tab.id}
@@ -394,84 +394,86 @@ export default function PayPage() {
               <p className='text-sm'>No transactions found</p>
             </div>
           ) : (
-            <table className='w-full text-sm'>
-              <thead>
-                <tr className='bg-primary-40 text-white text-xs'>
-                  <th className='text-left px-6 py-3 font-medium'>
-                    <span className='flex items-center gap-1.5'>
-                      <Icon icon='ph:calendar-blank' />
-                      Date
-                    </span>
-                  </th>
-                  <th className='text-left px-4 py-3 font-medium'>
-                    <span className='flex items-center gap-1.5'>
-                      <Icon icon='ph:git-branch' />
-                      Source
-                    </span>
-                  </th>
-                  <th className='text-left px-4 py-3 font-medium'>
-                    <span className='flex items-center gap-1.5'>
-                      <Icon icon='ph:user' />
-                      Sender/Recipient
-                    </span>
-                  </th>
-                  <th className='text-left px-4 py-3 font-medium'>
-                    <span className='flex items-center gap-1.5'>
-                      <Icon icon='ph:currency-circle-dollar' />
-                      Amount
-                    </span>
-                  </th>
-                  <th className='text-left px-4 py-3 font-medium'>
-                    <span className='flex items-center gap-1.5'>
-                      <Icon icon='ph:receipt' />
-                      Category
-                    </span>
-                  </th>
-                  <th className='text-left px-4 py-3 font-medium'>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredTransactions.map((tx) => {
-                  const { date: d, time: t } = formatDate(tx.transaction_date);
-                  const isCredit = tx.type === 'credit';
-                  return (
-                    <tr
-                      key={tx.id}
-                      className='border-t border-grey-10/40 hover:bg-primary-50/30 transition-colors'>
-                      <td className='px-6 py-3.5 text-secondary-20'>
-                        <div className='text-sm'>{d}</div>
-                        <div className='text-xs text-secondary-30'>{t}</div>
-                      </td>
-                      <td className='px-4 py-3.5 text-sm text-secondary-20'>
-                        {tx.bank_name ?? '—'}
-                      </td>
-                      <td className='px-4 py-3.5 text-sm text-secondary-20'>
-                        {tx.counterparty_name ?? '—'}
-                      </td>
-                      <td
-                        className={`px-4 py-3.5 text-sm font-medium ${isCredit ? 'text-success' : 'text-danger'}`}>
-                        {isCredit ? '+' : '-'}{formatNaira(tx.amount)}
-                      </td>
-                      <td className='px-4 py-3.5'>
-                        <span
-                          className={`text-xs px-2.5 py-1 rounded-full font-medium ${isCredit ? 'bg-success text-white' : 'bg-danger/10 text-danger'}`}>
-                          {tx.category ?? 'Uncategorized'}
-                        </span>
-                      </td>
-                       <td className='px-4 py-3.5'>
-                        <button
-                          onClick={() => setSelectedTx(tx)}
-                          className='text-primary-30 text-sm font-medium hover:underline'
-                        >
-                          View
-                        </button>
-                      </td>
+            <div className='overflow-x-auto w-full'>
+              <table className='w-full text-sm min-w-[750px]'>
+                <thead>
+                  <tr className='bg-primary-40 text-white text-xs'>
+                    <th className='text-left px-6 py-3 font-medium'>
+                      <span className='flex items-center gap-1.5'>
+                        <Icon icon='ph:calendar-blank' />
+                        Date
+                      </span>
+                    </th>
+                    <th className='text-left px-4 py-3 font-medium'>
+                      <span className='flex items-center gap-1.5'>
+                        <Icon icon='ph:git-branch' />
+                        Source
+                      </span>
+                    </th>
+                    <th className='text-left px-4 py-3 font-medium'>
+                      <span className='flex items-center gap-1.5'>
+                        <Icon icon='ph:user' />
+                        Sender/Recipient
+                      </span>
+                    </th>
+                    <th className='text-left px-4 py-3 font-medium'>
+                      <span className='flex items-center gap-1.5'>
+                        <Icon icon='ph:currency-circle-dollar' />
+                        Amount
+                      </span>
+                    </th>
+                    <th className='text-left px-4 py-3 font-medium'>
+                      <span className='flex items-center gap-1.5'>
+                        <Icon icon='ph:receipt' />
+                        Category
+                      </span>
+                    </th>
+                    <th className='text-left px-4 py-3 font-medium'>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTransactions.map((tx) => {
+                    const { date: d, time: t } = formatDate(tx.transaction_date);
+                    const isCredit = tx.type === 'credit';
+                    return (
+                      <tr
+                        key={tx.id}
+                        className='border-t border-grey-10/40 hover:bg-primary-50/30 transition-colors'>
+                        <td className='px-6 py-3.5 text-secondary-20'>
+                          <div className='text-sm'>{d}</div>
+                          <div className='text-xs text-secondary-30'>{t}</div>
+                        </td>
+                        <td className='px-4 py-3.5 text-sm text-secondary-20'>
+                          {tx.bank_name ?? '—'}
+                        </td>
+                        <td className='px-4 py-3.5 text-sm text-secondary-20'>
+                          {tx.counterparty_name ?? '—'}
+                        </td>
+                        <td
+                          className={`px-4 py-3.5 text-sm font-medium ${isCredit ? 'text-success' : 'text-danger'}`}>
+                          {isCredit ? '+' : '-'}{formatNaira(tx.amount)}
+                        </td>
+                        <td className='px-4 py-3.5'>
+                          <span
+                            className={`text-xs px-2.5 py-1 rounded-full font-medium ${isCredit ? 'bg-success text-white' : 'bg-danger/10 text-danger'}`}>
+                            {tx.category ?? 'Uncategorized'}
+                          </span>
+                        </td>
+                         <td className='px-4 py-3.5'>
+                          <button
+                            onClick={() => setSelectedTx(tx)}
+                            className='text-primary-30 text-sm font-medium hover:underline'
+                          >
+                            View
+                          </button>
+                        </td>
 
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
 
           {/* Pagination */}

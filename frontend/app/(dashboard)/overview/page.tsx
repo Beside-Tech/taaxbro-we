@@ -196,7 +196,7 @@ export default function OverviewPage() {
         <GreetingHeading />
       </TopBar>
 
-      <main className='flex-1 p-8 space-y-5 overflow-y-auto'>
+      <main className='flex-1 p-4 sm:p-8 space-y-5 overflow-y-auto'>
 
         {/* Error banner */}
         {error && (
@@ -283,7 +283,7 @@ export default function OverviewPage() {
         )}
 
         {/* ── Stat cards ──────────────────────────────────────────────────── */}
-        <div className='grid grid-cols-4 gap-4'>
+        <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4'>
           {loading ? (
             [0,1,2,3].map((i) => <SkeletonCard key={i} />)
           ) : (
@@ -354,7 +354,7 @@ export default function OverviewPage() {
         </div>
 
         {/* ── Quick Actions + Compliance ──────────────────────────────────── */}
-        <div className='grid grid-cols-[1fr_1.1fr] gap-4'>
+        <div className='grid grid-cols-1 lg:grid-cols-[1fr_1.1fr] gap-4'>
           {/* Quick Actions */}
           <div className='bg-white rounded-xl border border-grey-10/60 p-6'>
             <h2 className='text-base font-semibold text-secondary-10 mb-4'>Quick Actions</h2>
@@ -386,7 +386,7 @@ export default function OverviewPage() {
                 Compliance score will appear after your first month of activity.
               </p>
             ) : (
-              <div className='flex items-center gap-5'>
+              <div className='flex flex-col sm:flex-row items-center gap-5'>
                 {/* Donut */}
                 <div className='relative w-28 h-28 shrink-0'>
                   <svg viewBox='0 0 100 100' className='w-full h-full'>
@@ -457,65 +457,67 @@ export default function OverviewPage() {
               </Link>
             </div>
           ) : (
-            <table className='w-full text-sm'>
-              <thead>
-                <tr className='bg-primary-40 text-white text-xs'>
-                  <th className='text-left px-6 py-3 font-medium'>
-                    <span className='flex items-center gap-1.5'><Icon icon='ph:calendar-blank' />Date</span>
-                  </th>
-                  <th className='text-left px-4 py-3 font-medium'>
-                    <span className='flex items-center gap-1.5'><Icon icon='ph:arrows-down-up' />Type</span>
-                  </th>
-                  <th className='text-left px-4 py-3 font-medium'>
-                    <span className='flex items-center gap-1.5'><Icon icon='ph:git-branch' />Source</span>
-                  </th>
-                  <th className='text-left px-4 py-3 font-medium'>
-                    <span className='flex items-center gap-1.5'><Icon icon='ph:currency-circle-dollar' />Amount</span>
-                  </th>
-                  <th className='text-left px-4 py-3 font-medium'>
-                    <span className='flex items-center gap-1.5'><Icon icon='ph:receipt' />Tax Included</span>
-                  </th>
-                  <th className='text-left px-4 py-3 font-medium'>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {txs.map((tx) => {
-                  const { date: d, time: t } = formatDate(tx.transaction_date);
-                  const isCredit = tx.type === 'credit';
-                  return (
-                    <tr key={tx.id} className='border-t border-grey-10/40 hover:bg-primary-50/30 transition-colors'>
-                      <td className='px-6 py-3.5 text-secondary-20'>
-                        <div className='text-sm'>{d}</div>
-                        <div className='text-xs text-secondary-30'>{t}</div>
-                      </td>
-                      <td className='px-4 py-3.5'>
-                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${typeBadge[tx.type] ?? 'bg-grey-10 text-secondary-10'}`}>
-                          {typeLabel[tx.type] ?? tx.type}
-                        </span>
-                      </td>
-                      <td className='px-4 py-3.5 text-secondary-20 text-sm'>
-                        {tx.counterparty_name ?? tx.bank_name ?? '—'}
-                      </td>
-                      <td className={`px-4 py-3.5 text-sm font-medium ${isCredit ? 'text-success' : 'text-danger'}`}>
-                        {isCredit ? '+' : '-'}{formatNaira(tx.amount)}
-                      </td>
-                      <td className='px-4 py-3.5 text-sm text-primary-30 font-medium'>
-                        {tx.vat_amount != null ? `${formatNaira(tx.vat_amount)} (VAT)` : '—'}
-                      </td>
-                      <td className='px-4 py-3.5'>
-                        <button
-                          onClick={() => setSelectedTx(tx)}
-                          className='text-primary-30 text-sm font-medium hover:underline'
-                        >
-                          View
-                        </button>
-                      </td>
+            <div className='overflow-x-auto w-full'>
+              <table className='w-full text-sm min-w-[600px]'>
+                <thead>
+                  <tr className='bg-primary-40 text-white text-xs'>
+                    <th className='text-left px-6 py-3 font-medium'>
+                      <span className='flex items-center gap-1.5'><Icon icon='ph:calendar-blank' />Date</span>
+                    </th>
+                    <th className='text-left px-4 py-3 font-medium'>
+                      <span className='flex items-center gap-1.5'><Icon icon='ph:arrows-down-up' />Type</span>
+                    </th>
+                    <th className='text-left px-4 py-3 font-medium'>
+                      <span className='flex items-center gap-1.5'><Icon icon='ph:git-branch' />Source</span>
+                    </th>
+                    <th className='text-left px-4 py-3 font-medium'>
+                      <span className='flex items-center gap-1.5'><Icon icon='ph:currency-circle-dollar' />Amount</span>
+                    </th>
+                    <th className='text-left px-4 py-3 font-medium'>
+                      <span className='flex items-center gap-1.5'><Icon icon='ph:receipt' />Tax Included</span>
+                    </th>
+                    <th className='text-left px-4 py-3 font-medium'>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {txs.map((tx) => {
+                    const { date: d, time: t } = formatDate(tx.transaction_date);
+                    const isCredit = tx.type === 'credit';
+                    return (
+                      <tr key={tx.id} className='border-t border-grey-10/40 hover:bg-primary-50/30 transition-colors'>
+                        <td className='px-6 py-3.5 text-secondary-20'>
+                          <div className='text-sm'>{d}</div>
+                          <div className='text-xs text-secondary-30'>{t}</div>
+                        </td>
+                        <td className='px-4 py-3.5'>
+                          <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${typeBadge[tx.type] ?? 'bg-grey-10 text-secondary-10'}`}>
+                            {typeLabel[tx.type] ?? tx.type}
+                          </span>
+                        </td>
+                        <td className='px-4 py-3.5 text-secondary-20 text-sm'>
+                          {tx.counterparty_name ?? tx.bank_name ?? '—'}
+                        </td>
+                        <td className={`px-4 py-3.5 text-sm font-medium ${isCredit ? 'text-success' : 'text-danger'}`}>
+                          {isCredit ? '+' : '-'}{formatNaira(tx.amount)}
+                        </td>
+                        <td className='px-4 py-3.5 text-sm text-primary-30 font-medium'>
+                          {tx.vat_amount != null ? `${formatNaira(tx.vat_amount)} (VAT)` : '—'}
+                        </td>
+                        <td className='px-4 py-3.5'>
+                          <button
+                            onClick={() => setSelectedTx(tx)}
+                            className='text-primary-30 text-sm font-medium hover:underline'
+                          >
+                            View
+                          </button>
+                        </td>
 
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </main>
