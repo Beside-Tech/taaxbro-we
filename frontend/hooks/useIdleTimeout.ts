@@ -51,11 +51,13 @@ export function useIdleTimeout({
   useEffect(() => {
     if (!isActive) return;
 
-    // Initialize the last activity timestamp if not present
+    // Always reset the activity timestamp on mount.
+    // If we only set it when absent, a stale value from a prior session
+    // (e.g. closed tab 20 min ago) will make the interval think the user
+    // has been idle for 20 min and fire onTimeout() within 5 seconds of login.
     try {
-      if (!localStorage.getItem(STORAGE_KEY)) {
-        localStorage.setItem(STORAGE_KEY, Date.now().toString());
-      }
+      localStorage.setItem(STORAGE_KEY, Date.now().toString());
+      lastWriteRef.current = Date.now();
     } catch (e) {}
 
     const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
@@ -105,4 +107,3 @@ export function useIdleTimeout({
 
   return { reset };
 }
-
