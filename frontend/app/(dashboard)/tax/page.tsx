@@ -112,22 +112,42 @@ export default function TaxPage() {
     }
   };
 
+  // Helper to determine if a tax type is applicable based on role / profile settings
+  const isObligationActive = (taxType: string): boolean => {
+    if (!profile) return false;
+    const t = taxType.toLowerCase();
+    if (t === 'vat') {
+      return profile.vat_registered === true;
+    }
+    if (t === 'cit') {
+      return profile.user_type === 'business' && profile.business_type === 'limited_liability';
+    }
+    if (t === 'paye') {
+      return profile.user_type === 'business';
+    }
+    return true; // WHT and other general tax types always apply
+  };
+
+  const activeObligations = obligationsList.filter(o => isObligationActive(o.tax_type));
+
   const handleRecalculateAll = async () => {
     if (!profile?.business_id) return;
     setRecalculatingAll(true);
     
-    // Set all tax type loaders to true
-    const types = ['vat', 'paye', 'wht', 'cit'];
-    setRecalculating({
-      vat: true,
-      paye: true,
-      wht: true,
-      cit: true
-    });
+    // Filter down to only active tax types for this profile
+    const allTypes = ['vat', 'paye', 'wht', 'cit'];
+    const activeTypes = allTypes.filter(isObligationActive);
+    
+    const initialRecalculating = activeTypes.reduce((acc, t) => {
+      acc[t] = true;
+      return acc;
+    }, {} as Record<string, boolean>);
+    
+    setRecalculating(initialRecalculating);
 
     try {
-      // Trigger all calculations in parallel
-      await Promise.all(types.map(t => tax.triggerCompute(profile.business_id!, t)));
+      // Trigger calculation only for active ones in parallel
+      await Promise.all(activeTypes.map(t => tax.triggerCompute(profile.business_id!, t)));
       
       const startTime = new Date().getTime();
       let attempts = 0;
@@ -137,12 +157,13 @@ export default function TaxPage() {
         try {
           const res = await tax.getOverview(profile.business_id!);
           
-          // Determine which types have finished recalculating
           const nextRecalculating = { ...recalculating };
           let finishedCount = 0;
           
           res.obligations.forEach(o => {
             const t = o.tax_type.toLowerCase();
+            if (!isObligationActive(t)) return;
+            
             const isFinished = o.computed_at && (new Date(o.computed_at).getTime() > startTime - 5000);
             if (isFinished) {
               nextRecalculating[t] = false;
@@ -154,15 +175,14 @@ export default function TaxPage() {
 
           setRecalculating(nextRecalculating);
           
-          // If all 4 are done, or we timed out (10 attempts * 3s = 30s)
-          if (finishedCount === types.length || attempts >= 10) {
+          if (finishedCount === activeTypes.length || attempts >= 10) {
             setObligationsList(res.obligations);
-            setRecalculating({
-              vat: false,
-              paye: false,
-              wht: false,
-              cit: false
-            });
+            setRecalculating(
+              allTypes.reduce((acc, t) => {
+                acc[t] = false;
+                return acc;
+              }, {} as Record<string, boolean>)
+            );
             setRecalculatingAll(false);
             clearInterval(interval);
           }
@@ -174,16 +194,15 @@ export default function TaxPage() {
     } catch (err: any) {
       console.error('Failed to trigger recalculation for all:', err);
       alert(err.message || 'Failed to recalculate all obligations');
-      setRecalculating({
-        vat: false,
-        paye: false,
-        wht: false,
-        cit: false
-      });
+      setRecalculating(
+        allTypes.reduce((acc, t) => {
+          acc[t] = false;
+          return acc;
+        }, {} as Record<string, boolean>)
+      );
       setRecalculatingAll(false);
     }
   };
-
   // ── Derived values ───────────────────────────────────────────────────────
   const stats = data?.stats;
   const revenue = stats ? Number(stats.revenue_current_month) : 0;
@@ -355,6 +374,16 @@ export default function TaxPage() {
     (f) => f.status.toLowerCase() === 'confirmed' || f.status.toLowerCase() === 'filed'
   ).length;
 
+  // Sum non-filed liabilities for active obligations
+  const activeObligationsDue = activeObligations
+    .filter(o => o.status.toLowerCase() !== 'filed' && o.status.toLowerCase() !== 'confirmed')
+    .reduce((sum, o) => {
+      if (o.tax_type.toLowerCase() === 'vat') return sum; // Add netVatPayable separately for live offset calculations
+      return sum + Number(o.net_liability);
+    }, 0);
+
+  const totalDueThisMonth = activeObligationsDue + netVatPayable;
+
   const statCards = [
     { 
       label: 'Filed this year', 
@@ -370,7 +399,7 @@ export default function TaxPage() {
     },
     { 
       label: 'Total due this month', 
-      value: stats ? formatNaira(Number(stats.tax_liabilities_due) + netVatPayable) : '—', 
+      value: stats ? formatNaira(totalDueThisMonth) : '—', 
       sub: 'Active Obligations', 
       subClass: 'text-primary-30', 
       border: 'border-primary-30' 
@@ -592,12 +621,12 @@ export default function TaxPage() {
                     <div className='h-3 bg-grey-10 rounded w-20' />
                   </div>
                 ))
-              ) : obligationsList.length === 0 ? (
+              ) : activeObligations.length === 0 ? (
                 <p className='text-sm text-secondary-30 text-center py-4'>
                   No active tax obligations found. Use settings to configure your business profile.
                 </p>
               ) : (
-                obligationsList.map((ob, i) => (
+                activeObligations.map((ob, i) => (
                   <div key={ob.id ?? i} className='border border-grey-10 rounded-xl p-4 hover:border-primary-20 cursor-pointer transition-colors shadow-sm relative group'>
                     <div className='flex items-start justify-between gap-2 mb-2'>
                       <div>
