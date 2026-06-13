@@ -274,9 +274,27 @@ export interface DashboardData {
   history: MonthlyHistoryItem[];
 }
 
+export interface WebNotification {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  action_url: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
 export const dashboard = {
   get(): Promise<DashboardData> {
     return request<DashboardData>('/api/v1/dashboard');
+  },
+  getNotifications(): Promise<WebNotification[]> {
+    return request<WebNotification[]>('/api/v1/dashboard/notifications');
+  },
+  markNotificationRead(id: string): Promise<{ status: string }> {
+    return request<{ status: string }>(`/api/v1/dashboard/notifications/${id}/read`, {
+      method: 'PATCH',
+    });
   },
 };
 
