@@ -304,9 +304,13 @@ export default function PaymentLinkModal({ onClose }: Props) {
               </div>
 
               {shareMode === 'qr' && (
-                <div className='mt-4 flex flex-col items-center gap-2'>
-                  <div className='w-36 h-36 flex items-center justify-center bg-grey-10/30 rounded-xl'>
-                    <Icon icon='ph:qr-code' className='text-8xl text-secondary-10' />
+                <div className='mt-4 flex flex-col items-center gap-2 animate-fade-in'>
+                  <div className='w-36 h-36 flex items-center justify-center bg-white border border-grey-10 rounded-xl overflow-hidden p-2'>
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(paymentLink)}`}
+                      alt="QR Code to Pay"
+                      className="w-full h-full object-contain"
+                    />
                   </div>
                   <p className='text-xs text-secondary-30'>
                     Scan to pay

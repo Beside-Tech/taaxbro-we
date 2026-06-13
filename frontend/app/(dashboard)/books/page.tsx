@@ -13,10 +13,12 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import TopBar from '@/components/dashboard/TopBar';
-import { dashboard, invoices, expenses, type DashboardData, type InvoiceResponse, type ExpenseResponse } from '@/lib/api';
+import { dashboard, invoices, expenses, ai, type DashboardData, type InvoiceResponse, type ExpenseResponse } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import PaymentLinkModal from '@/components/dashboard/pay/PaymentLinkModal';
 import ViewInvoiceModal from '@/components/dashboard/books/ViewInvoiceModal';
+import CreateInvoiceModal from '@/components/dashboard/books/CreateInvoiceModal';
+import EditInvoiceModal from '@/components/dashboard/books/EditInvoiceModal';
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 
@@ -493,8 +495,10 @@ function ExpensesTab({ expensesList, loading }: ExpensesTabProps) {
   
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<string | null>(null);
+  const [isDragActive, setIsDragActive] = useState(false);
 
   const scanPanelRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const filteredExpenses = expensesList.filter(exp => {
     if (selectedCategory === 'all') return true;
@@ -518,13 +522,47 @@ function ExpensesTab({ expensesList, loading }: ExpensesTabProps) {
     scanPanelRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const handleFileUploadMock = () => {
+  const handleUploadFile = async (file: File) => {
+    if (!file) return;
     setScanning(true);
     setScanResult(null);
-    setTimeout(() => {
+    try {
+      const res = await ai.chatOCR(file);
+      setScanResult(res.answer || 'Receipt uploaded and processed successfully.');
+    } catch (err: any) {
+      console.error(err);
+      setScanResult(`Error processing receipt: ${err?.message || 'Unknown error'}`);
+    } finally {
       setScanning(false);
-      setScanResult('Mock OCR Parse: Found software subscription receipt of ₦14,290.00. Tax details parsed successfully.');
-    }, 2000);
+    }
+  };
+
+  const handleContainerClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      handleUploadFile(e.target.files[0]);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragActive(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragActive(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleUploadFile(e.dataTransfer.files[0]);
+    }
   };
 
   return (
@@ -646,9 +684,21 @@ function ExpensesTab({ expensesList, loading }: ExpensesTabProps) {
         <p className='text-sm text-secondary-30 text-center mb-4'>Drop document here</p>
         
         <div
-          onClick={handleFileUploadMock}
-          className='border-2 border-dashed border-grey-10 rounded-xl p-10 flex flex-col items-center gap-3 hover:border-primary-20 transition-colors cursor-pointer bg-grey-0/10'
+          onClick={handleContainerClick}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          className={`border-2 border-dashed rounded-xl p-10 flex flex-col items-center gap-3 transition-colors cursor-pointer ${
+            isDragActive ? 'border-primary-30 bg-primary-50/20' : 'border-grey-10 hover:border-primary-20 bg-grey-0/10'
+          }`}
         >
+          <input
+            type='file'
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept='image/*,application/pdf'
+            className='hidden'
+          />
           {scanning ? (
             <>
               <Icon icon='ph:circle-notch-bold' className='text-3xl text-primary-30 animate-spin' />
@@ -811,7 +861,9 @@ export default function BooksPage() {
   const [expensesLoaded, setExpensesLoaded] = useState(false);
 
   const [showPaymentLink, setShowPaymentLink] = useState(false);
+  const [showCreateInvoice, setShowCreateInvoice] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
+  const [editingInvoice, setEditingInvoice] = useState<any | null>(null);
 
   const loadInvoices = (force = false) => {
     if (user?.business_id && (!invoicesLoaded || force)) {
@@ -889,7 +941,7 @@ export default function BooksPage() {
           <InvoicesTab
             invoicesList={invoicesList}
             loading={invoicesLoading}
-            onNewInvoice={() => setShowPaymentLink(true)}
+            onNewInvoice={() => setShowCreateInvoice(true)}
             onViewInvoice={setSelectedInvoice}
           />
         )}
@@ -901,11 +953,42 @@ export default function BooksPage() {
         <PaymentLinkModal onClose={() => setShowPaymentLink(false)} />
       )}
 
+      {showCreateInvoice && (
+        <CreateInvoiceModal
+          onClose={() => setShowCreateInvoice(false)}
+          onSuccess={() => {
+            setShowCreateInvoice(false);
+            loadInvoices(true);
+          }}
+        />
+      )}
+
       {selectedInvoice && user?.business_id && (
         <ViewInvoiceModal
           invoice={selectedInvoice}
           businessId={user.business_id}
           onClose={() => setSelectedInvoice(null)}
+          onEdit={(inv) => {
+            setSelectedInvoice(null);
+            setEditingInvoice(inv);
+          }}
+        />
+      )}
+
+      {editingInvoice && user?.business_id && (
+        <EditInvoiceModal
+          invoiceId={editingInvoice.id}
+          businessId={user.business_id}
+          onClose={() => setEditingInvoice(null)}
+          onSuccess={() => {
+            setEditingInvoice(null);
+            loadInvoices(true);
+            // Also refresh dashboard stats
+            dashboard
+              .get()
+              .then(setData)
+              .catch((e) => setError(e.message ?? 'Failed to load books data'));
+          }}
         />
       )}
     </div>

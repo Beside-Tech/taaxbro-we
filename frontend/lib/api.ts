@@ -513,15 +513,56 @@ export const invoices = {
   },
   create(businessId: string, data: {
     client_name: string;
+    client_email?: string;
+    client_phone?: string;
+    client_address?: string;
     total_amount: number;
     due_date?: string;
     notes?: string;
     items?: Array<{ description: string; quantity: number; unit_price: number }>;
+    vat_applicable?: boolean;
+    already_paid?: boolean;
   }): Promise<InvoiceResponse> {
     return request<InvoiceResponse>(`/api/v1/invoices?business_id=${businessId}`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  },
+  update(businessId: string, invoiceId: string, data: {
+    client_name?: string;
+    client_email?: string | null;
+    client_phone?: string | null;
+    client_address?: string | null;
+    total_amount?: number;
+    due_date?: string;
+    notes?: string | null;
+    vat_applicable?: boolean;
+    status?: string;
+  }): Promise<InvoiceResponse> {
+    return request<InvoiceResponse>(`/api/v1/invoices/${invoiceId}?business_id=${businessId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+  sendViaEmail(businessId: string, invoiceId: string, data: {
+    client_email: string;
+    subject: string;
+    body: string;
+  }): Promise<{ status: string; message: string }> {
+    return request<{ status: string; message: string }>(`/api/v1/invoices/${invoiceId}/send-email?business_id=${businessId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  get(businessId: string, invoiceId: string): Promise<InvoiceResponse & {
+    client_email?: string | null;
+    client_address?: string | null;
+    subtotal: number;
+    vat_total: number;
+    notes?: string | null;
+    vat_applicable: boolean;
+  }> {
+    return request<any>(`/api/v1/invoices/${invoiceId}?business_id=${businessId}`);
   },
 };
 
