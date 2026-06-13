@@ -46,6 +46,7 @@ export default function TaxPage() {
   const [lawUpdates, setLawUpdates] = useState<TaxLawUpdateResponse[]>([]);
   const [showLawMonitor, setShowLawMonitor] = useState(true);
   const [recalculating, setRecalculating] = useState<Record<string, boolean>>({});
+  const [recalculatingAll, setRecalculatingAll] = useState(false);
 
   const loadObligations = (bizId: string) => {
     setObligationsLoading(true);
@@ -108,6 +109,78 @@ export default function TaxPage() {
       console.error('Failed to trigger recalculation:', err);
       alert(err.message || 'Failed to trigger recalculation');
       setRecalculating(prev => ({ ...prev, [typeLower]: false }));
+    }
+  };
+
+  const handleRecalculateAll = async () => {
+    if (!profile?.business_id) return;
+    setRecalculatingAll(true);
+    
+    // Set all tax type loaders to true
+    const types = ['vat', 'paye', 'wht', 'cit'];
+    setRecalculating({
+      vat: true,
+      paye: true,
+      wht: true,
+      cit: true
+    });
+
+    try {
+      // Trigger all calculations in parallel
+      await Promise.all(types.map(t => tax.triggerCompute(profile.business_id!, t)));
+      
+      const startTime = new Date().getTime();
+      let attempts = 0;
+      
+      const interval = setInterval(async () => {
+        attempts++;
+        try {
+          const res = await tax.getOverview(profile.business_id!);
+          
+          // Determine which types have finished recalculating
+          const nextRecalculating = { ...recalculating };
+          let finishedCount = 0;
+          
+          res.obligations.forEach(o => {
+            const t = o.tax_type.toLowerCase();
+            const isFinished = o.computed_at && (new Date(o.computed_at).getTime() > startTime - 5000);
+            if (isFinished) {
+              nextRecalculating[t] = false;
+              finishedCount++;
+            } else {
+              nextRecalculating[t] = true;
+            }
+          });
+
+          setRecalculating(nextRecalculating);
+          
+          // If all 4 are done, or we timed out (10 attempts * 3s = 30s)
+          if (finishedCount === types.length || attempts >= 10) {
+            setObligationsList(res.obligations);
+            setRecalculating({
+              vat: false,
+              paye: false,
+              wht: false,
+              cit: false
+            });
+            setRecalculatingAll(false);
+            clearInterval(interval);
+          }
+        } catch (err) {
+          console.error('Error polling after batch recalculation:', err);
+        }
+      }, 3000);
+      
+    } catch (err: any) {
+      console.error('Failed to trigger recalculation for all:', err);
+      alert(err.message || 'Failed to recalculate all obligations');
+      setRecalculating({
+        vat: false,
+        paye: false,
+        wht: false,
+        cit: false
+      });
+      setRecalculatingAll(false);
     }
   };
 
@@ -297,7 +370,7 @@ export default function TaxPage() {
     },
     { 
       label: 'Total due this month', 
-      value: stats ? formatNaira(Number(stats.tax_liabilities_due) + Number(stats.tax_reserve)) : '—', 
+      value: stats ? formatNaira(Number(stats.tax_liabilities_due) + netVatPayable) : '—', 
       sub: 'Active Obligations', 
       subClass: 'text-primary-30', 
       border: 'border-primary-30' 
@@ -491,10 +564,25 @@ export default function TaxPage() {
 
           {/* Active Obligations */}
           <div className='bg-white rounded-xl border border-grey-10/60 p-6'>
-            <h2 className='text-base font-semibold text-secondary-10 mb-1'>Active Obligations</h2>
-            <p className='text-xs text-secondary-30 flex items-center gap-1 mb-5'>
-              <Icon icon='ph:info' /> Click on item to view more info
-            </p>
+            <div className='flex items-center justify-between mb-4'>
+              <div>
+                <h2 className='text-base font-semibold text-secondary-10'>Active Obligations</h2>
+                <p className='text-xs text-secondary-30 flex items-center gap-1 mt-0.5'>
+                  <Icon icon='ph:info' /> Click on item to view more info
+                </p>
+              </div>
+              <button
+                onClick={handleRecalculateAll}
+                disabled={recalculatingAll || obligationsLoading}
+                className='text-xs text-primary-30 hover:text-primary-40 transition-all flex items-center gap-1.5 bg-primary-50 hover:bg-primary-10 rounded-full px-3 py-1.5 font-semibold border border-primary-20/40 shadow-sm disabled:opacity-50 select-none'
+              >
+                <Icon 
+                  icon='ph:arrows-clockwise' 
+                  className={`text-sm ${recalculatingAll ? 'animate-spin' : ''}`} 
+                />
+                {recalculatingAll ? 'Recalculating All...' : 'Recalculate All'}
+              </button>
+            </div>
             <div className='space-y-3'>
               {obligationsLoading ? (
                 [0, 1, 2, 3].map((i) => (
