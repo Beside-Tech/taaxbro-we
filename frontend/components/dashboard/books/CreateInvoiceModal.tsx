@@ -77,6 +77,13 @@ export default function CreateInvoiceModal({ onClose, onSuccess }: CreateInvoice
         unit_price: Number(unitPrice),
         quantity: Number(quantity),
       });
+      // Notify Elon's chat bubble so it can give a proactive tax tip
+      window.dispatchEvent(new CustomEvent('elon-books-event', {
+        detail: {
+          type: 'invoice_created',
+          summary: `Invoice for ${clientName.trim()}, subtotal ₦${subtotal.toLocaleString('en-NG', { minimumFractionDigits: 2 })}, VAT ${vatApplicable ? `7.5% (₦${vat.toLocaleString('en-NG', { minimumFractionDigits: 2 })}) applied` : 'not applied'}, total ₦${total.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`,
+        },
+      }));
       onSuccess();
     } catch (err: any) {
       setErrorMsg(err.message ?? 'Failed to create invoice. Please try again.');

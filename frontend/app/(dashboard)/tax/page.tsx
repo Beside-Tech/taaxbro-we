@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Icon } from '@iconify/react';
 import TopBar from '@/components/dashboard/TopBar';
 import Link from 'next/link';
@@ -129,6 +129,18 @@ export default function TaxPage() {
   };
 
   const activeObligations = obligationsList.filter(o => isObligationActive(o.tax_type));
+
+  const deduplicatedObligations = useMemo(() => {
+    const map = new Map<string, TaxObligationResponse>();
+    activeObligations.forEach(o => {
+      const type = o.tax_type.toLowerCase();
+      const existing = map.get(type);
+      if (!existing || (o.due_date && (!existing.due_date || new Date(o.due_date) > new Date(existing.due_date)))) {
+        map.set(type, o);
+      }
+    });
+    return Array.from(map.values());
+  }, [activeObligations]);
 
   const handleRecalculateAll = async () => {
     if (!profile?.business_id) return;
@@ -375,7 +387,7 @@ export default function TaxPage() {
   ).length;
 
   // Sum non-filed liabilities for active obligations
-  const activeObligationsDue = activeObligations
+  const activeObligationsDue = deduplicatedObligations
     .filter(o => o.status.toLowerCase() !== 'filed' && o.status.toLowerCase() !== 'confirmed')
     .reduce((sum, o) => {
       if (o.tax_type.toLowerCase() === 'vat') return sum; // Add netVatPayable separately for live offset calculations
@@ -621,12 +633,12 @@ export default function TaxPage() {
                     <div className='h-3 bg-grey-10 rounded w-20' />
                   </div>
                 ))
-              ) : activeObligations.length === 0 ? (
+              ) : deduplicatedObligations.length === 0 ? (
                 <p className='text-sm text-secondary-30 text-center py-4'>
                   No active tax obligations found. Use settings to configure your business profile.
                 </p>
               ) : (
-                activeObligations.map((ob, i) => (
+                deduplicatedObligations.map((ob, i) => (
                   <div key={ob.id ?? i} className='border border-grey-10 rounded-xl p-4 hover:border-primary-20 cursor-pointer transition-colors shadow-sm relative group'>
                     <div className='flex items-start justify-between gap-2 mb-2'>
                       <div>

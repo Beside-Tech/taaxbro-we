@@ -42,9 +42,11 @@ export async function POST(req: NextRequest) {
 
     // ── 3. Build enriched context for Elon ──────────────────────────────────
     // Tell Elon what page the user is on and what actions are available on web.
+    // CRITICAL: This proxy is only reached from the dashboard (auth-gated). The
+    // user is ALWAYS authenticated here — never redirect them to sign up.
     const webActionContext = dashboard_page
-      ? `[Web Dashboard Context: user is on the "${dashboard_page}" page. Available web actions: navigate to pages (overview/books/pay/tax/settings), show modals (new invoice, new expense, payment link), open tabs within the current page. When the user asks to create an invoice or log an expense, include action hints in your response like "ACTION:navigate:books" or "ACTION:show:new-invoice" so the frontend can act immediately.]`
-      : '[Web Dashboard Context: user is on a dashboard page. Guide them to the right section as needed.]';
+      ? `[Web Dashboard Context: AUTHENTICATED USER — this person is already logged in and has a verified Taaxbro account. NEVER tell them to "sign up", "create an account", "register", or visit "taaxbro.com/signup". They are INSIDE the platform. They are on the "${dashboard_page}" page. Available web actions: navigate to pages (overview/books/pay/tax/settings), show modals (new invoice, new expense, payment link), open tabs within the current page. When the user asks to create an invoice or log an expense, include action hints in your response like "ACTION:navigate:books" or "ACTION:show:new-invoice" so the frontend can act immediately.]`
+      : '[Web Dashboard Context: AUTHENTICATED USER — this person is already logged in and has a verified Taaxbro account. NEVER tell them to "sign up", "create an account", or visit any signup page. They are INSIDE the platform. Guide them to the right section as needed.]';
 
     const enrichedMessage = `${webActionContext}\n\n${message}`;
 
