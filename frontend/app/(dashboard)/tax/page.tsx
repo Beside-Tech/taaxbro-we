@@ -7,7 +7,7 @@ import Link from 'next/link';
 import FlagIssueModal from '@/components/dashboard/tax/FlagIssueModal';
 
 import EditVATModal from '@/components/dashboard/tax/EditVATModal';
-import { dashboard, business, tax, type DashboardData, type BusinessProfile, type TaxFilingResponse } from '@/lib/api';
+import { dashboard, business, tax, type DashboardData, type BusinessProfile, type TaxFilingResponse, type TaxObligationResponse, type TaxLawUpdateResponse } from '@/lib/api';
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 
@@ -40,6 +40,21 @@ export default function TaxPage() {
   const [filingsList, setFilingsList] = useState<TaxFilingResponse[]>([]);
   const [filingsLoading, setFilingsLoading] = useState(false);
 
+  // Live obligations and law updates
+  const [obligationsList, setObligationsList] = useState<TaxObligationResponse[]>([]);
+  const [obligationsLoading, setObligationsLoading] = useState(true);
+  const [lawUpdates, setLawUpdates] = useState<TaxLawUpdateResponse[]>([]);
+  const [showLawMonitor, setShowLawMonitor] = useState(true);
+  const [recalculating, setRecalculating] = useState<Record<string, boolean>>({});
+
+  const loadObligations = (bizId: string) => {
+    setObligationsLoading(true);
+    tax.getOverview(bizId)
+      .then((res) => setObligationsList(res.obligations))
+      .catch((e) => console.error('Failed to load obligations:', e))
+      .finally(() => setObligationsLoading(false));
+  };
+
   useEffect(() => {
     Promise.all([dashboard.get(), business.getProfile()])
       .then(([dash, prof]) => { setData(dash); setProfile(prof); })
@@ -54,20 +69,52 @@ export default function TaxPage() {
       .then((res) => setFilingsList(res))
       .catch((e) => console.error('Failed to load filings:', e))
       .finally(() => setFilingsLoading(false));
+
+    loadObligations(profile.business_id);
+    
+    tax.getLawUpdates()
+      .then((res) => setLawUpdates(res))
+      .catch((e) => console.error('Failed to load law updates:', e));
   }, [profile?.business_id]);
+
+  const handleRecalculate = async (taxType: string) => {
+    if (!profile?.business_id) return;
+    const typeLower = taxType.toLowerCase();
+    setRecalculating(prev => ({ ...prev, [typeLower]: true }));
+    try {
+      await tax.triggerCompute(profile.business_id, typeLower);
+      
+      let attempts = 0;
+      const interval = setInterval(async () => {
+        attempts++;
+        try {
+          const res = await tax.getOverview(profile.business_id!);
+          const hasUpdated = res.obligations.some(o => 
+            o.tax_type.toLowerCase() === typeLower && 
+            o.computed_at && 
+            (new Date().getTime() - new Date(o.computed_at).getTime()) < 20000
+          );
+          if (hasUpdated || attempts >= 10) {
+            setObligationsList(res.obligations);
+            setRecalculating(prev => ({ ...prev, [typeLower]: false }));
+            clearInterval(interval);
+          }
+        } catch (err) {
+          console.error('Error polling obligation status:', err);
+        }
+      }, 3000);
+
+    } catch (err: any) {
+      console.error('Failed to trigger recalculation:', err);
+      alert(err.message || 'Failed to trigger recalculation');
+      setRecalculating(prev => ({ ...prev, [typeLower]: false }));
+    }
+  };
 
   // ── Derived values ───────────────────────────────────────────────────────
   const stats = data?.stats;
   const revenue = stats ? Number(stats.revenue_current_month) : 0;
-  const businessName = profile?.name ?? null;
   const state = profile?.state ?? 'Lagos';
-
-  // Deterministic hash so refs don't jump on every render
-  function deterministicRef(seed: string): string {
-    let hash = 0;
-    for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) & 0xffffffff;
-    return String(Math.abs(hash) % 9000 + 1000);
-  }
 
   const steps = [
     { n: 1, label: 'Computed', done: true },
@@ -79,11 +126,6 @@ export default function TaxPage() {
   const nextFilingMonthName = stats?.next_filing_date 
     ? new Date(stats.next_filing_date).toLocaleDateString('en-GB', { month: 'short' })
     : new Date(new Date().getFullYear(), new Date().getMonth() + 1, 21).toLocaleDateString('en-GB', { month: 'short' });
-
-  const lastFilingMonthName = new Date(
-    new Date().getFullYear(),
-    new Date().getMonth() - (new Date().getDate() >= 10 ? 0 : 1)
-  ).toLocaleDateString('en-GB', { month: 'long' });
 
   const formatPeriod = (startStr: string) => {
     const d = new Date(startStr);
@@ -105,6 +147,58 @@ export default function TaxPage() {
     if (s === 'awaiting_approval' || s === 'pending') return 'bg-orange-400 text-white';
     if (s === 'failed') return 'bg-red-500 text-white';
     return 'bg-secondary-40 text-secondary-10';
+  };
+
+  const getTaxTypeName = (type: string) => {
+    const t = type.toLowerCase();
+    if (t === 'vat') return 'Value Added Tax (VAT)';
+    if (t === 'wht') return 'Withholding Tax (WHT)';
+    if (t === 'cit') return 'Company Income Tax (CIT)';
+    if (t === 'paye') return 'PAYE Income Tax';
+    return type.toUpperCase();
+  };
+
+  const getObligationMeta = (ob: TaxObligationResponse) => {
+    const t = ob.tax_type.toLowerCase();
+    const formattedDue = formatFilingDate(ob.due_date);
+    if (t === 'vat') return `7.5% · Monthly · ${ob.authority} · Due ${formattedDue}`;
+    if (t === 'wht') return `At source · Monthly · ${ob.authority} · Due ${formattedDue}`;
+    if (t === 'cit') return `CIT Rate · Annual · ${ob.authority} · Due ${formattedDue}`;
+    if (t === 'paye') return `Monthly · ${ob.authority} · Due ${formattedDue}`;
+    return `${ob.authority} · Due ${formattedDue}`;
+  };
+
+  const getObligationStatusClass = (status: string) => {
+    const s = status.toLowerCase();
+    if (s === 'filed' || s === 'confirmed') return 'bg-success/15 text-success';
+    if (s === 'awaiting_approval' || s === 'pending') return 'bg-orange-400 text-white';
+    if (s === 'computed') return 'bg-primary-20 text-primary-40';
+    return 'bg-primary-10 text-primary-30';
+  };
+
+  const formatComputedAt = (iso: string | null | undefined) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return `Last computed: ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}, ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+  };
+
+  const getZeroStateExplanation = (ob: TaxObligationResponse) => {
+    if (Number(ob.net_liability) !== 0) return null;
+    const t = ob.tax_type.toLowerCase();
+    const periodMonth = new Date(ob.period_start).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    if (t === 'paye') {
+      return `No salary payments recorded for ${periodMonth}`;
+    }
+    if (t === 'cit') {
+      return `Net profit ≤ ₦0 — CIT exempt for this year`;
+    }
+    if (t === 'vat') {
+      return `No sales or operations subject to VAT for ${periodMonth}`;
+    }
+    if (t === 'wht') {
+      return `No withholding transactions recorded for ${periodMonth}`;
+    }
+    return null;
   };
 
   const filteredHistory = filingsList.filter((f) => {
@@ -213,41 +307,6 @@ export default function TaxPage() {
       value: stats?.tax_liabilities_status === 'Overdue' ? '1' : '0', 
       sub: stats?.tax_liabilities_status === 'Overdue' ? 'Requires immediate action' : 'All filings up to date', 
       border: stats?.tax_liabilities_status === 'Overdue' ? 'border-danger' : 'border-secondary-40' 
-    },
-  ];
-
-  const obligations = [
-    { 
-      name: 'Value Added Tax (VAT)', 
-      meta: `7.5% · Monthly · FIRS · Due ${stats?.next_filing_date ? formatFilingDate(stats.next_filing_date) : '21 June'}`, 
-      amount: stats ? formatNaira(Number(stats.tax_liabilities_due)) : '—', 
-      status: isVatSubmitted 
-        ? 'Awaiting Confirmation' 
-        : (stats?.tax_liabilities_due && Number(stats.tax_liabilities_due) > 0 ? 'Awaiting Approval' : 'Ready'), 
-      statusClass: isVatSubmitted 
-        ? 'bg-blue-400 text-white' 
-        : (stats?.tax_liabilities_due && Number(stats.tax_liabilities_due) > 0 ? 'bg-orange-400 text-white' : 'bg-primary-20 text-primary-40') 
-    },
-    { 
-      name: 'Withholding Tax (WHT)', 
-      meta: `At source · Monthly · FIRS · Due 21 ${nextFilingMonthName}`, 
-      amount: stats ? formatNaira(Number(stats.tax_reserve) * 0.067) : '—',
-      status: stats?.tax_reserve && Number(stats.tax_reserve) > 0 ? 'Filing Ready' : 'Ready', 
-      statusClass: 'bg-primary-20 text-primary-40' 
-    },
-    { 
-      name: 'Company Income Tax (CIT)', 
-      meta: `30% · Annual · Due Dec ${new Date().getFullYear()}`, 
-      amount: revenue > 0 ? formatNaira(revenue * 0.05) : '₦0.00', 
-      status: 'Accumulating', 
-      statusClass: 'bg-primary-10 text-primary-30' 
-    },
-    { 
-      name: `PAYE – ${state} State`, 
-      meta: `Monthly · ${state === 'Lagos' ? 'Lagos IRS (LIRS)' : `${state} IRS`} · Filed 10 ${lastFilingMonthName}`, 
-      amount: revenue > 0 ? formatNaira(revenue * 0.02) : '₦0.00', 
-      status: 'Filed', 
-      statusClass: 'bg-success/15 text-success' 
     },
   ];
 
@@ -367,7 +426,6 @@ export default function TaxPage() {
               <Link href='/books' className='text-sm text-primary-30 hover:underline flex items-center gap-1'>
                 View Transactions <Icon icon='ph:arrow-right' />
               </Link>
-
             </div>
 
             {/* Input/Output tabs */}
@@ -438,25 +496,67 @@ export default function TaxPage() {
               <Icon icon='ph:info' /> Click on item to view more info
             </p>
             <div className='space-y-3'>
-              {obligations.map((ob, i) => (
-                <div key={i} className='border border-grey-10 rounded-xl p-4 hover:border-primary-20 cursor-pointer transition-colors shadow-sm'>
-                  <div className='flex items-start justify-between gap-2 mb-2'>
-                    <div>
-                      <p className='text-sm font-medium text-secondary-10'>{ob.name}</p>
-                      <p className='text-xs text-secondary-30 mt-0.5'>{ob.meta}</p>
-                    </div>
-                    <span className={`text-[10px] px-2 py-1 rounded-full font-medium shrink-0 ${ob.statusClass}`}>
-                      {ob.status}
-                    </span>
+              {obligationsLoading ? (
+                [0, 1, 2, 3].map((i) => (
+                  <div key={i} className='bg-white rounded-xl border border-grey-10 p-5 animate-pulse'>
+                    <div className='h-3 bg-grey-10 rounded w-24 mb-3' />
+                    <div className='h-7 bg-grey-10 rounded w-32 mb-4' />
+                    <div className='h-3 bg-grey-10 rounded w-20' />
                   </div>
-                  <p className='text-sm font-semibold text-secondary-10'>{ob.amount}</p>
-                </div>
-              ))}
+                ))
+              ) : obligationsList.length === 0 ? (
+                <p className='text-sm text-secondary-30 text-center py-4'>
+                  No active tax obligations found. Use settings to configure your business profile.
+                </p>
+              ) : (
+                obligationsList.map((ob, i) => (
+                  <div key={ob.id ?? i} className='border border-grey-10 rounded-xl p-4 hover:border-primary-20 cursor-pointer transition-colors shadow-sm relative group'>
+                    <div className='flex items-start justify-between gap-2 mb-2'>
+                      <div>
+                        <p className='text-sm font-medium text-secondary-10'>{getTaxTypeName(ob.tax_type)}</p>
+                        <p className='text-xs text-secondary-30 mt-0.5'>{getObligationMeta(ob)}</p>
+                      </div>
+                      <span className={`text-[10px] px-2 py-1 rounded-full font-medium shrink-0 ${getObligationStatusClass(ob.status)}`}>
+                        {getFilingStatusLabel(ob.status)}
+                      </span>
+                    </div>
+                    <div className='flex items-baseline justify-between mb-1'>
+                      <p className='text-lg font-bold text-secondary-10'>{formatNaira(Number(ob.net_liability))}</p>
+                      
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRecalculate(ob.tax_type);
+                        }}
+                        disabled={recalculating[ob.tax_type.toLowerCase()]}
+                        className='text-xs text-primary-30 hover:text-primary-40 transition-colors flex items-center gap-1 bg-primary-50 hover:bg-primary-10 rounded-full px-2.5 py-1 font-medium border border-primary-20/40 shadow-sm disabled:opacity-50'
+                      >
+                        <Icon 
+                          icon='ph:arrows-clockwise' 
+                          className={`text-xs ${recalculating[ob.tax_type.toLowerCase()] ? 'animate-spin' : ''}`} 
+                        />
+                        {recalculating[ob.tax_type.toLowerCase()] ? 'Recalculating...' : 'Recalculate'}
+                      </button>
+                    </div>
+                    
+                    {getZeroStateExplanation(ob) && (
+                      <p className='text-xs text-orange-400 mt-1 font-medium bg-orange-50/50 rounded px-2.5 py-1 inline-block border border-orange-100/50'>
+                        💡 {getZeroStateExplanation(ob)}
+                      </p>
+                    )}
+
+                    {ob.computed_at && (
+                      <p className='text-[10px] text-secondary-30 mt-2 block font-normal'>
+                        {formatComputedAt(ob.computed_at)}
+                      </p>
+                    )}
+                  </div>
+                ))
+              )}
             </div>
             <Link href='/settings' className='w-full mt-4 py-3 block text-center rounded-full bg-primary-40 text-white text-sm font-medium hover:bg-primary-30 transition-colors shadow-sm'>
               Configure Obligations in Settings
             </Link>
-
           </div>
         </div>
 
@@ -545,6 +645,76 @@ export default function TaxPage() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* AI Tax Law Monitor collapsible section */}
+        <div className='bg-white rounded-xl border border-grey-10/60 overflow-hidden shadow-sm'>
+          <button 
+            onClick={() => setShowLawMonitor(!showLawMonitor)}
+            className='w-full flex items-center justify-between px-6 py-4 hover:bg-primary-50/20 transition-colors'
+          >
+            <div className='flex items-center gap-2'>
+              <div className='w-8 h-8 rounded-lg bg-primary-10 flex items-center justify-center text-primary-30'>
+                <Icon icon='ph:cpu' className='text-lg' />
+              </div>
+              <div className='text-left'>
+                <h2 className='text-base font-semibold text-secondary-10'>AI Tax Law Monitor</h2>
+                <p className='text-xs text-secondary-30'>Automatic daily tracking of FIRS / State IRS regulations</p>
+              </div>
+            </div>
+            <Icon 
+              icon={showLawMonitor ? 'ph:caret-up' : 'ph:caret-down'} 
+              className='text-secondary-30 text-lg' 
+            />
+          </button>
+
+          {showLawMonitor && (
+            <div className='border-t border-grey-10/60 p-6 space-y-4 bg-primary-50/10'>
+              {lawUpdates.length === 0 ? (
+                <p className='text-sm text-secondary-30 text-center py-4'>
+                  No recent tax law updates detected. The monitor is running and checking official sources daily.
+                </p>
+              ) : (
+                <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                  {lawUpdates.map((update) => (
+                    <div key={update.id} className='bg-white border border-grey-10/40 rounded-xl p-4 shadow-sm flex flex-col justify-between'>
+                      <div>
+                        <div className='flex items-center justify-between mb-2'>
+                          <span className='text-xs font-semibold px-2 py-0.5 rounded bg-primary-10 text-primary-30 uppercase'>
+                            {update.tax_type}
+                          </span>
+                          <span className='text-xs text-secondary-30'>
+                            {new Date(update.detected_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                        </div>
+                        <h4 className='text-sm font-semibold text-secondary-10 mb-1 capitalize'>
+                          {update.category_code.replace(/_/g, ' ')}
+                        </h4>
+                        <p className='text-xs text-secondary-30 mb-2'>
+                          Rate updated from <span className='line-through'>{(Number(update.old_rate ?? 0) * 100).toFixed(1)}%</span> to <span className='font-semibold text-secondary-10'>{(Number(update.new_rate) * 100).toFixed(1)}%</span>
+                        </p>
+                        {update.source_law && (
+                          <p className='text-[11px] text-primary-30 bg-primary-50/50 rounded px-2 py-1 font-medium inline-block mb-2'>
+                            ⚖️ {update.source_law}
+                          </p>
+                        )}
+                      </div>
+                      {update.source_url && (
+                        <a 
+                          href={update.source_url} 
+                          target='_blank' 
+                          rel='noopener noreferrer'
+                          className='text-xs text-primary-30 hover:underline flex items-center gap-1 mt-2 self-start'
+                        >
+                          View Official Announcement <Icon icon='ph:arrow-square-out' />
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </main>
 

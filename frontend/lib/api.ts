@@ -669,8 +669,79 @@ export interface TaxFilingResponse {
   confirmed_at?: string | null;
 }
 
+export interface TaxObligationResponse {
+  id: string;
+  tax_type: string;
+  authority: string;
+  period_start: string;
+  period_end: string;
+  due_date: string;
+  gross_output: number;
+  gross_input: number;
+  net_liability: number;
+  status: string;
+  computed_at?: string | null;
+}
+
+export interface TaxOverviewResponse {
+  obligations: TaxObligationResponse[];
+  pending_count: number;
+  computed_count: number;
+  filed_count: number;
+  total_liability: number;
+}
+
+export interface TaxLawUpdateResponse {
+  id: string;
+  tax_type: string;
+  category_code: string;
+  old_rate: number | null;
+  new_rate: number;
+  effective_date: string;
+  source_url: string | null;
+  source_law: string | null;
+  detected_at: string;
+  applied_at: string;
+}
+
+export interface TaxRateRuleResponse {
+  id: string;
+  tax_type: string;
+  category_code: string;
+  category_label: string;
+  description: string;
+  resident_rate: number;
+  nonresident_rate: number;
+  effective_date: string;
+  sunset_date: string | null;
+  source_law: string | null;
+  notes: string | null;
+}
+
 export const tax = {
   getFilings(businessId: string): Promise<TaxFilingResponse[]> {
     return request<TaxFilingResponse[]>(`/api/v1/tax/filings?business_id=${businessId}`);
+  },
+  getOverview(businessId: string): Promise<TaxOverviewResponse> {
+    return request<TaxOverviewResponse>(`/api/v1/tax/overview?business_id=${businessId}`);
+  },
+  triggerCompute(
+    businessId: string,
+    taxType: string,
+    year?: number,
+    month?: number
+  ): Promise<{ task_id: string; status: string }> {
+    return request<{ task_id: string; status: string }>('/api/v1/tax/compute', {
+      method: 'POST',
+      body: JSON.stringify({ business_id: businessId, tax_type: taxType, year, month }),
+    });
+  },
+  getLawUpdates(businessId?: string): Promise<TaxLawUpdateResponse[]> {
+    const query = businessId ? `?business_id=${businessId}` : '';
+    return request<TaxLawUpdateResponse[]>(`/api/v1/tax/law-updates${query}`);
+  },
+  getCurrentRates(taxType?: string): Promise<TaxRateRuleResponse[]> {
+    const query = taxType ? `?tax_type=${taxType}` : '';
+    return request<TaxRateRuleResponse[]>(`/api/v1/tax/rates${query}`);
   },
 };
