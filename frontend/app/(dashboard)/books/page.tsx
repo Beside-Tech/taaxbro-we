@@ -13,7 +13,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import TopBar from '@/components/dashboard/TopBar';
-import { dashboard, invoices, type DashboardData, type InvoiceResponse } from '@/lib/api';
+import { dashboard, invoices, expenses, type DashboardData, type InvoiceResponse, type ExpenseResponse } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import PaymentLinkModal from '@/components/dashboard/pay/PaymentLinkModal';
 import ViewInvoiceModal from '@/components/dashboard/books/ViewInvoiceModal';
@@ -482,7 +482,12 @@ function InvoicesTab({ invoicesList, loading, onNewInvoice, onViewInvoice }: Inv
 
 // ─── Expenses Tab ─────────────────────────────────────────────────────────────
 
-function ExpensesTab({ data, loading }: TabProps) {
+interface ExpensesTabProps {
+  expensesList: ExpenseResponse[];
+  loading: boolean;
+}
+
+function ExpensesTab({ expensesList, loading }: ExpensesTabProps) {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
   
@@ -491,12 +496,9 @@ function ExpensesTab({ data, loading }: TabProps) {
 
   const scanPanelRef = useRef<HTMLDivElement>(null);
 
-  const recentTransactions = data?.recent_transactions ?? [];
-  const debitTransactions = recentTransactions.filter((tx) => tx.type === 'debit');
-
-  const filteredExpenses = debitTransactions.filter(tx => {
+  const filteredExpenses = expensesList.filter(exp => {
     if (selectedCategory === 'all') return true;
-    return tx.category?.toLowerCase() === selectedCategory;
+    return exp.category?.toLowerCase() === selectedCategory;
   });
 
   const categoryIcons: Record<string, string> = {
@@ -504,6 +506,12 @@ function ExpensesTab({ data, loading }: TabProps) {
     software: 'ph:robot',
     office: 'ph:storefront',
     travel: 'ph:airplane',
+    rent: 'ph:house-line',
+    fuel: 'ph:gas-pump',
+    legal: 'ph:scales',
+    accounting: 'ph:calculator',
+    groceries: 'ph:shopping-cart',
+    equipment: 'ph:wrench',
   };
 
   const handleScanReceiptClick = () => {
@@ -542,7 +550,7 @@ function ExpensesTab({ data, loading }: TabProps) {
 
         {showFilters && (
           <div className='px-6 py-3 border-b border-grey-10/60 flex flex-wrap gap-2 animate-fade-in'>
-            {['all', 'utility', 'software', 'office', 'travel'].map((cat) => (
+            {['all', 'utility', 'software', 'office', 'travel', 'rent', 'fuel', 'legal', 'accounting', 'groceries', 'equipment'].map((cat) => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
@@ -563,20 +571,54 @@ function ExpensesTab({ data, loading }: TabProps) {
         ) : (
           <div className='divide-y divide-grey-10/60'>
             {filteredExpenses.map((exp) => {
-              const { date: d } = formatDate(exp.transaction_date);
+              const { date: d } = formatDate(exp.expense_date);
               const cat = exp.category?.toLowerCase() || 'office';
               const icon = categoryIcons[cat] ?? 'ph:shopping-bag';
 
               return (
-                <div key={exp.id} className='flex items-center gap-4 px-6 py-4 hover:bg-primary-50/30 transition-colors'>
-                  <div className='w-10 h-10 rounded-xl border border-grey-10 flex items-center justify-center shrink-0'>
+                <div key={exp.id} className='flex items-start gap-4 px-6 py-4 hover:bg-primary-50/30 transition-colors'>
+                  <div className='w-10 h-10 rounded-xl border border-grey-10 flex items-center justify-center shrink-0 mt-0.5'>
                     <Icon icon={icon} className='text-xl text-secondary-10' />
                   </div>
-                  <div className='flex-1'>
-                    <p className='text-sm font-medium text-secondary-10'>{exp.counterparty_name ?? exp.bank_name ?? 'Expense'}</p>
-                    <p className='text-xs text-secondary-30 mt-0.5'>{d} | {exp.category ?? 'Uncategorized'}</p>
+                  <div className='flex-1 min-w-0'>
+                    <div className='flex flex-wrap items-center gap-2'>
+                      <p className='text-sm font-medium text-secondary-10 truncate'>{exp.vendor_name || 'Unknown Vendor'}</p>
+                      
+                      {exp.source === 'whatsapp' ? (
+                        <span className='text-[10px] bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1 border border-green-200/50'>
+                          <Icon icon='ph:whatsapp-logo-fill' className='text-xs' /> WhatsApp
+                        </span>
+                      ) : (
+                        <span className='text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1 border border-blue-200/50'>
+                          <Icon icon='ph:laptop' className='text-xs' /> Web
+                        </span>
+                      )}
+
+                      {exp.wht_applicable && exp.wht_amount > 0 && (
+                        <span className='text-[10px] bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full font-semibold border border-purple-200/50'>
+                          WHT withheld: {formatNaira(exp.wht_amount)}
+                        </span>
+                      )}
+                    </div>
+
+                    <p className='text-xs text-secondary-30 mt-0.5'>{d} | {exp.category || 'Uncategorized'}</p>
+                    
+                    {exp.description && (
+                      <p className='text-xs text-secondary-20 mt-1 italic leading-relaxed'>"{exp.description}"</p>
+                    )}
+
+                    {exp.receipt_url && (
+                      <a
+                        href={exp.receipt_url}
+                        target='_blank'
+                        rel='noopener noreferrer'
+                        className='inline-flex items-center gap-1 text-xs text-primary-30 hover:underline mt-2 font-medium bg-primary-50 px-2.5 py-1 rounded-lg border border-primary-20/40 hover:bg-primary-50/80 transition-colors'
+                      >
+                        <Icon icon='ph:image' className='text-sm' /> View Scanned Receipt
+                      </a>
+                    )}
                   </div>
-                  <div className='text-right'>
+                  <div className='text-right shrink-0'>
                     <p className='text-sm font-semibold text-danger'>-{formatNaira(exp.amount)}</p>
                     <p className='text-xs text-primary-30 mt-0.5'>
                       {exp.vat_amount != null ? `VAT: ${formatNaira(exp.vat_amount)}` : '—'}
@@ -592,7 +634,7 @@ function ExpensesTab({ data, loading }: TabProps) {
           <span>Total Input VAT Claimable</span>
           <span>
             {formatNaira(
-              filteredExpenses.reduce((sum, tx) => sum + (tx.vat_amount ?? 0), 0)
+              filteredExpenses.reduce((sum, exp) => sum + (exp.vat_amount ?? 0), 0)
             )}
           </span>
         </div>
@@ -741,6 +783,9 @@ export default function BooksPage() {
   const [invoicesList, setInvoicesList] = useState<InvoiceResponse[]>([]);
   const [invoicesLoading, setInvoicesLoading] = useState(true);
 
+  const [expensesList, setExpensesList] = useState<ExpenseResponse[]>([]);
+  const [expensesLoading, setExpensesLoading] = useState(true);
+
   const [showPaymentLink, setShowPaymentLink] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
 
@@ -755,6 +800,17 @@ export default function BooksPage() {
     }
   };
 
+  const loadExpenses = () => {
+    if (user?.business_id) {
+      setExpensesLoading(true);
+      expenses
+        .list(user.business_id)
+        .then(setExpensesList)
+        .catch((e) => console.error('Failed to load expenses:', e))
+        .finally(() => setExpensesLoading(false));
+    }
+  };
+
   useEffect(() => {
     dashboard
       .get()
@@ -766,6 +822,8 @@ export default function BooksPage() {
   useEffect(() => {
     if (activeTab === 'Invoices') {
       loadInvoices();
+    } else if (activeTab === 'Expenses') {
+      loadExpenses();
     }
   }, [activeTab, user?.business_id]);
 
@@ -799,7 +857,7 @@ export default function BooksPage() {
             onViewInvoice={setSelectedInvoice}
           />
         )}
-        {activeTab === 'Expenses' && <ExpensesTab data={data} loading={loading} />}
+        {activeTab === 'Expenses' && <ExpensesTab expensesList={expensesList} loading={expensesLoading} />}
         {activeTab === 'Reports' && <ReportsTab data={data} loading={loading} />}
       </main>
 

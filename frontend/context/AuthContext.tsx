@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { useRouter } from 'next/navigation';
 import { auth, type AuthUser, ApiError, onSessionExpired } from '@/lib/api';
+import { Icon } from '@iconify/react';
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -47,6 +48,7 @@ async function silentRefresh(): Promise<boolean> {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showSessionExpiredModal, setShowSessionExpiredModal] = useState(false);
 
   // Track when the tab was last hidden so we know if the access token
   // (15 min TTL) may have expired while we were away.
@@ -89,8 +91,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ── Register Global 401 Session Expiry Callback ────────────────────────
   useEffect(() => {
     onSessionExpired(() => {
-      console.log('[AuthContext] Session expired globally. Logging out...');
-      logoutRef.current?.();
+      console.log('[AuthContext] Session expired globally. Showing modal...');
+      setShowSessionExpiredModal(true);
     });
   }, []);
 
@@ -176,6 +178,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider value={{ user, loading, login, logout, setUser, refreshSession }}>
       {children}
+
+      {showSessionExpiredModal && (
+        <div className='fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in'>
+          <div className='bg-white rounded-3xl p-8 max-w-md w-full mx-4 border border-grey-10 shadow-2xl space-y-6 text-center animate-scale-up'>
+            <div className='mx-auto w-16 h-16 bg-red-50 border border-red-100 rounded-2xl flex items-center justify-center text-red-500 shadow-sm'>
+              <Icon icon='ph:lock-key-bold' className='text-3xl' />
+            </div>
+
+            <div className='space-y-2'>
+              <h3 className='text-xl font-bold text-secondary-10'>Session Expired</h3>
+              <p className='text-sm text-secondary-30 leading-relaxed'>
+                For your security, you have been logged out because your session expired or you signed in from another device.
+              </p>
+            </div>
+
+            <div className='pt-2'>
+              <button
+                type='button'
+                onClick={async () => {
+                  setShowSessionExpiredModal(false);
+                  await logoutRef.current?.();
+                }}
+                className='w-full px-6 py-3 bg-primary-30 hover:bg-primary-40 text-sm font-bold text-white transition rounded-full flex items-center justify-center gap-2 shadow-md shadow-primary-30/10'
+              >
+                Log In Again
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AuthContext.Provider>
   );
 }

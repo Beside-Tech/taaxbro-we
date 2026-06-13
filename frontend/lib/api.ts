@@ -28,6 +28,26 @@ const NO_RETRY_PATHS = [
   '/api/v1/auth/logout',
 ];
 
+let activeRefreshPromise: Promise<boolean> | null = null;
+
+async function executeSilentRefresh(): Promise<boolean> {
+  if (!activeRefreshPromise) {
+    activeRefreshPromise = fetch(`${BASE}/api/v1/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+    })
+      .then((res) => {
+        activeRefreshPromise = null;
+        return res.ok;
+      })
+      .catch(() => {
+        activeRefreshPromise = null;
+        return false;
+      });
+  }
+  return activeRefreshPromise;
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -48,11 +68,8 @@ async function request<T>(
   // must surface the real error (e.g. "Invalid password") to the user.
   const shouldRetry = res.status === 401 && retry && !NO_RETRY_PATHS.includes(path);
   if (shouldRetry) {
-    const refreshed = await fetch(`${BASE}/api/v1/auth/refresh`, {
-      method: 'POST',
-      credentials: 'include',
-    });
-    if (refreshed.ok) {
+    const refreshedOk = await executeSilentRefresh();
+    if (refreshedOk) {
       return request<T>(path, options, false);
     }
     if (sessionExpiredCallback) {
@@ -502,6 +519,42 @@ export const invoices = {
     items?: Array<{ description: string; quantity: number; unit_price: number }>;
   }): Promise<InvoiceResponse> {
     return request<InvoiceResponse>(`/api/v1/invoices?business_id=${businessId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+};
+
+// ─── Expenses ────────────────────────────────────────────────────────────────
+
+export interface ExpenseResponse {
+  id: string;
+  category: string;
+  amount: number;
+  vendor_name: string | null;
+  expense_date: string;
+  description: string | null;
+  vat_amount: number;
+  created_at: string;
+  source: string;
+  wht_applicable: boolean;
+  wht_amount: number;
+  receipt_url: string | null;
+}
+
+export const expenses = {
+  list(businessId: string): Promise<ExpenseResponse[]> {
+    return request<ExpenseResponse[]>(`/api/v1/expenses?business_id=${businessId}`);
+  },
+  create(businessId: string, data: {
+    category: string;
+    amount: number;
+    vendor_name?: string | null;
+    expense_date?: string | null;
+    description?: string | null;
+    vat_amount?: number;
+  }): Promise<ExpenseResponse> {
+    return request<ExpenseResponse>(`/api/v1/expenses?business_id=${businessId}`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
