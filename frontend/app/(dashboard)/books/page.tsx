@@ -20,6 +20,7 @@ import ViewInvoiceModal from '@/components/dashboard/books/ViewInvoiceModal';
 import CreateInvoiceModal from '@/components/dashboard/books/CreateInvoiceModal';
 import EditInvoiceModal from '@/components/dashboard/books/EditInvoiceModal';
 import LogPaymentModal from '@/components/dashboard/books/LogPaymentModal';
+import ReviewScannedExpenseModal from '@/components/dashboard/books/ReviewScannedExpenseModal';
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 
@@ -105,11 +106,11 @@ function OverviewTab({ data, loading, onTabChange, customStart, setCustomStart, 
 
   const totalReceived = selectedMonth === 'current'
     ? (stats?.revenue_current_month ?? 0)
-    : filteredTxsForMonth.filter(t => t.type === 'credit').reduce((sum, t) => sum + t.amount, 0);
+    : filteredTxsForMonth.filter(t => t.type === 'credit').reduce((sum, t) => sum + Number(t.amount || 0), 0);
 
   const totalSent = selectedMonth === 'current'
-    ? (stats?.expenses_current_month ?? filteredTxsForMonth.filter(t => t.type === 'debit').reduce((sum, t) => sum + t.amount, 0))
-    : filteredTxsForMonth.filter(t => t.type === 'debit').reduce((sum, t) => sum + t.amount, 0);
+    ? (stats?.expenses_current_month ?? filteredTxsForMonth.filter(t => t.type === 'debit').reduce((sum, t) => sum + Number(t.amount || 0), 0))
+    : filteredTxsForMonth.filter(t => t.type === 'debit').reduce((sum, t) => sum + Number(t.amount || 0), 0);
 
   const netFlow = totalReceived - totalSent;
 
@@ -528,9 +529,11 @@ function InvoicesTab({ invoicesList, loading, onNewInvoice, onViewInvoice, onLog
 interface ExpensesTabProps {
   expensesList: ExpenseResponse[];
   loading: boolean;
+  businessId: string;
+  onRefresh: () => void;
 }
 
-function ExpensesTab({ expensesList, loading }: ExpensesTabProps) {
+function ExpensesTab({ expensesList, loading, businessId, onRefresh }: ExpensesTabProps) {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
   
@@ -563,13 +566,15 @@ function ExpensesTab({ expensesList, loading }: ExpensesTabProps) {
     scanPanelRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const [scannedOcrData, setScannedOcrData] = useState<any | null>(null);
+
   const handleUploadFile = async (file: File) => {
     if (!file) return;
     setScanning(true);
     setScanResult(null);
     try {
-      const res = await ai.chatOCR(file);
-      setScanResult(res.answer || 'Receipt uploaded and processed successfully.');
+      const res = await expenses.scanOCR(file, businessId);
+      setScannedOcrData(res);
     } catch (err: any) {
       console.error(err);
       setScanResult(`Error processing receipt: ${err?.message || 'Unknown error'}`);
@@ -713,7 +718,7 @@ function ExpensesTab({ expensesList, loading }: ExpensesTabProps) {
           <span>Total Input VAT Claimable</span>
           <span>
             {formatNaira(
-              filteredExpenses.reduce((sum, exp) => sum + (exp.vat_amount ?? 0), 0)
+              filteredExpenses.reduce((sum, exp) => sum + Number(exp.vat_amount ?? 0), 0)
             )}
           </span>
         </div>
@@ -761,6 +766,18 @@ function ExpensesTab({ expensesList, loading }: ExpensesTabProps) {
           </div>
         )}
       </div>
+
+      {scannedOcrData && (
+        <ReviewScannedExpenseModal
+          ocrData={scannedOcrData}
+          businessId={businessId}
+          onClose={() => setScannedOcrData(null)}
+          onSuccess={() => {
+            setScannedOcrData(null);
+            onRefresh();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -777,8 +794,8 @@ function ReportsTab({ data, loading, expensesList, expensesLoading }: ReportsTab
 
   const totalReceived = stats?.revenue_current_month ?? 0;
   // Use real expenses data (sum of all logged expenses) instead of dashboard transactions
-  const totalSent = expensesList.reduce((sum, exp) => sum + (exp.amount ?? 0), 0);
-  const totalVAT = expensesList.reduce((sum, exp) => sum + (exp.vat_amount ?? 0), 0);
+  const totalSent = expensesList.reduce((sum, exp) => sum + Number(exp.amount ?? 0), 0);
+  const totalVAT = expensesList.reduce((sum, exp) => sum + Number(exp.vat_amount ?? 0), 0);
   const netFlow = totalReceived - totalSent;
 
   const isLoadingReports = loading || expensesLoading;
@@ -862,7 +879,7 @@ function ReportsTab({ data, loading, expensesList, expensesLoading }: ReportsTab
             <div>
               <div className='bg-secondary-10/5 px-6 py-3 text-sm font-semibold text-secondary-10 border-t border-grey-10'>Expense Breakdown ({expensesList.length} items)</div>
               {Array.from(new Set(expensesList.map(e => e.category || 'Uncategorized'))).slice(0, 6).map(cat => {
-                const catTotal = expensesList.filter(e => (e.category || 'Uncategorized') === cat).reduce((s, e) => s + e.amount, 0);
+                const catTotal = expensesList.filter(e => (e.category || 'Uncategorized') === cat).reduce((s, e) => s + Number(e.amount || 0), 0);
                 return (
                   <div key={cat} className='flex justify-between px-6 py-2.5 border-t border-grey-10/40 text-sm'>
                     <span className='text-secondary-30 capitalize'>{cat}</span>
@@ -1007,7 +1024,20 @@ export default function BooksPage() {
             onLogPayment={setPaymentInvoice}
           />
         )}
-        {activeTab === 'Expenses' && <ExpensesTab expensesList={expensesList} loading={expensesLoading} />}
+        {activeTab === 'Expenses' && user?.business_id && (
+          <ExpensesTab
+            expensesList={expensesList}
+            loading={expensesLoading}
+            businessId={user.business_id}
+            onRefresh={() => {
+              loadExpenses(true);
+              dashboard
+                .get()
+                .then(setData)
+                .catch((e) => setError(e.message ?? 'Failed to load books data'));
+            }}
+          />
+        )}
         {activeTab === 'Reports' && <ReportsTab data={data} loading={loading} expensesList={expensesList} expensesLoading={expensesLoading} />}
       </main>
 

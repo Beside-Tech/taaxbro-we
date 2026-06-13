@@ -86,7 +86,7 @@ export default function PayPage() {
   const totalReceived = stats?.revenue_current_month ?? 0;
   const totalSent = recentTransactions
     .filter((t) => t.type === 'debit')
-    .reduce((sum, t) => sum + t.amount, 0);
+    .reduce((sum, t) => sum + Number(t.amount || 0), 0);
   const netFlow = totalReceived - totalSent;
 
   const statCards = [

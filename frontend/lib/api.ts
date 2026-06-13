@@ -603,6 +603,26 @@ export interface ExpenseResponse {
   receipt_url: string | null;
 }
 
+export interface OcrStructuredResult {
+  vendor_name: string;
+  transaction_date: string;
+  receipt_type: string;
+  description: string;
+  invoice_number?: string | null;
+  vendor_tin?: string | null;
+  category?: string | null;
+  subtotal: number;
+  total_vat: number;
+  total_amount: number;
+  payment_method: string;
+  balance_remaining: number;
+  tax_deductible: boolean;
+  wht_applicable: boolean;
+  wht_rate: number;
+  wht_amount: number;
+  notes: string;
+}
+
 export const expenses = {
   list(businessId: string): Promise<ExpenseResponse[]> {
     return request<ExpenseResponse[]>(`/api/v1/expenses?business_id=${businessId}`);
@@ -614,10 +634,21 @@ export const expenses = {
     expense_date?: string | null;
     description?: string | null;
     vat_amount?: number;
+    wht_applicable?: boolean;
+    wht_rate?: number;
+    wht_amount?: number;
   }): Promise<ExpenseResponse> {
     return request<ExpenseResponse>(`/api/v1/expenses?business_id=${businessId}`, {
       method: 'POST',
       body: JSON.stringify(data),
+    });
+  },
+  scanOCR(file: File, businessId: string): Promise<OcrStructuredResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return request<OcrStructuredResult>(`/api/v1/expenses/scan-ocr?business_id=${businessId}`, {
+      method: 'POST',
+      body: formData,
     });
   },
 };
