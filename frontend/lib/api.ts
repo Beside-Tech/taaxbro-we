@@ -522,6 +522,9 @@ export const invoices = {
     items?: Array<{ description: string; quantity: number; unit_price: number }>;
     vat_applicable?: boolean;
     already_paid?: boolean;
+    amount_paid?: number;
+    unit_price?: number;
+    quantity?: number;
   }): Promise<InvoiceResponse> {
     return request<InvoiceResponse>(`/api/v1/invoices?business_id=${businessId}`, {
       method: 'POST',
@@ -538,6 +541,9 @@ export const invoices = {
     notes?: string | null;
     vat_applicable?: boolean;
     status?: string;
+    unit_price?: number;
+    quantity?: number;
+    amount_paid?: number;
   }): Promise<InvoiceResponse> {
     return request<InvoiceResponse>(`/api/v1/invoices/${invoiceId}?business_id=${businessId}`, {
       method: 'PUT',
@@ -561,8 +567,22 @@ export const invoices = {
     vat_total: number;
     notes?: string | null;
     vat_applicable: boolean;
+    unit_price?: number;
+    quantity?: number;
+    amount_paid?: number;
   }> {
     return request<any>(`/api/v1/invoices/${invoiceId}?business_id=${businessId}`);
+  },
+  logPayment(businessId: string, invoiceId: string, data: {
+    amount: number;
+    payment_date: string;
+    payment_method: string;
+    reference?: string;
+  }): Promise<{ status: string; message: string; amount_paid: number; balance_due: number }> {
+    return request<any>(`/api/v1/invoices/${invoiceId}/payments?business_id=${businessId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   },
 };
 

@@ -9,13 +9,14 @@ interface ViewInvoiceModalProps {
   businessId: string;
   onClose: () => void;
   onEdit?: (invoice: any) => void;
+  onLogPayment?: (invoice: any) => void;
 }
 
 function formatNaira(value: number): string {
   return `₦${value.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`;
 }
 
-export default function ViewInvoiceModal({ invoice, businessId, onClose, onEdit }: ViewInvoiceModalProps) {
+export default function ViewInvoiceModal({ invoice, businessId, onClose, onEdit, onLogPayment }: ViewInvoiceModalProps) {
   const [waSettings, setWaSettings] = useState<any>(null);
   const [waLoading, setWaLoading] = useState(true);
   
@@ -172,6 +173,15 @@ export default function ViewInvoiceModal({ invoice, businessId, onClose, onEdit 
             >
               <Icon icon='ph:pencil-simple-line' />
               Edit Invoice
+            </button>
+          )}
+          {invoiceNum.startsWith('INV-') && displayStatus.toLowerCase() !== 'paid' && onLogPayment && (
+            <button
+              onClick={() => onLogPayment(invoice)}
+              className='flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success text-white hover:bg-green-600 transition-colors text-xs font-semibold shadow-sm'
+            >
+              <Icon icon='ph:wallet-bold' />
+              Log Payment
             </button>
           )}
           <button

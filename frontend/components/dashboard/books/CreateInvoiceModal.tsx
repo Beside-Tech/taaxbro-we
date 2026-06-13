@@ -17,7 +17,11 @@ export default function CreateInvoiceModal({ onClose, onSuccess }: CreateInvoice
   const [clientEmail, setClientEmail] = useState('');
   const [clientPhone, setClientPhone] = useState('');
   const [clientAddress, setClientAddress] = useState('');
-  const [amount, setAmount] = useState('');
+  
+  const [unitPrice, setUnitPrice] = useState('');
+  const [quantity, setQuantity] = useState('1');
+  const [amountPaid, setAmountPaid] = useState('0');
+  
   const [notes, setNotes] = useState('');
   const [dueDate, setDueDate] = useState(() => {
     const d = new Date();
@@ -25,10 +29,16 @@ export default function CreateInvoiceModal({ onClose, onSuccess }: CreateInvoice
     return d.toISOString().split('T')[0];
   });
   const [vatApplicable, setVatApplicable] = useState(true);
-  const [alreadyPaid, setAlreadyPaid] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Dynamic live calculations
+  const subtotal = Number(unitPrice || 0) * Number(quantity || 0);
+  const vat = vatApplicable ? subtotal * 0.075 : 0;
+  const total = subtotal + vat;
+  const balanceDue = Math.max(0, total - Number(amountPaid || 0));
+  const calculatedStatus = Number(amountPaid || 0) >= total ? 'paid' : Number(amountPaid || 0) > 0 ? 'partial' : 'sent';
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,8 +47,16 @@ export default function CreateInvoiceModal({ onClose, onSuccess }: CreateInvoice
       setErrorMsg('Client Name is required.');
       return;
     }
-    if (!amount || Number(amount) <= 0) {
-      setErrorMsg('Please enter a valid amount.');
+    if (!unitPrice || Number(unitPrice) <= 0) {
+      setErrorMsg('Please enter a valid unit price.');
+      return;
+    }
+    if (!quantity || Number(quantity) <= 0) {
+      setErrorMsg('Please enter a valid quantity.');
+      return;
+    }
+    if (Number(amountPaid) < 0) {
+      setErrorMsg('Amount paid cannot be negative.');
       return;
     }
 
@@ -51,11 +69,13 @@ export default function CreateInvoiceModal({ onClose, onSuccess }: CreateInvoice
         client_email: clientEmail.trim() || undefined,
         client_phone: clientPhone.trim() || undefined,
         client_address: clientAddress.trim() || undefined,
-        total_amount: Number(amount),
+        total_amount: subtotal,
         due_date: dueDate || undefined,
         notes: notes.trim() || undefined,
         vat_applicable: vatApplicable,
-        already_paid: alreadyPaid,
+        amount_paid: Number(amountPaid),
+        unit_price: Number(unitPrice),
+        quantity: Number(quantity),
       });
       onSuccess();
     } catch (err: any) {
@@ -148,19 +168,63 @@ export default function CreateInvoiceModal({ onClose, onSuccess }: CreateInvoice
           <div className='bg-grey-0/10 p-4 rounded-xl border border-grey-10/40 space-y-3'>
             <h3 className='text-xs font-bold text-secondary-20 uppercase tracking-wider mb-2'>Invoice Details</h3>
 
-            <div>
-              <label className='block text-xs font-semibold text-secondary-20 mb-1'>Amount *</label>
-              <div className='relative'>
-                <span className='absolute left-4 top-1/2 -translate-y-1/2 text-secondary-30 text-sm'>₦</span>
+            <div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
+              <div>
+                <label className='block text-xs font-semibold text-secondary-20 mb-1'>Unit Price *</label>
+                <div className='relative'>
+                  <span className='absolute left-4 top-1/2 -translate-y-1/2 text-secondary-30 text-sm'>₦</span>
+                  <input
+                    type='number'
+                    required
+                    min='0.01'
+                    step='any'
+                    placeholder='0.00'
+                    value={unitPrice}
+                    onChange={(e) => setUnitPrice(e.target.value)}
+                    className='w-full border border-grey-10 rounded-xl pl-8 pr-4 py-2.5 text-sm outline-none focus:border-primary-30 transition-colors bg-white'
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className='block text-xs font-semibold text-secondary-20 mb-1'>Quantity *</label>
                 <input
                   type='number'
                   required
                   min='1'
                   step='any'
-                  placeholder='0.00'
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className='w-full border border-grey-10 rounded-xl pl-8 pr-4 py-2.5 text-sm outline-none focus:border-primary-30 transition-colors bg-white'
+                  placeholder='1'
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                  className='w-full border border-grey-10 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-primary-30 transition-colors bg-white'
+                />
+              </div>
+            </div>
+
+            <div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
+              <div>
+                <label className='block text-xs font-semibold text-secondary-20 mb-1'>Amount Paid (installments)</label>
+                <div className='relative'>
+                  <span className='absolute left-4 top-1/2 -translate-y-1/2 text-secondary-30 text-sm'>₦</span>
+                  <input
+                    type='number'
+                    min='0'
+                    step='any'
+                    placeholder='0.00'
+                    value={amountPaid}
+                    onChange={(e) => setAmountPaid(e.target.value)}
+                    className='w-full border border-grey-10 rounded-xl pl-8 pr-4 py-2.5 text-sm outline-none focus:border-primary-30 transition-colors bg-white'
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className='block text-xs font-semibold text-secondary-20 mb-1'>Due Date</label>
+                <input
+                  type='date'
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className='w-full border border-grey-10 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-primary-30 transition-colors bg-white'
                 />
               </div>
             </div>
@@ -176,17 +240,7 @@ export default function CreateInvoiceModal({ onClose, onSuccess }: CreateInvoice
               />
             </div>
 
-            <div>
-              <label className='block text-xs font-semibold text-secondary-20 mb-1'>Due Date</label>
-              <input
-                type='date'
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className='w-full border border-grey-10 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-primary-30 transition-colors bg-white'
-              />
-            </div>
-
-            <div className='flex flex-wrap items-center gap-6 pt-2'>
+            <div className='flex items-center gap-2 pt-1'>
               <label className='flex items-center gap-2 text-sm text-secondary-10 cursor-pointer select-none'>
                 <input
                   type='checkbox'
@@ -196,16 +250,37 @@ export default function CreateInvoiceModal({ onClose, onSuccess }: CreateInvoice
                 />
                 Apply 7.5% VAT
               </label>
+            </div>
+          </div>
 
-              <label className='flex items-center gap-2 text-sm text-secondary-10 cursor-pointer select-none'>
-                <input
-                  type='checkbox'
-                  checked={alreadyPaid}
-                  onChange={(e) => setAlreadyPaid(e.target.checked)}
-                  className='rounded border-grey-10 text-primary-30 focus:ring-primary-30 w-4 h-4 cursor-pointer animate-fade-in'
-                />
-                Mark as Already Paid
-              </label>
+          {/* Dynamic live calculations summary box */}
+          <div className='bg-primary-50/50 p-4 rounded-xl border border-primary-20/40 space-y-2 text-xs'>
+            <h4 className='font-bold text-secondary-10 uppercase tracking-wider mb-1'>Calculations Summary</h4>
+            <div className='flex justify-between'>
+              <span className='text-secondary-30'>Subtotal (Price × Qty):</span>
+              <span className='font-medium text-secondary-10'>₦{subtotal.toLocaleString('en-NG', { minimumFractionDigits: 2 })}</span>
+            </div>
+            {vatApplicable && (
+              <div className='flex justify-between'>
+                <span className='text-secondary-30'>VAT (7.5%):</span>
+                <span className='font-medium text-secondary-10'>₦{vat.toLocaleString('en-NG', { minimumFractionDigits: 2 })}</span>
+              </div>
+            )}
+            <div className='flex justify-between border-t border-grey-10 pt-2 font-semibold text-sm'>
+              <span className='text-secondary-10'>Total Invoice Value:</span>
+              <span className='text-secondary-10 font-bold'>₦{total.toLocaleString('en-NG', { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className='flex justify-between text-secondary-30'>
+              <span>Amount Paid:</span>
+              <span className='font-medium text-secondary-10'>₦{Number(amountPaid || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className='flex justify-between border-t border-grey-10 pt-2 font-bold text-xs text-primary-30'>
+              <span>Balance Due:</span>
+              <span>₦{balanceDue.toLocaleString('en-NG', { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className='flex justify-between font-bold text-[10px] uppercase pt-1'>
+              <span className='text-secondary-30'>Auto-Assigned Status:</span>
+              <span className={`${calculatedStatus === 'paid' ? 'text-success' : calculatedStatus === 'partial' ? 'text-amber-500' : 'text-blue-500'}`}>{calculatedStatus}</span>
             </div>
           </div>
 

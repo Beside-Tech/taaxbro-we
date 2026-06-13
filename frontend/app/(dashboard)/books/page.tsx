@@ -19,6 +19,7 @@ import PaymentLinkModal from '@/components/dashboard/pay/PaymentLinkModal';
 import ViewInvoiceModal from '@/components/dashboard/books/ViewInvoiceModal';
 import CreateInvoiceModal from '@/components/dashboard/books/CreateInvoiceModal';
 import EditInvoiceModal from '@/components/dashboard/books/EditInvoiceModal';
+import LogPaymentModal from '@/components/dashboard/books/LogPaymentModal';
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 
@@ -40,6 +41,10 @@ interface TabProps {
   data: DashboardData | null;
   loading: boolean;
   onTabChange?: (tab: string) => void;
+  customStart?: string;
+  setCustomStart?: (v: string) => void;
+  customEnd?: string;
+  setCustomEnd?: (v: string) => void;
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
@@ -63,7 +68,7 @@ function BooksTabs({ active, onChange }: { active: string; onChange: (t: string)
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 
-function OverviewTab({ data, loading, onTabChange }: TabProps) {
+function OverviewTab({ data, loading, onTabChange, customStart, setCustomStart, customEnd, setCustomEnd }: TabProps) {
   const [alertDismissed, setAlertDismissed] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState('current');
 
@@ -83,10 +88,14 @@ function OverviewTab({ data, loading, onTabChange }: TabProps) {
     dropdownOptions.push(label);
   }
 
-  // Filter transactions based on selected month
+  // Filter transactions based on selected month or custom date range
   const filteredTxsForMonth = recentTransactions.filter(tx => {
     if (selectedMonth === 'current') {
       return true; // Use all loaded transactions for "Current" summary stats fallback
+    } else if (selectedMonth === 'custom') {
+      if (!customStart || !customEnd) return true;
+      const txDate = tx.transaction_date.split('T')[0];
+      return txDate >= customStart && txDate <= customEnd;
     } else {
       const txDate = new Date(tx.transaction_date);
       const label = txDate.toLocaleString('en-US', { month: 'long', year: 'numeric' });
@@ -109,9 +118,9 @@ function OverviewTab({ data, loading, onTabChange }: TabProps) {
       label: 'Revenue (Current)', 
       value: formatNaira(totalReceived), 
       footer: { 
-        text: stats?.revenue_change_pct != null ? `${Math.abs(stats.revenue_change_pct)}% vs ${prevMonthName}` : `18% vs ${prevMonthName}`, 
-        icon: stats?.revenue_change_pct != null && stats.revenue_change_pct >= 0 ? 'ph:trend-up' : 'ph:trend-down', 
-        cls: stats?.revenue_change_pct != null && stats.revenue_change_pct >= 0 ? 'text-success' : 'text-danger' 
+        text: stats?.revenue_change_pct != null ? `${Math.abs(stats.revenue_change_pct)}% vs ${prevMonthName}` : `— vs ${prevMonthName}`, 
+        icon: stats?.revenue_change_pct != null ? (stats.revenue_change_pct >= 0 ? 'ph:trend-up' : 'ph:trend-down') : undefined, 
+        cls: stats?.revenue_change_pct != null ? (stats.revenue_change_pct >= 0 ? 'text-success' : 'text-danger') : 'text-secondary-30' 
       }, 
       border: 'border-success' 
     },
@@ -119,9 +128,9 @@ function OverviewTab({ data, loading, onTabChange }: TabProps) {
       label: 'Expenses (Current)', 
       value: formatNaira(totalSent), 
       footer: { 
-        text: stats?.expenses_change_pct != null ? `${Math.abs(stats.expenses_change_pct)}% vs ${prevMonthName}` : `6% vs ${prevMonthName}`, 
-        icon: stats?.expenses_change_pct != null && stats.expenses_change_pct >= 0 ? 'ph:trend-up' : 'ph:trend-down', 
-        cls: stats?.expenses_change_pct != null && stats.expenses_change_pct >= 0 ? 'text-danger' : 'text-success' 
+        text: stats?.expenses_change_pct != null ? `${Math.abs(stats.expenses_change_pct)}% vs ${prevMonthName}` : `— vs ${prevMonthName}`, 
+        icon: stats?.expenses_change_pct != null ? (stats.expenses_change_pct >= 0 ? 'ph:trend-up' : 'ph:trend-down') : undefined, 
+        cls: stats?.expenses_change_pct != null ? (stats.expenses_change_pct >= 0 ? 'text-danger' : 'text-success') : 'text-secondary-30' 
       }, 
       border: 'border-danger' 
     },
@@ -185,24 +194,45 @@ function OverviewTab({ data, loading, onTabChange }: TabProps) {
 
   return (
     <div className='space-y-5'>
-      <div className='flex items-center justify-between'>
+      <div className='flex flex-col sm:flex-row sm:items-center justify-between gap-3'>
         <h2 className='text-xl font-semibold text-secondary-10'>Books Summary</h2>
-        <div className='flex items-center gap-2'>
-          <label className='text-sm text-secondary-30'>Month</label>
-          <div className='relative'>
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className='border border-grey-10 rounded-lg px-3 py-1.5 text-sm text-secondary-10 outline-none appearance-none pr-7 bg-white'
-            >
-              {dropdownOptions.map((opt, idx) => (
-                <option key={opt} value={idx === 0 ? 'current' : opt}>
-                  {idx === 0 ? `Current (${opt})` : opt}
-                </option>
-              ))}
-            </select>
-            <Icon icon='ph:caret-down' className='absolute right-2 top-1/2 -translate-y-1/2 text-secondary-30 pointer-events-none text-sm' />
+        <div className='flex flex-wrap items-center gap-3'>
+          <div className='flex items-center gap-2'>
+            <label className='text-sm text-secondary-30'>Filter</label>
+            <div className='relative'>
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className='border border-grey-10 rounded-lg px-3 py-1.5 text-sm text-secondary-10 outline-none appearance-none pr-7 bg-white'
+              >
+                {dropdownOptions.map((opt, idx) => (
+                  <option key={opt} value={idx === 0 ? 'current' : opt}>
+                    {idx === 0 ? `Current (${opt})` : opt}
+                  </option>
+                ))}
+                <option value='custom'>Custom Range</option>
+              </select>
+              <Icon icon='ph:caret-down' className='absolute right-2 top-1/2 -translate-y-1/2 text-secondary-30 pointer-events-none text-sm' />
+            </div>
           </div>
+
+          {selectedMonth === 'custom' && (
+            <div className='flex items-center gap-2 animate-fade-in'>
+              <input
+                type='date'
+                value={customStart}
+                onChange={(e) => setCustomStart?.(e.target.value)}
+                className='border border-grey-10 rounded-lg px-3 py-1.5 text-sm text-secondary-10 outline-none focus:border-primary-30 transition-colors bg-white'
+              />
+              <span className='text-sm text-secondary-30'>to</span>
+              <input
+                type='date'
+                value={customEnd}
+                onChange={(e) => setCustomEnd?.(e.target.value)}
+                className='border border-grey-10 rounded-lg px-3 py-1.5 text-sm text-secondary-10 outline-none focus:border-primary-30 transition-colors bg-white'
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -340,6 +370,7 @@ interface InvoicesTabProps {
   loading: boolean;
   onNewInvoice: () => void;
   onViewInvoice: (invoice: any) => void;
+  onLogPayment: (invoice: any) => void;
 }
 
 function getStatusClass(status: string): string {
@@ -359,7 +390,7 @@ function getStatusClass(status: string): string {
   }
 }
 
-function InvoicesTab({ invoicesList, loading, onNewInvoice, onViewInvoice }: InvoicesTabProps) {
+function InvoicesTab({ invoicesList, loading, onNewInvoice, onViewInvoice, onLogPayment }: InvoicesTabProps) {
   const [search, setSearch] = useState('');
 
   const filteredInvoices = invoicesList.filter((inv) => {
@@ -456,12 +487,22 @@ function InvoicesTab({ invoicesList, loading, onNewInvoice, onViewInvoice }: Inv
                         </span>
                       </td>
                       <td className='px-4 py-3.5'>
-                        <button
-                          onClick={() => onViewInvoice(inv)}
-                          className='flex items-center gap-1 text-primary-30 text-sm font-medium hover:underline'
-                        >
-                          <Icon icon='ph:eye-circle' /> View
-                        </button>
+                        <div className='flex items-center gap-3.5'>
+                          <button
+                            onClick={() => onViewInvoice(inv)}
+                            className='flex items-center gap-1 text-primary-30 text-sm font-medium hover:underline'
+                          >
+                            <Icon icon='ph:eye-circle' /> View
+                          </button>
+                          {inv.status.toLowerCase() !== 'paid' && (
+                            <button
+                              onClick={() => onLogPayment(inv)}
+                              className='flex items-center gap-1 text-success text-sm font-medium hover:underline'
+                            >
+                              <Icon icon='ph:wallet' /> Pay
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -864,6 +905,16 @@ export default function BooksPage() {
   const [showCreateInvoice, setShowCreateInvoice] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
   const [editingInvoice, setEditingInvoice] = useState<any | null>(null);
+  const [paymentInvoice, setPaymentInvoice] = useState<any | null>(null);
+  const [customStart, setCustomStart] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d.toISOString().split('T')[0];
+  });
+  const [customEnd, setCustomEnd] = useState(() => {
+    const d = new Date();
+    return d.toISOString().split('T')[0];
+  });
 
   const loadInvoices = (force = false) => {
     if (user?.business_id && (!invoicesLoaded || force)) {
@@ -936,13 +987,24 @@ export default function BooksPage() {
         )}
 
         <BooksTabs active={activeTab} onChange={setActiveTab} />
-        {activeTab === 'Overview' && <OverviewTab data={data} loading={loading} onTabChange={setActiveTab} />}
+        {activeTab === 'Overview' && (
+          <OverviewTab
+            data={data}
+            loading={loading}
+            onTabChange={setActiveTab}
+            customStart={customStart}
+            setCustomStart={setCustomStart}
+            customEnd={customEnd}
+            setCustomEnd={setCustomEnd}
+          />
+        )}
         {activeTab === 'Invoices' && (
           <InvoicesTab
             invoicesList={invoicesList}
             loading={invoicesLoading}
             onNewInvoice={() => setShowCreateInvoice(true)}
             onViewInvoice={setSelectedInvoice}
+            onLogPayment={setPaymentInvoice}
           />
         )}
         {activeTab === 'Expenses' && <ExpensesTab expensesList={expensesList} loading={expensesLoading} />}
@@ -972,6 +1034,10 @@ export default function BooksPage() {
             setSelectedInvoice(null);
             setEditingInvoice(inv);
           }}
+          onLogPayment={(inv) => {
+            setSelectedInvoice(null);
+            setPaymentInvoice(inv);
+          }}
         />
       )}
 
@@ -982,6 +1048,23 @@ export default function BooksPage() {
           onClose={() => setEditingInvoice(null)}
           onSuccess={() => {
             setEditingInvoice(null);
+            loadInvoices(true);
+            // Also refresh dashboard stats
+            dashboard
+              .get()
+              .then(setData)
+              .catch((e) => setError(e.message ?? 'Failed to load books data'));
+          }}
+        />
+      )}
+
+      {paymentInvoice && user?.business_id && (
+        <LogPaymentModal
+          invoice={paymentInvoice}
+          businessId={user.business_id}
+          onClose={() => setPaymentInvoice(null)}
+          onSuccess={() => {
+            setPaymentInvoice(null);
             loadInvoices(true);
             // Also refresh dashboard stats
             dashboard
