@@ -73,7 +73,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       })
-      .catch(() => setUser(null))
+      .catch(async () => {
+        // auth.me() failed — try a silent refresh before giving up.
+        // This handles the case where the access_token just expired but the
+        // refresh_token is still valid (common right after login or on tab reload).
+        const refreshed = await silentRefresh();
+        if (refreshed) {
+          try {
+            const u = await auth.me();
+            setUser(u);
+            return;
+          } catch {
+            // refresh succeeded but me() still failed — fall through to null
+          }
+        }
+        setUser(null);
+      })
       .finally(() => setLoading(false));
   }, [router]);
 

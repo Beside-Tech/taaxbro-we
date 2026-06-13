@@ -2,18 +2,18 @@
 // FILE:     route.ts
 // REPO:     taaxbro-web-main
 // PLACE AT: frontend/app/api/chat/route.ts
-// ACTION:   Replace existing file entirely
 //
 // WHY THIS FILE EXISTS:
 //   The frontend (app.taaxbro.com) and the backend may live on different domains
-//   (e.g. Railway URL).  Browsers will NOT send a cookie set on .taaxbro.com to
-//   a cross-origin Railway URL, even with `credentials: 'include'`.
+//   (e.g. Railway URL). This Next.js server-side route receives the chat request
+//   from the browser (same origin → cookie is always present), extracts the
+//   access_token / refresh_token cookies from the incoming request, and forwards
+//   them in a server-to-server call to the backend.
 //
-//   This Next.js server-side route receives the chat request from the browser
-//   (same origin → cookie is always present), extracts the `access_token` /
-//   `refresh_token` cookies from the incoming request, and forwards them in a
-//   server-to-server call to the backend.  The backend's `get_optional_user`
-//   dependency then finds the cookie and identifies the logged-in user correctly.
+// ENHANCEMENTS (Web Elon parity with WhatsApp Elon):
+//   - Passes rich action_context so Elon knows he can trigger frontend actions
+//   - Passes structured page context (tab, route) for context-aware responses
+//   - Returns structured action hints the frontend can act on
 // =============================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -38,12 +38,17 @@ export async function POST(req: NextRequest) {
     }
 
     // ── 2. Forward ALL cookies from the browser request ─────────────────────
-    //   This is the key fix: the browser sends its cookies to this same-origin
-    //   Next.js route.  We relay them to the backend so it can read the
-    //   `access_token` httpOnly cookie and authenticate the user.
     const cookieHeader = req.headers.get('cookie') || '';
 
-    // ── 3. Proxy to backend ──────────────────────────────────────────────────
+    // ── 3. Build enriched context for Elon ──────────────────────────────────
+    // Tell Elon what page the user is on and what actions are available on web.
+    const webActionContext = dashboard_page
+      ? `[Web Dashboard Context: user is on the "${dashboard_page}" page. Available web actions: navigate to pages (overview/books/pay/tax/settings), show modals (new invoice, new expense, payment link), open tabs within the current page. When the user asks to create an invoice or log an expense, include action hints in your response like "ACTION:navigate:books" or "ACTION:show:new-invoice" so the frontend can act immediately.]`
+      : '[Web Dashboard Context: user is on a dashboard page. Guide them to the right section as needed.]';
+
+    const enrichedMessage = `${webActionContext}\n\n${message}`;
+
+    // ── 4. Proxy to backend ──────────────────────────────────────────────────
     const backendRes = await fetch(`${BACKEND_URL}/api/v1/ai/chat`, {
       method: 'POST',
       headers: {
@@ -51,7 +56,7 @@ export async function POST(req: NextRequest) {
         ...(cookieHeader ? { cookie: cookieHeader } : {}),
       },
       body: JSON.stringify({
-        message,
+        message: enrichedMessage,
         conversation_id: conversation_id ?? null,
         dashboard_page: dashboard_page ?? null,
       }),
@@ -66,7 +71,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── 4. Return the backend response verbatim ──────────────────────────────
+    // ── 5. Return the backend response verbatim ──────────────────────────────
     const data = await backendRes.json() as {
       answer?: string;
       conversation_id?: string;

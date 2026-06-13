@@ -16,7 +16,8 @@ function isTokenExpired(token: string): boolean {
     );
     const payload = JSON.parse(jsonPayload);
     if (!payload.exp) return true;
-    return payload.exp * 1000 < Date.now();
+    // Add a 30-second grace buffer to avoid edge-case expiry during redirect
+    return payload.exp * 1000 < Date.now() - 30_000;
   } catch {
     return true;
   }
@@ -161,6 +162,17 @@ export function middleware(req: NextRequest) {
 
   // Protect dashboard routes — require valid access_token cookie
   if (!isTokenValid) {
+    // Check for refresh_token cookie as a secondary signal.
+    // If refresh_token exists, the user likely just logged in and the access_token
+    // cookie is still propagating. Let the request through — the client-side
+    // AuthContext will call /auth/refresh and recover.
+    const refreshCookie = req.cookies.get('refresh_token');
+    if (refreshCookie?.value) {
+      // Refresh token present — let client-side handle the refresh instead of
+      // hard-redirecting to /login. This prevents the login loop on first load.
+      return NextResponse.next();
+    }
+
     const loginUrl = req.nextUrl.clone();
     loginUrl.pathname = '/login';
     loginUrl.searchParams.set('next', pathname);

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from '@/components/dashboard/Sidebar';
 import ChatButton from '@/components/ChatButton';
@@ -13,13 +14,24 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { logout, refreshSession, user } = useAuth();
+  const { logout, refreshSession, user, loading } = useAuth();
+  const router = useRouter();
   const [showWarningModal, setShowWarningModal] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const email = user?.email ?? '';
   const name = user?.full_name || email.split('@')[0] || '';
+
+  // Guard: while auth is loading, show a full-screen spinner instead of
+  // rendering the dashboard (which can flash unauthenticated content) or
+  // redirecting to /login prematurely (causing the login loop).
+  // Once loading is done, if there's still no user, redirect to /login.
+  useEffect(() => {
+    if (!loading && !user) {
+      router.replace('/login');
+    }
+  }, [loading, user, router]);
 
   const { reset } = useIdleTimeout({
     onWarning: () => setShowWarningModal(true),
@@ -49,6 +61,21 @@ export default function DashboardLayout({
     setShowWarningModal(false);
     logout();
   };
+
+  // Show full-screen loading spinner while hydrating session
+  if (loading) {
+    return (
+      <div className='min-h-screen bg-[#fafafa] flex items-center justify-center'>
+        <div className='flex flex-col items-center gap-4'>
+          <div className='w-12 h-12 rounded-full border-4 border-primary-30/20 border-t-primary-30 animate-spin' />
+          <p className='text-sm text-secondary-30'>Loading your dashboard…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render anything if user is null (redirect effect above will run)
+  if (!user) return null;
 
   return (
     <div className='min-h-screen bg-[#fafafa] relative'>

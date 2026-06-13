@@ -15,7 +15,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { Icon } from '@iconify/react';
 import { useAuth } from '@/context/AuthContext';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useChatContext } from '@/context/ChatContext';
 
 // ── Chat via local proxy (preserves cookies for auth) ────────────────────────
@@ -223,6 +223,7 @@ function mkId() { return Math.random().toString(36).slice(2); }
 export default function ChatButton() {
   const { user } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
   const isLoggedIn = !!user;
   const dashboardPage = getPageName(pathname);
 
@@ -266,10 +267,41 @@ export default function ChatButton() {
         setConversationId(data.conversation_id);
       }
 
+      let answer = data.answer || 'No response received.';
+
+      // ── Parse and execute ACTION hints from Elon ─────────────────────────
+      // Elon can embed action directives in his response that trigger
+      // frontend navigation or modals, matching his WhatsApp capabilities.
+      const actionRegex = /ACTION:(navigate|show|tab):([a-z0-9\-\/]+)/gi;
+      const actions: Array<{ type: string; target: string }> = [];
+      let match;
+      while ((match = actionRegex.exec(answer)) !== null) {
+        actions.push({ type: match[1].toLowerCase(), target: match[2].toLowerCase() });
+      }
+      // Strip action hints from displayed answer
+      answer = answer.replace(/ACTION:(navigate|show|tab):[a-z0-9\-\/]+/gi, '').trim();
+
       setMessages((prev) => [
         ...prev,
-        { id: mkId(), role: 'assistant', content: data.answer || 'No response received.' },
+        { id: mkId(), role: 'assistant', content: answer },
       ]);
+
+      // Execute actions after a short delay so the user sees Elon's message first
+      if (actions.length > 0) {
+        setTimeout(() => {
+          for (const action of actions) {
+            if (action.type === 'navigate') {
+              const route = action.target.startsWith('/') ? action.target : `/${action.target}`;
+              router.push(route);
+            } else if (action.type === 'show') {
+              // Emit a custom event that page components can listen to
+              window.dispatchEvent(new CustomEvent('elon-action', { detail: { show: action.target } }));
+            } else if (action.type === 'tab') {
+              window.dispatchEvent(new CustomEvent('elon-action', { detail: { tab: action.target } }));
+            }
+          }
+        }, 600);
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '';
       const errorText = msg.includes('model output')

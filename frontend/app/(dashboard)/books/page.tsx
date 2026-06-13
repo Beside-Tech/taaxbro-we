@@ -676,15 +676,21 @@ function ExpensesTab({ expensesList, loading }: ExpensesTabProps) {
 
 // ─── Reports Tab ──────────────────────────────────────────────────────────────
 
-function ReportsTab({ data, loading }: TabProps) {
-  const recentTransactions = data?.recent_transactions ?? [];
+interface ReportsTabProps extends TabProps {
+  expensesList: ExpenseResponse[];
+  expensesLoading: boolean;
+}
+
+function ReportsTab({ data, loading, expensesList, expensesLoading }: ReportsTabProps) {
   const stats = data?.stats;
 
   const totalReceived = stats?.revenue_current_month ?? 0;
-  const totalSent = recentTransactions
-    .filter((t) => t.type === 'debit')
-    .reduce((sum, t) => sum + t.amount, 0);
+  // Use real expenses data (sum of all logged expenses) instead of dashboard transactions
+  const totalSent = expensesList.reduce((sum, exp) => sum + (exp.amount ?? 0), 0);
+  const totalVAT = expensesList.reduce((sum, exp) => sum + (exp.vat_amount ?? 0), 0);
   const netFlow = totalReceived - totalSent;
+
+  const isLoadingReports = loading || expensesLoading;
 
   const plReports = [
     { 
@@ -698,25 +704,26 @@ function ReportsTab({ data, loading }: TabProps) {
       section: 'Cost of Goods sold / Expenses', 
       rows: [
         { label: 'Operating Expenses', amount: `-${formatNaira(totalSent)}`, positive: false },
+        { label: 'Input VAT Claimable', amount: formatNaira(totalVAT), positive: true },
       ], 
-      total: { label: 'Gross Profit', amount: formatNaira(netFlow), positive: true } 
+      total: { label: 'Gross Profit', amount: formatNaira(netFlow), positive: netFlow >= 0 } 
     },
   ];
 
   const handleExportReport = () => {
-    const csvContent = "data:text/csv;charset=utf-8,"
-      + [
-          "Section,Category,Amount",
-          "Revenue,Operating Revenue," + totalReceived,
-          "Revenue,Total Revenue," + totalReceived,
-          "Expenses,Operating Expenses,-" + totalSent,
-          "Expenses,Gross Profit," + netFlow,
-          "Summary,Net Profit," + netFlow
-        ].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `profit_loss_report_${new Date().toISOString().slice(0, 10)}.csv`);
+    const rows = [
+      ['Section', 'Category', 'Amount'],
+      ['Revenue', 'Operating Revenue', totalReceived.toString()],
+      ['Revenue', 'Total Revenue', totalReceived.toString()],
+      ['Expenses', 'Operating Expenses', `-${totalSent}`],
+      ['Expenses', 'Input VAT Claimable', totalVAT.toString()],
+      ['Expenses', 'Gross Profit', netFlow.toString()],
+      ['Summary', 'Net Profit', netFlow.toString()],
+    ];
+    const csvContent = 'data:text/csv;charset=utf-8,' + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const link = document.createElement('a');
+    link.setAttribute('href', encodeURI(csvContent));
+    link.setAttribute('download', `profit_loss_report_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -736,7 +743,7 @@ function ReportsTab({ data, loading }: TabProps) {
         </div>
       </div>
 
-      {loading ? (
+      {isLoadingReports ? (
         <div className='p-6 space-y-3 animate-pulse'>
           {[0, 1, 2].map((i) => <div key={i} className='h-10 bg-grey-10 rounded' />)}
         </div>
@@ -749,7 +756,7 @@ function ReportsTab({ data, loading }: TabProps) {
                 <div key={i} className='flex justify-between px-6 py-3.5 border-t border-grey-10/60 text-sm'>
                   <span className='text-secondary-10'>{r.label}</span>
                   <span className={r.positive ? 'text-success font-medium' : 'text-danger font-medium'}>
-                    {r.label.includes('Expenses') ? `-${formatNaira(totalSent)}` : r.amount}
+                    {r.amount}
                   </span>
                 </div>
               ))}
@@ -759,6 +766,21 @@ function ReportsTab({ data, loading }: TabProps) {
               </div>
             </div>
           ))}
+
+          {expensesList.length > 0 && (
+            <div>
+              <div className='bg-secondary-10/5 px-6 py-3 text-sm font-semibold text-secondary-10 border-t border-grey-10'>Expense Breakdown ({expensesList.length} items)</div>
+              {Array.from(new Set(expensesList.map(e => e.category || 'Uncategorized'))).slice(0, 6).map(cat => {
+                const catTotal = expensesList.filter(e => (e.category || 'Uncategorized') === cat).reduce((s, e) => s + e.amount, 0);
+                return (
+                  <div key={cat} className='flex justify-between px-6 py-2.5 border-t border-grey-10/40 text-sm'>
+                    <span className='text-secondary-30 capitalize'>{cat}</span>
+                    <span className='text-danger font-medium'>-{formatNaira(catTotal)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           <div className='flex justify-between px-6 py-4 bg-primary-40 text-white font-semibold text-sm'>
             <span>Net Profit</span>
@@ -781,31 +803,33 @@ export default function BooksPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [invoicesList, setInvoicesList] = useState<InvoiceResponse[]>([]);
-  const [invoicesLoading, setInvoicesLoading] = useState(true);
+  const [invoicesLoading, setInvoicesLoading] = useState(false);
+  const [invoicesLoaded, setInvoicesLoaded] = useState(false);
 
   const [expensesList, setExpensesList] = useState<ExpenseResponse[]>([]);
-  const [expensesLoading, setExpensesLoading] = useState(true);
+  const [expensesLoading, setExpensesLoading] = useState(false);
+  const [expensesLoaded, setExpensesLoaded] = useState(false);
 
   const [showPaymentLink, setShowPaymentLink] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
 
-  const loadInvoices = () => {
-    if (user?.business_id) {
+  const loadInvoices = (force = false) => {
+    if (user?.business_id && (!invoicesLoaded || force)) {
       setInvoicesLoading(true);
       invoices
         .list(user.business_id)
-        .then(setInvoicesList)
+        .then((list) => { setInvoicesList(list); setInvoicesLoaded(true); })
         .catch((e) => console.error('Failed to load invoices:', e))
         .finally(() => setInvoicesLoading(false));
     }
   };
 
-  const loadExpenses = () => {
-    if (user?.business_id) {
+  const loadExpenses = (force = false) => {
+    if (user?.business_id && (!expensesLoaded || force)) {
       setExpensesLoading(true);
       expenses
         .list(user.business_id)
-        .then(setExpensesList)
+        .then((list) => { setExpensesList(list); setExpensesLoaded(true); })
         .catch((e) => console.error('Failed to load expenses:', e))
         .finally(() => setExpensesLoading(false));
     }
@@ -819,13 +843,25 @@ export default function BooksPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Load invoices and expenses eagerly once business_id is available,
+  // so they're ready when the user switches tabs.
   useEffect(() => {
-    if (activeTab === 'Invoices') {
+    if (user?.business_id) {
       loadInvoices();
-    } else if (activeTab === 'Expenses') {
       loadExpenses();
     }
-  }, [activeTab, user?.business_id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.business_id]);
+
+  // Also reload when navigating to specific tabs (force-refresh for latest data)
+  useEffect(() => {
+    if (activeTab === 'Invoices') {
+      loadInvoices(true);
+    } else if (activeTab === 'Expenses' || activeTab === 'Reports') {
+      loadExpenses(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   return (
     <div className='flex flex-col flex-1'>
@@ -858,7 +894,7 @@ export default function BooksPage() {
           />
         )}
         {activeTab === 'Expenses' && <ExpensesTab expensesList={expensesList} loading={expensesLoading} />}
-        {activeTab === 'Reports' && <ReportsTab data={data} loading={loading} />}
+        {activeTab === 'Reports' && <ReportsTab data={data} loading={loading} expensesList={expensesList} expensesLoading={expensesLoading} />}
       </main>
 
       {showPaymentLink && (
