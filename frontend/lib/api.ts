@@ -652,3 +652,25 @@ export const expenses = {
     });
   },
 };
+
+// ─── Tax ───────────────────────────────────────────────────────────────────
+
+export interface TaxFilingResponse {
+  id: string;
+  obligation_id: string;
+  tax_type: string;
+  authority: string;
+  period_start: string;
+  period_end: string;
+  amount_filed: number;
+  status: string;
+  nrs_reference?: string | null;
+  submitted_at?: string | null;
+  confirmed_at?: string | null;
+}
+
+export const tax = {
+  getFilings(businessId: string): Promise<TaxFilingResponse[]> {
+    return request<TaxFilingResponse[]>(`/api/v1/tax/filings?business_id=${businessId}`);
+  },
+};

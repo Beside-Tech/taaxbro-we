@@ -7,7 +7,7 @@ import Link from 'next/link';
 import FlagIssueModal from '@/components/dashboard/tax/FlagIssueModal';
 
 import EditVATModal from '@/components/dashboard/tax/EditVATModal';
-import { dashboard, business, type DashboardData, type BusinessProfile } from '@/lib/api';
+import { dashboard, business, tax, type DashboardData, type BusinessProfile, type TaxFilingResponse } from '@/lib/api';
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 
@@ -37,12 +37,24 @@ export default function TaxPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [filingsList, setFilingsList] = useState<TaxFilingResponse[]>([]);
+  const [filingsLoading, setFilingsLoading] = useState(false);
+
   useEffect(() => {
     Promise.all([dashboard.get(), business.getProfile()])
       .then(([dash, prof]) => { setData(dash); setProfile(prof); })
       .catch((e) => setError(e.message ?? 'Failed to load tax data'))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!profile?.business_id) return;
+    setFilingsLoading(true);
+    tax.getFilings(profile.business_id)
+      .then((res) => setFilingsList(res))
+      .catch((e) => console.error('Failed to load filings:', e))
+      .finally(() => setFilingsLoading(false));
+  }, [profile?.business_id]);
 
   // ── Derived values ───────────────────────────────────────────────────────
   const stats = data?.stats;
@@ -73,48 +85,33 @@ export default function TaxPage() {
     new Date().getMonth() - (new Date().getDate() >= 10 ? 0 : 1)
   ).toLocaleDateString('en-GB', { month: 'long' });
 
-  // Generate dynamic filing history relative to current date
-  const getDynamicHistory = () => {
-    const history = [];
-    const now = new Date();
+  const formatPeriod = (startStr: string) => {
+    const d = new Date(startStr);
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    
-    for (let i = 1; i <= 5; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const period = `${months[d.getMonth()]} ${d.getFullYear()}`;
-      
-      const isLIRS = i % 3 === 0;
-      const isWHT = i % 3 === 2;
-      const authority = isLIRS ? 'LIRS' : 'FIRS';
-      const type = isLIRS ? 'PAYE' : (isWHT ? 'WHT' : 'VAT');
-      // Deterministic ref — no Math.random()
-      const ref = `${authority}/${type}/${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${deterministicRef(period + type)}`;
-      
-      // Use real revenue when available, else ₦0 (no fabricated amounts)
-      const amountVal = revenue > 0 
-        ? revenue * (isLIRS ? 0.02 : (isWHT ? 0.05 : 0.075))
-        : 0;
-      
-      history.push({
-        period,
-        authority,
-        ref,
-        submitted: period,
-        amount: amountVal > 0 ? formatNaira(amountVal) : '₦0.00',
-        status: i === 1 ? 'Awaiting Approval' : 'Confirmed',
-        statusClass: i === 1 ? 'bg-orange-400 text-white' : 'bg-success text-white',
-        type
-      });
-    }
-    return history;
+    return `${months[d.getMonth()]} ${d.getFullYear()}`;
   };
 
-  const filingHistory = getDynamicHistory();
+  const getFilingStatusLabel = (status: string) => {
+    const s = status.toLowerCase();
+    if (s === 'confirmed' || s === 'filed') return 'Confirmed';
+    if (s === 'awaiting_approval' || s === 'pending') return 'Awaiting Approval';
+    if (s === 'failed') return 'Failed';
+    return status.charAt(0).toUpperCase() + status.slice(1);
+  };
 
-  const filteredHistory = filingHistory.filter((row) => {
+  const getFilingStatusClass = (status: string) => {
+    const s = status.toLowerCase();
+    if (s === 'confirmed' || s === 'filed') return 'bg-success text-white';
+    if (s === 'awaiting_approval' || s === 'pending') return 'bg-orange-400 text-white';
+    if (s === 'failed') return 'bg-red-500 text-white';
+    return 'bg-secondary-40 text-secondary-10';
+  };
+
+  const filteredHistory = filingsList.filter((f) => {
+    const type = f.tax_type.toUpperCase();
     if (activeFilingTab === 'All') return true;
-    if (activeFilingTab === 'LIRS') return row.authority === 'LIRS';
-    return row.type === activeFilingTab;
+    if (activeFilingTab === 'LIRS') return f.authority.toUpperCase() === 'LIRS';
+    return type === activeFilingTab.toUpperCase();
   });
 
   const getVatBreakdown = () => {
@@ -186,8 +183,10 @@ export default function TaxPage() {
     ? data.recent_transactions.filter(t => t.type === 'credit' && t.vat_amount && Number(t.vat_amount) > 0).length
     : 0;
 
-  // Total confirmed filings count — only count confirmed rows from real history (no fabricated +12)
-  const confirmedFilingCount = filingHistory.filter(h => h.status === 'Confirmed').length;
+  // Total confirmed filings count — only count confirmed rows from real history
+  const confirmedFilingCount = filingsList.filter(
+    (f) => f.status.toLowerCase() === 'confirmed' || f.status.toLowerCase() === 'filed'
+  ).length;
 
   const statCards = [
     { 
@@ -265,7 +264,15 @@ export default function TaxPage() {
   function handleExportCSV() {
     const rows = [
       ['Period', 'Authority', 'Type', 'Reference', 'Submitted', 'Amount Filed', 'Status'],
-      ...filteredHistory.map(r => [r.period, r.authority, r.type, r.ref, r.submitted, r.amount, r.status]),
+      ...filteredHistory.map(r => [
+        formatPeriod(r.period_start),
+        r.authority,
+        r.tax_type,
+        r.nrs_reference ?? '—',
+        r.submitted_at ? new Date(r.submitted_at).toLocaleDateString('en-GB') : '—',
+        r.amount_filed,
+        getFilingStatusLabel(r.status)
+      ]),
     ];
     const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -486,24 +493,45 @@ export default function TaxPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredHistory.map((row, i) => (
-                  <tr key={i} className='border-t border-grey-10/40 hover:bg-primary-50/30 transition-colors'>
-                    <td className='px-5 py-3.5 text-secondary-10'>{row.period}</td>
-                    <td className='px-5 py-3.5 text-secondary-10'>{row.authority}</td>
-                    <td className='px-5 py-3.5 text-secondary-30'>{row.ref}</td>
-                    <td className='px-5 py-3.5 text-secondary-10'>{row.submitted}</td>
-                    <td className='px-5 py-3.5 font-medium text-secondary-10'>{row.amount}</td>
-                    <td className='px-5 py-3.5'>
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${row.statusClass}`}>{row.status}</span>
+                {filingsLoading ? (
+                  <tr>
+                    <td colSpan={6} className="text-center py-12 text-sm text-secondary-30">
+                      <div className="flex items-center justify-center gap-2">
+                        <Icon icon="ph:circle-notch" className="text-lg animate-spin text-primary-30" />
+                        <span>Loading filings...</span>
+                      </div>
                     </td>
                   </tr>
-                ))}
+                ) : filteredHistory.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="text-center py-12 text-sm text-secondary-30">
+                      No filings recorded yet. Prepare your CSV, submit to FIRS/REV360, and enter the reference code to record.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredHistory.map((row, i) => (
+                    <tr key={row.id ?? i} className='border-t border-grey-10/40 hover:bg-primary-50/30 transition-colors'>
+                      <td className='px-5 py-3.5 text-secondary-10'>{formatPeriod(row.period_start)}</td>
+                      <td className='px-5 py-3.5 text-secondary-10'>{row.authority} ({row.tax_type})</td>
+                      <td className='px-5 py-3.5 text-secondary-30'>{row.nrs_reference ?? '—'}</td>
+                      <td className='px-5 py-3.5 text-secondary-10'>
+                        {row.submitted_at ? new Date(row.submitted_at).toLocaleDateString('en-GB') : '—'}
+                      </td>
+                      <td className='px-5 py-3.5 font-medium text-secondary-10'>{formatNaira(row.amount_filed)}</td>
+                      <td className='px-5 py-3.5'>
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${getFilingStatusClass(row.status)}`}>
+                          {getFilingStatusLabel(row.status)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
 
           <div className='flex items-center justify-between px-6 py-4 border-t border-grey-10/60'>
-            <p className='text-xs text-secondary-30'>Showing {filingHistory.length} of {filingHistory.length}</p>
+            <p className='text-xs text-secondary-30'>Showing {filteredHistory.length} of {filingsList.length}</p>
             <div className='flex items-center gap-1'>
               <button className='w-8 h-8 rounded-full bg-primary-30 text-white text-sm flex items-center justify-center transition-colors'>1</button>
             </div>
