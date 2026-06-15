@@ -415,7 +415,12 @@ export default function TaxPage() {
     if (t === 'vat') return 'Value Added Tax (VAT)';
     if (t === 'wht') return 'Withholding Tax (WHT)';
     if (t === 'cit') return 'Company Income Tax (CIT)';
-    if (t === 'paye') return `PAYE - Lagos State (${authority ?? 'LIRS'})`;
+    if (t === 'paye') {
+      const stateName = profile?.state 
+        ? (profile.state.charAt(0).toUpperCase() + profile.state.slice(1).toLowerCase()) 
+        : 'Lagos';
+      return `PAYE - ${stateName} State (${authority ?? 'LIRS'})`;
+    }
     return type.toUpperCase();
   };
 
@@ -1357,6 +1362,9 @@ export default function TaxPage() {
           taxType={selectedObligation.tax_type}
           period={formatPeriod(selectedObligation.period_start)}
           authority={selectedObligation.authority}
+          grossOutput={Number(selectedObligation.gross_output)}
+          grossInput={Number(selectedObligation.gross_input)}
+          breakdownData={breakdownData}
         />
       )}
       {showEdit && (
