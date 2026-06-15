@@ -395,6 +395,10 @@ export interface BusinessProfile {
   account_name:         string | null;
   user_type:            string | null;
   owner_name:           string | null;
+  // Tax profile fields
+  cit_applicable:  boolean;
+  pit_applicable:  boolean;
+  fiscal_year_end: string;  // "MM-DD" format, e.g. "12-31"
 }
 
 export const business = {

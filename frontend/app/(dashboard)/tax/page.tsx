@@ -181,12 +181,32 @@ export default function TaxPage() {
       return profile.vat_registered === true;
     }
     if (t === 'cit') {
-      return profile.user_type === 'business' && profile.business_type === 'limited_liability';
+      // Use cit_applicable from TaxProfile (set during onboarding / settings)
+      // Falls back to business_type check for legacy profiles without TaxProfile row
+      return profile.cit_applicable === true ||
+        (profile.user_type === 'business' && profile.business_type === 'limited_liability');
+    }
+    if (t === 'pit') {
+      return profile.pit_applicable === true;
     }
     if (t === 'paye') {
       return profile.user_type === 'business';
     }
     return true; // WHT and other general tax types always apply
+  };
+
+  // Format fiscal year period from fiscal_year_end ("MM-DD") for display
+  const getFiscalYearLabel = (): string => {
+    const fyEnd = profile?.fiscal_year_end ?? '12-31';
+    const [mm, dd] = fyEnd.split('-').map(Number);
+    if (!mm || !dd) return 'Jan 1 – Dec 31';
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    // Start is the day after FY end in the prior year
+    const startM = mm === 12 ? 1 : mm + 1;
+    const startD = dd === 31 ? 1 : dd + 1; // simplified; good enough for display
+    const startLabel = `${months[startM - 1]} ${startD}`;
+    const endLabel = `${months[mm - 1]} ${dd}`;
+    return `${startLabel} – ${endLabel}`;
   };
 
   const activeObligations = obligationsList.filter(o => 
@@ -468,7 +488,11 @@ export default function TaxPage() {
 
     if (t === 'vat') return `7.5% | Monthly | ${ob.authority} | ${dateStr}`;
     if (t === 'wht') return `At source | Monthly | ${ob.authority} | ${dateStr}`;
-    if (t === 'cit') return `30% | Annual | ${dateStr}`;
+    if (t === 'cit') {
+      const fyStart = new Date(ob.period_start).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      const fyEnd = new Date(ob.period_end).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      return `30% | Annual | FY: ${fyStart} – ${fyEnd} | ${dateStr}`;
+    }
     if (t === 'paye') return `Monthly | ${ob.authority} | ${dateStr}`;
     return `${ob.authority} | ${dateStr}`;
   };
@@ -1144,6 +1168,19 @@ export default function TaxPage() {
                 <p className='text-xs text-secondary-30 flex items-center gap-1 mt-0.5'>
                   <Icon icon='ph:info' /> Click on item to view more info
                 </p>
+                {/* Financial Year Info Badge */}
+                {profile && (
+                  <div className='mt-2 inline-flex items-center gap-1.5 text-[10px] font-medium text-secondary-30 bg-grey-10/50 border border-grey-10 rounded-full px-2.5 py-1'>
+                    <Icon icon='ph:calendar-blank' className='shrink-0' />
+                    <span>Your Financial Year: <strong className='text-secondary-20'>{getFiscalYearLabel()}</strong></span>
+                    <span
+                      title={`Your company's fiscal year runs ${getFiscalYearLabel()} annually. CIT is due 6 months after the financial year ends. This is determined by your Tax Profile settings.`}
+                      className='cursor-help'
+                    >
+                      <Icon icon='ph:question' className='text-secondary-40' />
+                    </span>
+                  </div>
+                )}
               </div>
               <button
                 onClick={handleRecalculateAll}
