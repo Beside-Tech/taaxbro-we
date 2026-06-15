@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { Icon } from '@iconify/react';
 import TopBar from '@/components/dashboard/TopBar';
 import Link from 'next/link';
@@ -27,6 +27,7 @@ function formatFilingDate(iso: string | null): string {
 const filingTabs = ['All', 'VAT', 'WHT', 'CIT', 'LIRS'];
 
 export default function TaxPage() {
+  const breakdownRef = useRef<HTMLDivElement>(null);
   const [vatTab, setVatTab] = useState<'input' | 'output'>('input');
   const [activeFilingTab, setActiveFilingTab] = useState('All');
   const [showFlag, setShowFlag] = useState(false);
@@ -168,6 +169,29 @@ export default function TaxPage() {
     o.status.toLowerCase() !== 'filed' &&
     o.status.toLowerCase() !== 'confirmed'
   );
+
+  const sortedObligations = useMemo(() => {
+    const filtered = obligationsList.filter(o => isObligationActive(o.tax_type));
+    return [...filtered].sort((a, b) => {
+      const aActive = a.status.toLowerCase() !== 'filed' && a.status.toLowerCase() !== 'confirmed';
+      const bActive = b.status.toLowerCase() !== 'filed' && b.status.toLowerCase() !== 'confirmed';
+      if (aActive && !bActive) return -1;
+      if (!aActive && bActive) return 1;
+      return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+    });
+  }, [obligationsList, profile]);
+
+  const tabCounts = useMemo(() => {
+    const counts: Record<string, number> = { All: filingsList.length };
+    filingsList.forEach((f) => {
+      const type = f.tax_type.toUpperCase();
+      counts[type] = (counts[type] || 0) + 1;
+      if (f.authority.toUpperCase() === 'LIRS') {
+        counts['LIRS'] = (counts['LIRS'] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [filingsList]);
 
   const handleRecalculateAll = async () => {
     if (!profile?.business_id) return;
@@ -312,12 +336,22 @@ export default function TaxPage() {
     return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
+  const getObligationStatusLabel = (status: string) => {
+    const s = status.toLowerCase();
+    if (s === 'filed' || s === 'confirmed') return 'Filed';
+    if (s === 'awaiting_approval') return 'Awaiting Approval';
+    if (s === 'under_review') return 'Under Review';
+    if (s === 'computed') return 'Filing Ready';
+    if (s === 'pending') return 'Accumulating';
+    return status.charAt(0).toUpperCase() + status.slice(1);
+  };
+
   const getFilingStatusClass = (status: string) => {
     const s = status.toLowerCase();
-    if (s === 'confirmed' || s === 'filed') return 'bg-success text-white';
-    if (s === 'awaiting_approval' || s === 'pending') return 'bg-orange-400 text-white';
-    if (s === 'failed') return 'bg-red-500 text-white';
-    return 'bg-secondary-40 text-secondary-10';
+    if (s === 'confirmed' || s === 'filed') return 'bg-green-50 text-green-600 border border-green-150 font-semibold px-2 py-0.5 text-xs';
+    if (s === 'awaiting_approval' || s === 'pending') return 'bg-orange-50 text-orange-600 border border-orange-150 font-semibold px-2 py-0.5 text-xs';
+    if (s === 'failed') return 'bg-red-50 text-red-600 border border-red-150 font-semibold px-2 py-0.5 text-xs';
+    return 'bg-grey-50 text-grey-600 border border-grey-150 font-semibold px-2 py-0.5 text-xs';
   };
 
   const getTaxTypeName = (type: string) => {
@@ -341,10 +375,11 @@ export default function TaxPage() {
 
   const getObligationStatusClass = (status: string) => {
     const s = status.toLowerCase();
-    if (s === 'filed' || s === 'confirmed') return 'bg-success/15 text-success';
-    if (s === 'awaiting_approval' || s === 'pending') return 'bg-orange-400 text-white';
-    if (s === 'computed') return 'bg-primary-20 text-primary-40';
-    return 'bg-primary-10 text-primary-30';
+    if (s === 'filed' || s === 'confirmed') return 'bg-green-50 text-green-600 border border-green-200';
+    if (s === 'awaiting_approval' || s === 'pending') return 'bg-orange-50 text-orange-600 border border-orange-200';
+    if (s === 'under_review') return 'bg-orange-50 text-orange-600 border border-orange-200';
+    if (s === 'computed') return 'bg-purple-50 text-purple-600 border border-purple-200';
+    return 'bg-primary-50 text-primary-600 border border-primary-200';
   };
 
   const formatComputedAt = (iso: string | null | undefined) => {
@@ -637,7 +672,7 @@ export default function TaxPage() {
                   { n: 1, label: 'Computed', done: true },
                   { n: 2, label: isUnderReview ? 'Under Review' : 'Ready for review', done: true, isWarn: isUnderReview },
                   { n: 3, label: 'Record Filing', done: isConfirmed },
-                  { n: 4, label: 'Filing Confirmed', done: isConfirmed },
+                  { n: 4, label: `Confirmed by ${selectedObligation.authority}`, done: isConfirmed },
                 ];
                 return filingSteps.map((step, idx) => (
                   <div key={step.n} className='flex items-center shrink-0'>
@@ -659,10 +694,10 @@ export default function TaxPage() {
 
         <div className='grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-5'>
           {/* Breakdown Card */}
-          <div className='bg-white rounded-xl border border-grey-10/60 p-6 flex flex-col justify-between min-h-[400px] shadow-sm'>
+          <div ref={breakdownRef} className='bg-white rounded-xl border border-grey-10/60 p-6 flex flex-col lg:sticky lg:top-[96px] lg:max-h-[calc(100vh-130px)] min-h-[400px] shadow-sm overflow-hidden'>
             {selectedObligation ? (
-              <div>
-                <div className='flex items-center justify-between mb-4 border-b border-grey-10 pb-3'>
+              <div className='flex flex-col flex-1 min-h-0'>
+                <div className='flex items-center justify-between mb-4 border-b border-grey-10 pb-3 shrink-0'>
                   <div>
                     <h2 className='text-base font-semibold text-secondary-10'>{getTaxTypeName(selectedObligation.tax_type)} Breakdown</h2>
                     <p className='text-xs text-secondary-30 mt-0.5'>{selectedObligation.authority} remittable ledger calculation</p>
@@ -672,216 +707,244 @@ export default function TaxPage() {
                   </Link>
                 </div>
 
-                {breakdownLoading ? (
-                  <div className='py-20 flex flex-col items-center justify-center gap-3'>
-                    <Icon icon='ph:circle-notch' className='text-3xl animate-spin text-primary-30' />
-                    <p className='text-sm text-secondary-30'>Retrieving live calculation data...</p>
-                  </div>
-                ) : !breakdownData ? (
-                  <div className='py-20 text-center text-sm text-secondary-30'>
-                    No breakdown details available for this obligation.
-                  </div>
-                ) : (
-                  <div>
-                    {/* Render VAT Breakdown */}
-                    {selectedObligation.tax_type.toLowerCase() === 'vat' && (
-                      <div className='space-y-4 animate-fadeIn'>
-                        <div className='flex flex-wrap gap-4 sm:gap-6 border-b border-grey-10 mb-4'>
-                          {(['input', 'output'] as const).map((t) => (
-                            <button
-                              key={t}
-                              onClick={() => setVatTab(t)}
-                              className={`pb-2.5 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${vatTab === t ? 'border-primary-30 text-primary-30' : 'border-transparent text-secondary-30'}`}
-                            >
-                              {t === 'input' ? 'Input VAT (Expenses)' : 'Output VAT (Sales)'}
-                            </button>
-                          ))}
-                        </div>
-
-                        <div className='border border-grey-10 rounded-xl overflow-hidden shadow-sm'>
-                          <div className='grid grid-cols-3 bg-primary-40 text-white text-xs px-4 py-3 font-medium'>
-                            <span>Category / Client</span>
-                            <span>VAT Amount</span>
-                            <span>Transactions</span>
+                <div className='flex-1 overflow-y-auto min-h-0 pr-1'>
+                  {breakdownLoading ? (
+                    <div className='py-20 flex flex-col items-center justify-center gap-3'>
+                      <Icon icon='ph:circle-notch' className='text-3xl animate-spin text-primary-30' />
+                      <p className='text-sm text-secondary-30'>Retrieving live calculation data...</p>
+                    </div>
+                  ) : !breakdownData ? (
+                    <div className='py-20 text-center text-sm text-secondary-30'>
+                      No breakdown details available for this obligation.
+                    </div>
+                  ) : (
+                    <div className='space-y-4'>
+                      {/* Render VAT Breakdown */}
+                      {selectedObligation.tax_type.toLowerCase() === 'vat' && (
+                        <div className='space-y-4 animate-fadeIn'>
+                          <div className='flex flex-wrap gap-4 sm:gap-6 border-b border-grey-10 mb-4'>
+                            {(['input', 'output'] as const).map((t) => (
+                              <button
+                                key={t}
+                                onClick={() => setVatTab(t)}
+                                className={`pb-2.5 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${vatTab === t ? 'border-primary-30 text-primary-30' : 'border-transparent text-secondary-30'}`}
+                              >
+                                {t === 'input' ? 'Input VAT (Expenses)' : 'Output VAT (Sales)'}
+                              </button>
+                            ))}
                           </div>
-                          {/* Map grouped breakdown */}
-                          {(() => {
-                            const outputList = breakdownData.output_vat || [];
-                            const inputList = breakdownData.input_vat || [];
-                            const breakdownRows: Array<{ category: string; collected: number; txns: number }> = [];
-                            
-                            if (vatTab === 'output') {
-                              const categoriesMap: Record<string, { collected: number; txns: number }> = {};
-                              outputList.forEach((inv: any) => {
-                                const cat = inv.client_name || 'Sales';
-                                if (!categoriesMap[cat]) categoriesMap[cat] = { collected: 0, txns: 0 };
-                                categoriesMap[cat].collected += Number(inv.vat_total);
-                                categoriesMap[cat].txns += 1;
-                              });
-                              Object.entries(categoriesMap).forEach(([category, val]) => {
-                                breakdownRows.push({ category, collected: val.collected, txns: val.txns });
-                              });
-                            } else {
-                              const categoriesMap: Record<string, { collected: number; txns: number }> = {};
-                              inputList.forEach((exp: any) => {
-                                const cat = exp.category ? (exp.category.charAt(0).toUpperCase() + exp.category.slice(1)) : 'Expenses';
-                                if (!categoriesMap[cat]) categoriesMap[cat] = { collected: 0, txns: 0 };
-                                categoriesMap[cat].collected += Number(exp.vat_amount);
-                                categoriesMap[cat].txns += 1;
-                              });
-                              Object.entries(categoriesMap).forEach(([category, val]) => {
-                                breakdownRows.push({ category, collected: val.collected, txns: val.txns });
-                              });
-                            }
 
-                            if (breakdownRows.length === 0) {
+                          <div className='border border-grey-10 rounded-xl overflow-hidden shadow-sm'>
+                            <div className='grid grid-cols-3 bg-primary-40 text-white text-xs px-4 py-3 font-medium'>
+                              <span>Category / Client</span>
+                              <span>VAT Amount</span>
+                              <span>Transactions</span>
+                            </div>
+                            {/* Map grouped breakdown */}
+                            {(() => {
+                              const outputList = breakdownData.output_vat || [];
+                              const inputList = breakdownData.input_vat || [];
+                              const breakdownRows: Array<{ category: string; collected: number; txns: number }> = [];
+                              
+                              if (vatTab === 'output') {
+                                const categoriesMap: Record<string, { collected: number; txns: number }> = {};
+                                outputList.forEach((inv: any) => {
+                                  const cat = inv.client_name || 'Sales';
+                                  if (!categoriesMap[cat]) categoriesMap[cat] = { collected: 0, txns: 0 };
+                                  categoriesMap[cat].collected += Number(inv.vat_total);
+                                  categoriesMap[cat].txns += 1;
+                                });
+                                Object.entries(categoriesMap).forEach(([category, val]) => {
+                                  breakdownRows.push({ category, collected: val.collected, txns: val.txns });
+                                });
+                              } else {
+                                const categoriesMap: Record<string, { collected: number; txns: number }> = {};
+                                inputList.forEach((exp: any) => {
+                                  const cat = exp.category ? (exp.category.charAt(0).toUpperCase() + exp.category.slice(1)) : 'Expenses';
+                                  if (!categoriesMap[cat]) categoriesMap[cat] = { collected: 0, txns: 0 };
+                                  categoriesMap[cat].collected += Number(exp.vat_amount);
+                                  categoriesMap[cat].txns += 1;
+                                });
+                                Object.entries(categoriesMap).forEach(([category, val]) => {
+                                  breakdownRows.push({ category, collected: val.collected, txns: val.txns });
+                                });
+                              }
+
+                              const totalOutputVat = outputList.reduce((sum: number, inv: any) => sum + Number(inv.vat_total || 0), 0);
+                              const totalInputVat = inputList.reduce((sum: number, exp: any) => sum + Number(exp.vat_amount || 0), 0);
+                              const netVatPayableValue = Math.max(0, totalOutputVat - totalInputVat);
+                              const totalOutputTxns = outputList.length;
+                              const totalInputTxns = inputList.length;
+
                               return (
-                                <div className='py-6 text-center text-xs text-secondary-30 bg-primary-50/10'>
-                                  No transactions with VAT tracked in this period.
-                                </div>
+                                <>
+                                  {breakdownRows.length === 0 ? (
+                                    <div className='py-6 text-center text-xs text-secondary-30 bg-primary-50/10'>
+                                      No transactions with VAT tracked in this period.
+                                    </div>
+                                  ) : (
+                                    breakdownRows.map((row, idx) => (
+                                      <div key={idx} className={`grid grid-cols-3 px-4 py-3 text-sm border-b border-grey-10/40 bg-white`}>
+                                        <span className='text-secondary-10 font-medium'>{row.category}</span>
+                                        <span className='text-secondary-10 font-semibold'>{formatNaira(row.collected)}</span>
+                                        <span className='text-secondary-30'>{row.txns}</span>
+                                      </div>
+                                    ))
+                                  )}
+                                  
+                                  {/* Summary Rows matching designer mockup */}
+                                  <div className='border-t border-grey-10/80 bg-grey-10/5 font-semibold shrink-0'>
+                                    <div className='grid grid-cols-3 px-4 py-2.5 text-xs text-secondary-20 border-b border-grey-10/40 items-center'>
+                                      <span>Output Total</span>
+                                      <span className='text-secondary-10 font-bold'>{formatNaira(totalOutputVat)}</span>
+                                      <span className='text-secondary-30'>{totalOutputTxns}</span>
+                                    </div>
+                                    <div className='grid grid-cols-3 px-4 py-2.5 text-xs text-secondary-20 border-b border-grey-10/40 items-center'>
+                                      <span>Input VAT Paid</span>
+                                      <span className='text-secondary-10 font-bold'>{formatNaira(totalInputVat)}</span>
+                                      <span className='text-secondary-30'>{totalInputTxns}</span>
+                                    </div>
+                                    <div className='grid grid-cols-3 px-4 py-3 text-sm font-bold bg-primary-50/20 text-primary-30 items-center'>
+                                      <span className='text-secondary-10'>Net VAT Payable</span>
+                                      <span className='col-span-2 text-primary-30 text-base'>{formatNaira(netVatPayableValue)}</span>
+                                    </div>
+                                  </div>
+                                </>
                               );
-                            }
-
-                            return breakdownRows.map((row, idx) => (
-                              <div key={idx} className={`grid grid-cols-3 px-4 py-3 text-sm border-b border-grey-10/40 bg-white`}>
-                                <span className='text-secondary-10 font-medium'>{row.category}</span>
-                                <span className='text-secondary-10 font-semibold'>{formatNaira(row.collected)}</span>
-                                <span className='text-secondary-30'>{row.txns}</span>
-                              </div>
-                            ));
-                          })()}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Render WHT Breakdown */}
-                    {selectedObligation.tax_type.toLowerCase() === 'wht' && (
-                      <div className='space-y-4 animate-fadeIn'>
-                        <div className='border border-grey-10 rounded-xl overflow-hidden shadow-sm'>
-                          <div className='grid grid-cols-4 bg-primary-40 text-white text-xs px-4 py-3 font-medium'>
-                            <span>Vendor / Item</span>
-                            <span>Date</span>
-                            <span>Gross Amount</span>
-                            <span>WHT Withheld</span>
+                            })()}
                           </div>
-                          {(() => {
-                            const bills = breakdownData.wht_bills || [];
-                            const expenses = breakdownData.wht_expenses || [];
-                            const whtItems = [
-                              ...bills.map((b: any) => ({
-                                name: b.vendor_name,
-                                date: b.date,
-                                amount: b.amount,
-                                wht: b.wht_amount,
-                              })),
-                              ...expenses.map((e: any) => ({
-                                name: e.vendor_name || 'General Expense',
-                                date: e.date,
-                                amount: e.amount,
-                                wht: e.wht_amount,
-                              })),
-                            ];
+                        </div>
+                      )}
 
-                            if (whtItems.length === 0) {
-                              return (
-                                <div className='py-6 text-center text-xs text-secondary-30 bg-primary-50/10'>
-                                  No withholding transactions recorded for this period.
+                      {/* Render WHT Breakdown */}
+                      {selectedObligation.tax_type.toLowerCase() === 'wht' && (
+                        <div className='space-y-4 animate-fadeIn'>
+                          <div className='border border-grey-10 rounded-xl overflow-hidden shadow-sm'>
+                            <div className='grid grid-cols-4 bg-primary-40 text-white text-xs px-4 py-3 font-medium'>
+                              <span>Vendor / Item</span>
+                              <span>Date</span>
+                              <span>Gross Amount</span>
+                              <span>WHT Withheld</span>
+                            </div>
+                            {(() => {
+                              const bills = breakdownData.wht_bills || [];
+                              const expenses = breakdownData.wht_expenses || [];
+                              const whtItems = [
+                                ...bills.map((b: any) => ({
+                                  name: b.vendor_name,
+                                  date: b.date,
+                                  amount: b.amount,
+                                  wht: b.wht_amount,
+                                })),
+                                ...expenses.map((e: any) => ({
+                                  name: e.vendor_name || 'General Expense',
+                                  date: e.date,
+                                  amount: e.amount,
+                                  wht: e.wht_amount,
+                                })),
+                              ];
+
+                              if (whtItems.length === 0) {
+                                return (
+                                  <div className='py-6 text-center text-xs text-secondary-30 bg-primary-50/10'>
+                                    No withholding transactions recorded for this period.
+                                  </div>
+                                );
+                              }
+
+                              return whtItems.map((item, idx) => (
+                                <div key={idx} className='grid grid-cols-4 px-4 py-3 text-sm border-b border-grey-10/40 bg-white items-center'>
+                                  <span className='text-secondary-10 font-medium truncate'>{item.name}</span>
+                                  <span className='text-secondary-30 text-xs'>{new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+                                  <span className='text-secondary-30'>{formatNaira(item.amount)}</span>
+                                  <span className='text-primary-30 font-semibold'>{formatNaira(item.wht)}</span>
                                 </div>
-                              );
-                            }
-
-                            return whtItems.map((item, idx) => (
-                              <div key={idx} className='grid grid-cols-4 px-4 py-3 text-sm border-b border-grey-10/40 bg-white items-center'>
-                                <span className='text-secondary-10 font-medium truncate'>{item.name}</span>
-                                <span className='text-secondary-30 text-xs'>{new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
-                                <span className='text-secondary-30'>{formatNaira(item.amount)}</span>
-                                <span className='text-primary-30 font-semibold'>{formatNaira(item.wht)}</span>
-                              </div>
-                            ));
-                          })()}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Render PAYE Breakdown */}
-                    {selectedObligation.tax_type.toLowerCase() === 'paye' && (
-                      <div className='space-y-4 animate-fadeIn'>
-                        <div className='border border-grey-10 rounded-xl overflow-hidden shadow-sm'>
-                          <div className='grid grid-cols-4 bg-primary-40 text-white text-xs px-4 py-3 font-medium'>
-                            <span>Employee</span>
-                            <span>Gross Pay</span>
-                            <span>Pension (EE)</span>
-                            <span>PAYE Deducted</span>
+                              ));
+                            })()}
                           </div>
-                          {(() => {
-                            const payments = breakdownData.payments || [];
-                            if (payments.length === 0) {
-                              return (
-                                <div className='py-6 text-center text-xs text-secondary-30 bg-primary-50/10'>
-                                  No payroll records generated in this period.
+                        </div>
+                      )}
+
+                      {/* Render PAYE Breakdown */}
+                      {selectedObligation.tax_type.toLowerCase() === 'paye' && (
+                        <div className='space-y-4 animate-fadeIn'>
+                          <div className='border border-grey-10 rounded-xl overflow-hidden shadow-sm'>
+                            <div className='grid grid-cols-4 bg-primary-40 text-white text-xs px-4 py-3 font-medium'>
+                              <span>Employee</span>
+                              <span>Gross Pay</span>
+                              <span>Pension (EE)</span>
+                              <span>PAYE Deducted</span>
+                            </div>
+                            {(() => {
+                              const payments = breakdownData.payments || [];
+                              if (payments.length === 0) {
+                                return (
+                                  <div className='py-6 text-center text-xs text-secondary-30 bg-primary-50/10'>
+                                    No payroll records generated in this period.
+                                  </div>
+                                );
+                              }
+                              return payments.map((p: any, idx: number) => (
+                                <div key={idx} className='grid grid-cols-4 px-4 py-3 text-sm border-b border-grey-10/40 bg-white items-center'>
+                                  <span className='text-secondary-10 font-medium'>{p.employee_name}</span>
+                                  <span className='text-secondary-30'>{formatNaira(p.gross_salary)}</span>
+                                  <span className='text-secondary-30'>{formatNaira(p.pension_employee)}</span>
+                                  <span className='text-primary-30 font-semibold'>{p.is_paye_exempt ? 'EXEMPT' : formatNaira(p.paye_deducted)}</span>
                                 </div>
-                              );
-                            }
-                            return payments.map((p: any, idx: number) => (
-                              <div key={idx} className='grid grid-cols-4 px-4 py-3 text-sm border-b border-grey-10/40 bg-white items-center'>
-                                <span className='text-secondary-10 font-medium'>{p.employee_name}</span>
-                                <span className='text-secondary-30'>{formatNaira(p.gross_salary)}</span>
-                                <span className='text-secondary-30'>{formatNaira(p.pension_employee)}</span>
-                                <span className='text-primary-30 font-semibold'>{p.is_paye_exempt ? 'EXEMPT' : formatNaira(p.paye_deducted)}</span>
-                              </div>
-                            ));
-                          })()}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Render CIT Breakdown */}
-                    {selectedObligation.tax_type.toLowerCase() === 'cit' && (
-                      <div className='space-y-4 animate-fadeIn text-secondary-10'>
-                        <div className='grid grid-cols-2 gap-4'>
-                          <div className='p-4 bg-primary-50/30 border border-grey-10 rounded-xl'>
-                            <p className='text-xs text-secondary-30 font-medium uppercase'>Annual Revenue</p>
-                            <p className='text-xl font-bold mt-1'>{formatNaira(breakdownData.annual_revenue || 0)}</p>
-                          </div>
-                          <div className='p-4 bg-primary-50/30 border border-grey-10 rounded-xl'>
-                            <p className='text-xs text-secondary-30 font-medium uppercase'>Annual Expenses</p>
-                            <p className='text-xl font-bold mt-1 text-danger'>{formatNaira(breakdownData.annual_expenses || 0)}</p>
+                              ));
+                            })()}
                           </div>
                         </div>
+                      )}
 
-                        <div className='border border-grey-10 rounded-xl p-4 bg-white space-y-3 shadow-sm'>
-                          <div className='flex justify-between text-sm'>
-                            <span className='text-secondary-30'>Estimated Net Profit</span>
-                            <span className='font-semibold'>{formatNaira((breakdownData.annual_revenue || 0) - (breakdownData.annual_expenses || 0))}</span>
+                      {/* Render CIT Breakdown */}
+                      {selectedObligation.tax_type.toLowerCase() === 'cit' && (
+                        <div className='space-y-4 animate-fadeIn text-secondary-10'>
+                          <div className='grid grid-cols-2 gap-4'>
+                            <div className='p-4 bg-primary-50/30 border border-grey-10 rounded-xl'>
+                              <p className='text-xs text-secondary-30 font-medium uppercase'>Annual Revenue</p>
+                              <p className='text-xl font-bold mt-1'>{formatNaira(breakdownData.annual_revenue || 0)}</p>
+                            </div>
+                            <div className='p-4 bg-primary-50/30 border border-grey-10 rounded-xl'>
+                              <p className='text-xs text-secondary-30 font-medium uppercase'>Annual Expenses</p>
+                              <p className='text-xl font-bold mt-1 text-danger'>{formatNaira(breakdownData.annual_expenses || 0)}</p>
+                            </div>
                           </div>
-                          <div className='flex justify-between text-sm'>
-                            <span className='text-secondary-30'>CIT Company Band</span>
-                            <span className='font-semibold text-primary-30 capitalize'>{breakdownData.band || 'Exempt'}</span>
+
+                          <div className='border border-grey-10 rounded-xl p-4 bg-white space-y-3 shadow-sm'>
+                            <div className='flex justify-between text-sm'>
+                              <span className='text-secondary-30'>Estimated Net Profit</span>
+                              <span className='font-semibold'>{formatNaira((breakdownData.annual_revenue || 0) - (breakdownData.annual_expenses || 0))}</span>
+                            </div>
+                            <div className='flex justify-between text-sm'>
+                              <span className='text-secondary-30'>CIT Company Band</span>
+                              <span className='font-semibold text-primary-30 capitalize'>{breakdownData.band || 'Exempt'}</span>
+                            </div>
+                            <div className='flex justify-between text-sm border-t border-grey-10/40 pt-2.5'>
+                              <span className='text-secondary-30'>Company Income Tax Estimate</span>
+                              <span className='font-semibold'>{formatNaira(breakdownData.cit_estimate || 0)}</span>
+                            </div>
+                            <div className='flex justify-between text-sm'>
+                              <span className='text-secondary-30'>Education Tax Estimate (3%)</span>
+                              <span className='font-semibold'>{formatNaira(breakdownData.education_tax || 0)}</span>
+                            </div>
+                            <div className='flex justify-between text-base font-bold border-t border-primary-10 pt-3 text-secondary-10'>
+                              <span>Total Estimated Due</span>
+                              <span className='text-primary-30'>{formatNaira(breakdownData.total_tax_estimate || 0)}</span>
+                            </div>
                           </div>
-                          <div className='flex justify-between text-sm border-t border-grey-10/40 pt-2.5'>
-                            <span className='text-secondary-30'>Company Income Tax Estimate</span>
-                            <span className='font-semibold'>{formatNaira(breakdownData.cit_estimate || 0)}</span>
-                          </div>
-                          <div className='flex justify-between text-sm'>
-                            <span className='text-secondary-30'>Education Tax Estimate (3%)</span>
-                            <span className='font-semibold'>{formatNaira(breakdownData.education_tax || 0)}</span>
-                          </div>
-                          <div className='flex justify-between text-base font-bold border-t border-primary-10 pt-3 text-secondary-10'>
-                            <span>Total Estimated Due</span>
-                            <span className='text-primary-30'>{formatNaira(breakdownData.total_tax_estimate || 0)}</span>
-                          </div>
+
+                          {breakdownData.notes && (
+                            <div className='p-4 bg-yellow-50 border border-yellow-200/60 rounded-xl flex gap-3 text-xs text-secondary-30 leading-relaxed shadow-sm'>
+                              <Icon icon='ph:warning' className='text-lg text-yellow-600 shrink-0 mt-0.5' />
+                              <p>{breakdownData.notes}</p>
+                            </div>
+                          )}
                         </div>
-
-                        {breakdownData.notes && (
-                          <div className='p-4 bg-yellow-50 border border-yellow-200/60 rounded-xl flex gap-3 text-xs text-secondary-30 leading-relaxed shadow-sm'>
-                            <Icon icon='ph:warning' className='text-lg text-yellow-600 shrink-0 mt-0.5' />
-                            <p>{breakdownData.notes}</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             ) : (
               <div className='py-20 text-center text-sm text-secondary-30 flex-1 flex flex-col justify-center items-center gap-2'>
@@ -963,17 +1026,22 @@ export default function TaxPage() {
                     <div className='h-3 bg-grey-10 rounded w-20' />
                   </div>
                 ))
-              ) : activeObligations.length === 0 ? (
+              ) : sortedObligations.length === 0 ? (
                 <p className='text-sm text-secondary-30 text-center py-4'>
-                  No active tax obligations found. Use settings to configure your business profile.
+                  No tax obligations found. Use settings to configure your business profile.
                 </p>
               ) : (
-                activeObligations.map((ob, i) => {
+                sortedObligations.map((ob, i) => {
                   const isSelected = selectedObligation?.id === ob.id;
                   return (
                     <div
                       key={ob.id ?? i}
-                      onClick={() => setSelectedObligation(ob)}
+                      onClick={() => {
+                        setSelectedObligation(ob);
+                        if (window.innerWidth < 1024) {
+                          breakdownRef.current?.scrollIntoView({ behavior: 'smooth' });
+                        }
+                      }}
                       className={`border rounded-xl p-4 hover:border-primary-20 cursor-pointer transition-colors shadow-sm relative group ${isSelected ? 'border-primary-30 bg-primary-50/20' : 'border-grey-10 bg-white'}`}
                     >
                     <div className='flex items-start justify-between gap-2 mb-2'>
@@ -982,7 +1050,7 @@ export default function TaxPage() {
                         <p className='text-xs text-secondary-30 mt-0.5'>{getObligationMeta(ob)}</p>
                       </div>
                       <span className={`text-[10px] px-2 py-1 rounded-full font-medium shrink-0 ${getObligationStatusClass(ob.status)}`}>
-                        {getFilingStatusLabel(ob.status)}
+                        {getObligationStatusLabel(ob.status)}
                       </span>
                     </div>
                     <div className='flex items-baseline justify-between mb-1'>
@@ -1044,7 +1112,10 @@ export default function TaxPage() {
                 onClick={() => setActiveFilingTab(t)}
                 className={`px-4 py-1.5 rounded-full text-sm transition-colors ${activeFilingTab === t ? 'bg-primary-30 text-white font-medium' : 'border border-grey-10 text-secondary-10 hover:bg-primary-50'}`}
               >
-                {t}
+                {(() => {
+                  const count = tabCounts[t.toUpperCase()] ?? tabCounts[t];
+                  return count && count > 0 ? `${t} (${count})` : t;
+                })()}
               </button>
             ))}
           </div>
