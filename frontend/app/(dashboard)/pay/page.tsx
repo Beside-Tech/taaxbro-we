@@ -48,6 +48,7 @@ export default function PayPage() {
 
   const [accounts, setAccounts] = useState<any[]>([]);
   const [accountsLoading, setAccountsLoading] = useState(true);
+  const [prevMonthName, setPrevMonthName] = useState('last month');
 
   useEffect(() => {
     dashboard
@@ -64,6 +65,10 @@ export default function PayPage() {
         .catch((e) => console.error('Failed to load accounts:', e))
         .finally(() => setAccountsLoading(false));
     }
+
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    setPrevMonthName(d.toLocaleString('en-US', { month: 'long' }));
   }, [user]);
 
   const handleDisconnect = async (accountId: string) => {
@@ -95,10 +100,14 @@ export default function PayPage() {
       value: formatNaira(totalReceived),
       footer: {
         text: stats?.revenue_change_pct != null 
-          ? `${Math.abs(stats.revenue_change_pct)}% vs last month`
-          : '18% vs April',
-        icon: stats?.revenue_change_pct != null && stats.revenue_change_pct >= 0 ? 'ph:trend-up' : 'ph:trend-down',
-        className: stats?.revenue_change_pct != null && stats.revenue_change_pct >= 0 ? 'text-success' : 'text-danger',
+          ? `${Math.abs(stats.revenue_change_pct)}% vs ${prevMonthName}`
+          : `—% vs ${prevMonthName}`,
+        icon: stats?.revenue_change_pct != null 
+          ? (stats.revenue_change_pct >= 0 ? 'ph:trend-up' : 'ph:trend-down') 
+          : 'ph:minus',
+        className: stats?.revenue_change_pct != null 
+          ? (stats.revenue_change_pct >= 0 ? 'text-success' : 'text-danger') 
+          : 'text-secondary-30',
       },
       border: 'border-success',
       value_color: 'text-success',
@@ -107,9 +116,15 @@ export default function PayPage() {
       label: 'Total Sent',
       value: formatNaira(totalSent),
       footer: {
-        text: '6% vs April',
-        icon: 'ph:trend-up',
-        className: 'text-danger',
+        text: stats?.expenses_change_pct != null 
+          ? `${Math.abs(stats.expenses_change_pct)}% vs ${prevMonthName}`
+          : `—% vs ${prevMonthName}`,
+        icon: stats?.expenses_change_pct != null 
+          ? (stats.expenses_change_pct >= 0 ? 'ph:trend-up' : 'ph:trend-down') 
+          : 'ph:minus',
+        className: stats?.expenses_change_pct != null 
+          ? (stats.expenses_change_pct >= 0 ? 'text-danger' : 'text-success') 
+          : 'text-secondary-30',
       },
       border: 'border-danger',
       value_color: 'text-danger',
@@ -126,6 +141,7 @@ export default function PayPage() {
       value_color: 'text-primary-30',
     },
   ];
+
 
   const tabs = [
     { id: 'all', label: `All (${recentTransactions.length})` },
