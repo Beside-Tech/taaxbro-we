@@ -783,6 +783,12 @@ export interface TaxRateRuleResponse {
   notes: string | null;
 }
 
+export interface TaxProfileSettings {
+  cit_applicable: boolean;
+  pit_applicable: boolean;
+  fiscal_year_end: string; // "MM-DD"
+}
+
 export const tax = {
   getFilings(businessId: string): Promise<TaxFilingResponse[]> {
     return request<TaxFilingResponse[]>(`/api/v1/tax/filings?business_id=${businessId}`);
@@ -843,5 +849,14 @@ export const tax = {
     if (end) params.append('end', end);
     const query = params.toString();
     return requestBlob(`/api/v1/ai/export/${exportType}${query ? `?${query}` : ''}`);
+  },
+  getTaxProfile(): Promise<TaxProfileSettings> {
+    return request<TaxProfileSettings>('/api/v1/tax/profile');
+  },
+  updateTaxProfile(data: Partial<TaxProfileSettings>): Promise<TaxProfileSettings> {
+    return request<TaxProfileSettings>('/api/v1/tax/profile', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
   },
 };

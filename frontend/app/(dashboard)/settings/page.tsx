@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Icon } from '@iconify/react';
 import TopBar from '@/components/dashboard/TopBar';
 import { useAuth } from '@/context/AuthContext';
-import { business, onboarding, ApiError, integrations, auth, type BusinessProfile, type OnboardingPayload, type WhatsAppSettings, type UserSessionInfo } from '@/lib/api';
+import { business, onboarding, ApiError, integrations, auth, tax, type BusinessProfile, type OnboardingPayload, type WhatsAppSettings, type UserSessionInfo, type TaxProfileSettings } from '@/lib/api';
 
 const NIGERIAN_STATES = [
   'Abia', 'Adamawa', 'Akwa Ibom', 'Anambra', 'Bauchi', 'Bayelsa', 'Benue', 'Borno',
@@ -44,6 +44,16 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Tax profile state (CIT / PIT / Fiscal Year)
+  const [taxProfileForm, setTaxProfileForm] = useState<TaxProfileSettings>({
+    cit_applicable: false,
+    pit_applicable: false,
+    fiscal_year_end: '12-31',
+  });
+  const [taxProfileSaving, setTaxProfileSaving] = useState(false);
+  const [taxProfileSuccess, setTaxProfileSuccess] = useState(false);
+  const [taxProfileError, setTaxProfileError] = useState<string | null>(null);
   
   // Logo upload state
   const [logoUploading, setLogoUploading] = useState(false);
@@ -130,6 +140,13 @@ export default function SettingsPage() {
           bank_name: data.bank_name ?? '',
           account_number: data.account_number ?? '',
           account_name: data.account_name ?? '',
+        });
+
+        // Pre-populate tax profile toggles from BusinessProfile (already joined server-side)
+        setTaxProfileForm({
+          cit_applicable: data.cit_applicable ?? false,
+          pit_applicable: data.pit_applicable ?? false,
+          fiscal_year_end: data.fiscal_year_end ?? '12-31',
         });
 
         if (data.business_id) {
@@ -220,6 +237,27 @@ export default function SettingsPage() {
       setError(err instanceof ApiError ? err.message : 'Failed to update settings. Please try again.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Save Tax Profile (CIT / PIT / Fiscal Year)
+  const handleSaveTaxProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setTaxProfileSaving(true);
+    setTaxProfileError(null);
+    setTaxProfileSuccess(false);
+    try {
+      const updated = await tax.updateTaxProfile(taxProfileForm);
+      setTaxProfileForm(updated);
+      // Also refresh the BusinessProfile cache so the tax page sees the new values
+      const refreshed = await business.getProfile();
+      setProfile(refreshed);
+      setTaxProfileSuccess(true);
+      setTimeout(() => setTaxProfileSuccess(false), 3000);
+    } catch (err: any) {
+      setTaxProfileError(err instanceof ApiError ? err.message : 'Failed to save tax profile settings.');
+    } finally {
+      setTaxProfileSaving(false);
     }
   };
 
@@ -885,8 +923,136 @@ export default function SettingsPage() {
                       </label>
                     )}
                   </div>
+
+                  {/* ── Income Tax & Financial Year ─────────────────────────────── */}
+                  <div className='pt-2 border-t border-grey-10 space-y-5'>
+                    <div>
+                      <h3 className='font-bold text-base text-secondary-10 mb-0.5'>Income Tax & Financial Year</h3>
+                      <p className='text-xs text-secondary-30'>
+                        Your income tax type is automatically determined by your registered business structure. Only your financial year end requires configuration.
+                      </p>
+                    </div>
+
+                    {/* Auto-derived tax type status card */}
+                    {(() => {
+                      const isCIT = form.business_type === 'limited_liability';
+                      const isPIT = ['sole_proprietorship', 'partnership'].includes(form.business_type) || form.user_type === 'freelancer';
+                      const taxLabel = isCIT ? 'CIT — Company Income Tax' : isPIT ? 'PIT — Personal Income Tax' : 'No Income Tax Obligation';
+                      const taxDesc = isCIT
+                        ? '30% of annual net profit, filed with FIRS 6 months after financial year end.'
+                        : isPIT
+                        ? 'Progressive rate on personal income. Annual self-assessment with FIRS.'
+                        : 'Your current business type does not trigger a standard income tax obligation.';
+                      const taxIcon = isCIT ? 'ph:buildings' : isPIT ? 'ph:user' : 'ph:minus-circle';
+                      const tagColor = isCIT
+                        ? 'bg-violet-50 text-violet-700 border-violet-200'
+                        : isPIT
+                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                        : 'bg-grey-0 text-secondary-30 border-grey-10';
+
+                      return (
+                        <div className='p-5 rounded-2xl border border-grey-10 bg-[#fafafa] flex items-start gap-4'>
+                          <div className={`mt-0.5 w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${tagColor}`}>
+                            <Icon icon={taxIcon} className='text-lg' />
+                          </div>
+                          <div className='flex-1 min-w-0'>
+                            <div className='flex items-center gap-2 flex-wrap'>
+                              <span className='text-sm font-bold text-secondary-10'>{taxLabel}</span>
+                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${tagColor}`}>
+                                Auto-detected
+                              </span>
+                            </div>
+                            <p className='text-xs text-secondary-30 mt-1 leading-relaxed'>{taxDesc}</p>
+                            <p className='text-[10px] text-secondary-40 mt-2'>
+                              To change your income tax type, update your <strong>Business Type</strong> in the Business Profile tab.
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Financial Year End — the only real config choice */}
+                    <form onSubmit={handleSaveTaxProfile} className='space-y-4'>
+                      <div className='p-5 rounded-2xl border border-grey-10 bg-[#fafafa] space-y-4'>
+                        <div>
+                          <h4 className='font-bold text-sm text-secondary-10'>Financial Year End</h4>
+                          <p className='text-xs text-secondary-30 mt-0.5 leading-relaxed'>
+                            When does your accounting year close? This determines your CIT due date (6 months after year-end). Most Nigerian businesses use <strong>Dec 31</strong>.
+                          </p>
+                        </div>
+                        <div className='grid grid-cols-2 sm:grid-cols-4 gap-3'>
+                          {[
+                            { label: 'Dec 31', sub: 'Most common', value: '12-31' },
+                            { label: 'Mar 31', sub: 'Apr–Mar FY', value: '03-31' },
+                            { label: 'Jun 30', sub: 'Jul–Jun FY', value: '06-30' },
+                            { label: 'Sep 30', sub: 'Oct–Sep FY', value: '09-30' },
+                          ].map((opt) => {
+                            const isSelected = taxProfileForm.fiscal_year_end === opt.value;
+                            return (
+                              <button
+                                key={opt.value}
+                                type='button'
+                                onClick={() => setTaxProfileForm({ ...taxProfileForm, fiscal_year_end: opt.value })}
+                                className={`py-3 px-2 rounded-xl border text-center transition-all flex flex-col items-center gap-0.5 ${
+                                  isSelected
+                                    ? 'border-primary-30 bg-primary-50 shadow-sm'
+                                    : 'border-grey-10 bg-white hover:border-primary-20'
+                                }`}
+                              >
+                                <span className={`text-sm font-bold ${isSelected ? 'text-primary-30' : 'text-secondary-10'}`}>{opt.label}</span>
+                                <span className={`text-[10px] font-medium ${isSelected ? 'text-primary-30/70' : 'text-secondary-40'}`}>{opt.sub}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* CIT due date preview */}
+                        {(() => {
+                          const fyEnd = taxProfileForm.fiscal_year_end;
+                          const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                          const [mm] = fyEnd.split('-').map(Number);
+                          if (!mm) return null;
+                          const dueMonth = mm + 6 > 12 ? mm + 6 - 12 : mm + 6;
+                          const dueMonthName = monthNames[dueMonth - 1];
+                          return (
+                            <p className='text-xs text-secondary-30 flex items-center gap-1.5 pt-1 border-t border-grey-10/60'>
+                              <Icon icon='ph:calendar-check' className='text-primary-30' />
+                              CIT annual filing would be due each <strong className='text-secondary-20'>{dueMonthName} 30</strong>, six months after your year-end.
+                            </p>
+                          );
+                        })()}
+                      </div>
+
+                      {taxProfileError && (
+                        <div className='px-4 py-3 rounded-2xl bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2'>
+                          <Icon icon='ph:warning-circle' className='text-lg shrink-0' />
+                          {taxProfileError}
+                        </div>
+                      )}
+                      {taxProfileSuccess && (
+                        <div className='px-4 py-3 rounded-2xl bg-green-50 border border-green-200 text-sm text-green-700 flex items-center gap-2'>
+                          <Icon icon='ph:check-circle' className='text-lg shrink-0' />
+                          Financial year saved! CIT due dates have been updated.
+                        </div>
+                      )}
+
+                      <button
+                        type='submit'
+                        disabled={taxProfileSaving}
+                        className='flex items-center gap-2 px-6 py-3 rounded-full bg-primary-30 text-white text-sm font-bold hover:bg-primary-40 transition-all shadow-sm disabled:opacity-60'
+                      >
+                        {taxProfileSaving ? (
+                          <Icon icon='ph:circle-notch' className='animate-spin text-base' />
+                        ) : (
+                          <Icon icon='ph:floppy-disk' className='text-base' />
+                        )}
+                        {taxProfileSaving ? 'Saving...' : 'Save Financial Year'}
+                      </button>
+                    </form>
+                  </div>
                 </div>
               )}
+
 
               {/* TAB 3: INVOICES & BANKING */}
               {activeTab === 'invoicing' && (
