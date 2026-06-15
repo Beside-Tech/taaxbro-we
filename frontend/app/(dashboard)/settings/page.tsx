@@ -53,6 +53,7 @@ export default function SettingsPage() {
   });
   const [customMonth, setCustomMonth] = useState('12');
   const [customDay, setCustomDay] = useState('31');
+  const [isCustomActive, setIsCustomActive] = useState(false);
   
   // Logo upload state
   const [logoUploading, setLogoUploading] = useState(false);
@@ -152,6 +153,8 @@ export default function SettingsPage() {
           setCustomMonth(parts[0]);
           setCustomDay(parts[1]);
         }
+        const presets = ['12-31', '03-31', '06-30', '09-30'];
+        setIsCustomActive(!presets.includes(fy));
 
         if (data.business_id) {
           setWaLoading(true);
@@ -965,7 +968,6 @@ export default function SettingsPage() {
                         { label: 'Jun 30', sub: 'Jul–Jun FY', value: '06-30' },
                         { label: 'Sep 30', sub: 'Oct–Sep FY', value: '09-30' },
                       ];
-                      const isPreset = presets.some(p => p.value === fyEnd);
 
                       return (
                         <div className='p-5 rounded-2xl border border-grey-10 bg-[#fafafa] space-y-4 animate-fade-in'>
@@ -978,12 +980,15 @@ export default function SettingsPage() {
                           
                           <div className='grid grid-cols-2 sm:grid-cols-5 gap-3'>
                             {presets.map((opt) => {
-                              const isSelected = fyEnd === opt.value;
+                              const isSelected = fyEnd === opt.value && !isCustomActive;
                               return (
                                 <button
                                   key={opt.value}
                                   type='button'
-                                  onClick={() => setTaxProfileForm({ ...taxProfileForm, fiscal_year_end: opt.value })}
+                                  onClick={() => {
+                                    setTaxProfileForm({ ...taxProfileForm, fiscal_year_end: opt.value });
+                                    setIsCustomActive(false);
+                                  }}
                                   className={`py-3 px-2 rounded-xl border text-center transition-all flex flex-col items-center gap-0.5 ${
                                     isSelected
                                       ? 'border-primary-30 bg-primary-50 shadow-sm'
@@ -998,7 +1003,7 @@ export default function SettingsPage() {
 
                             {/* Custom Date selection button */}
                             {(() => {
-                              const isSelected = !isPreset;
+                              const isSelected = isCustomActive;
                               let displayLabel = 'Custom Date';
                               if (isSelected) {
                                 const [mm, dd] = fyEnd.split('-');
@@ -1014,7 +1019,10 @@ export default function SettingsPage() {
                               return (
                                 <button
                                   type='button'
-                                  onClick={() => setTaxProfileForm({ ...taxProfileForm, fiscal_year_end: `${customMonth}-${customDay}` })}
+                                  onClick={() => {
+                                    setIsCustomActive(true);
+                                    setTaxProfileForm({ ...taxProfileForm, fiscal_year_end: `${customMonth}-${customDay}` });
+                                  }}
                                   className={`py-3 px-2 rounded-xl border text-center transition-all flex flex-col items-center gap-0.5 ${
                                     isSelected
                                       ? 'border-primary-30 bg-primary-50 shadow-sm'
@@ -1031,7 +1039,7 @@ export default function SettingsPage() {
                           </div>
 
                           {/* Custom date selectors */}
-                          {!isPreset && (
+                          {isCustomActive && (
                             <div className='flex gap-3 items-center animate-fade-in bg-white p-4 rounded-xl border border-grey-10 mt-3 max-w-sm'>
                               <label className='flex-1 flex flex-col gap-1 text-xs font-semibold text-secondary-20'>
                                 Month
