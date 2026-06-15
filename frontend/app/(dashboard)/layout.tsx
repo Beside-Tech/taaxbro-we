@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from '@/components/dashboard/Sidebar';
+import NotificationDropdown from '@/components/dashboard/NotificationDropdown';
 import ChatButton from '@/components/ChatButton';
 import { useAuth } from '@/context/AuthContext';
 import { useIdleTimeout } from '@/hooks/useIdleTimeout';
@@ -94,9 +95,7 @@ export default function DashboardLayout({
         </div>
 
         <div className='flex items-center gap-2'>
-          <button className='w-9 h-9 flex items-center justify-center rounded-full border border-grey-10 hover:bg-primary-50 transition-colors shrink-0'>
-            <Icon icon='ph:bell' className='text-lg text-secondary-10' />
-          </button>
+          <NotificationDropdown />
           <div className='flex items-center gap-2 border border-grey-10 rounded-full pl-1 pr-3 py-1 max-w-[120px] sm:max-w-xs'>
             <div className='w-7 h-7 rounded-full bg-secondary-40 overflow-hidden flex items-center justify-center shrink-0'>
               <Icon icon='ph:user-fill' className='text-white text-xs' />

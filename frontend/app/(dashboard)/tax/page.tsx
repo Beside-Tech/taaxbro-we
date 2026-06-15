@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { Icon } from '@iconify/react';
 import TopBar from '@/components/dashboard/TopBar';
 import Link from 'next/link';
@@ -38,6 +38,19 @@ export default function TaxPage() {
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const infoDismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showInfoMessage = useCallback((msg: string) => {
+    setInfoMessage(msg);
+    if (infoDismissTimer.current) clearTimeout(infoDismissTimer.current);
+    infoDismissTimer.current = setTimeout(() => setInfoMessage(null), 30000);
+  }, []);
+
+  const dismissInfoMessage = useCallback(() => {
+    setInfoMessage(null);
+    if (infoDismissTimer.current) clearTimeout(infoDismissTimer.current);
+  }, []);
 
   const [filingsList, setFilingsList] = useState<TaxFilingResponse[]>([]);
   const [filingsLoading, setFilingsLoading] = useState(false);
@@ -114,10 +127,22 @@ export default function TaxPage() {
       .catch((e) => console.error('Failed to load law updates:', e));
   }, [profile?.business_id]);
 
+  const getTaxAuditDescription = (type: string): string => {
+    const t = type.toLowerCase();
+    if (t === 'vat') return 'VAT output/input figures';
+    if (t === 'wht') return 'Withholding Tax (WHT) liabilities';
+    if (t === 'cit') return 'Company Income Tax (CIT) return';
+    if (t === 'paye') return 'PAYE payroll deductions';
+    return `${type.toUpperCase()} obligations`;
+  };
+
   const handleRecalculate = async (taxType: string) => {
     if (!profile?.business_id) return;
     const typeLower = taxType.toLowerCase();
     setRecalculating(prev => ({ ...prev, [typeLower]: true }));
+    showInfoMessage(
+      `Elon is currently working your books for you — your ${getTaxAuditDescription(taxType)} are being audited in the background. Please feel free to continue with your other activities. You will be notified via WhatsApp (if connected) or your in-app notification center as soon as the review is complete.`
+    );
     try {
       await tax.triggerCompute(profile.business_id, typeLower);
       
@@ -196,6 +221,9 @@ export default function TaxPage() {
   const handleRecalculateAll = async () => {
     if (!profile?.business_id) return;
     setRecalculatingAll(true);
+    showInfoMessage(
+      "Elon is currently working your books for you — a full audit of all your tax obligations has been queued and is running in the background. Please feel free to continue with your other activities. You will be notified via WhatsApp (if connected) or your in-app notification center as soon as the review is complete."
+    );
     
     // Filter down to only active tax types for this profile
     const allTypes = ['vat', 'paye', 'wht', 'cit'];
@@ -692,6 +720,38 @@ export default function TaxPage() {
           </div>
         )}
 
+        {/* Elon Audit Info Banner */}
+        {infoMessage && (
+          <div className='rounded-2xl border border-primary-10 bg-gradient-to-r from-primary-50 to-[#f0f7ff] text-sm text-secondary-10 shadow-sm overflow-hidden animate-fade-in'>
+            <div className='flex items-start justify-between gap-3 px-4 py-3.5'>
+              <div className='flex items-start gap-3'>
+                {/* Animated AI thinking indicator */}
+                <div className='relative mt-0.5 shrink-0'>
+                  <div className='w-8 h-8 rounded-full bg-primary-30/10 flex items-center justify-center'>
+                    <Icon icon='ph:robot' className='text-base text-primary-30' />
+                  </div>
+                  <span className='absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-primary-30 animate-pulse border-2 border-white' />
+                </div>
+                <div>
+                  <p className='font-semibold text-secondary-10 mb-0.5'>Elon is on it — sit back and relax</p>
+                  <p className='text-secondary-30 leading-relaxed'>{infoMessage}</p>
+                </div>
+              </div>
+              <button
+                onClick={dismissInfoMessage}
+                className='text-secondary-30 hover:text-secondary-10 transition-colors shrink-0 mt-0.5'
+                aria-label='Dismiss'
+              >
+                <Icon icon='ph:x' className='text-base' />
+              </button>
+            </div>
+            {/* Progress bar */}
+            <div className='h-0.5 bg-primary-10'>
+              <div className='h-full bg-primary-30/50 animate-[shrink_30s_linear_forwards]' style={{ width: '100%' }} />
+            </div>
+          </div>
+        )}
+
         {/* Stat cards */}
         <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4'>
           {loading
@@ -1178,7 +1238,7 @@ export default function TaxPage() {
             
             <div className='mt-auto pt-4 border-t border-grey-10 shrink-0'>
               <Link href='/settings' className='w-full py-3 block text-center rounded-full bg-primary-40 text-white text-sm font-medium hover:bg-primary-30 transition-colors shadow-sm'>
-                View Full List
+                Configure Obligations in Settings
               </Link>
             </div>
           </div>
