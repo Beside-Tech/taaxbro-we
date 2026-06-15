@@ -746,7 +746,7 @@ export default function TaxPage() {
 
         {/* Elon Audit Info Banner */}
         {infoMessage && (
-          <div className='rounded-2xl border border-primary-10 bg-gradient-to-r from-primary-50 to-[#f0f7ff] text-sm text-secondary-10 shadow-sm overflow-hidden animate-fade-in'>
+          <div className='fixed bottom-6 right-6 z-[9999] w-[calc(100%-3rem)] sm:w-[450px] md:w-[500px] rounded-2xl border border-primary-20 bg-gradient-to-r from-primary-50 to-[#f0f7ff] text-sm text-secondary-10 shadow-2xl overflow-hidden animate-fade-in'>
             <div className='flex items-start justify-between gap-3 px-4 py-3.5'>
               <div className='flex items-start gap-3'>
                 {/* Animated AI thinking indicator */}
