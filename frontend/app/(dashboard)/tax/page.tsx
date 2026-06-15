@@ -24,7 +24,7 @@ function formatFilingDate(iso: string | null): string {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
 }
 
-const filingTabs = ['All', 'VAT', 'WHT', 'CIT', 'LIRS'];
+const filingTabs = ['All', 'VAT', 'WHT', 'CIT', 'PAYE'];
 
 export default function TaxPage() {
   const breakdownRef = useRef<HTMLDivElement>(null);
@@ -186,8 +186,8 @@ export default function TaxPage() {
     filingsList.forEach((f) => {
       const type = f.tax_type.toUpperCase();
       counts[type] = (counts[type] || 0) + 1;
-      if (f.authority.toUpperCase() === 'LIRS') {
-        counts['LIRS'] = (counts['LIRS'] || 0) + 1;
+      if (type === 'PAYE' || f.authority.toUpperCase() === 'LIRS') {
+        counts['PAYE'] = (counts['PAYE'] || 0) + 1;
       }
     });
     return counts;
@@ -354,23 +354,90 @@ export default function TaxPage() {
     return 'bg-grey-50 text-grey-600 border border-grey-150 font-semibold px-2 py-0.5 text-xs';
   };
 
-  const getTaxTypeName = (type: string) => {
+  const renderStatusBadge = (status: string) => {
+    const s = status.toLowerCase();
+    let bgClass = '';
+    let textClass = '';
+    let borderClass = '';
+    let iconName = '';
+    let label = '';
+
+    if (s === 'awaiting_approval' || s === 'under_review') {
+      if (s === 'under_review') {
+        bgClass = 'bg-[#FEF2F2]';
+        textClass = 'text-[#EF4444]';
+        borderClass = 'border-[#FEE2E2]';
+        iconName = 'ph:warning-bold';
+        label = 'Under Review';
+      } else {
+        bgClass = 'bg-[#FFF4E5]';
+        textClass = 'text-[#F0861C]';
+        borderClass = 'border-[#FFE2BA]';
+        iconName = 'ph:clock-bold';
+        label = 'Awaiting Approval';
+      }
+    } else if (s === 'computed') {
+      bgClass = 'bg-[#F5EAFF]';
+      textClass = 'text-[#A855F7]';
+      borderClass = 'border-[#E9D5FF]';
+      iconName = 'ph:file-text-bold';
+      label = 'Filing Ready';
+    } else if (s === 'pending') {
+      bgClass = 'bg-[#EEF2FF]';
+      textClass = 'text-[#4F46E5]';
+      borderClass = 'border-[#C7D2FE]';
+      iconName = 'ph:chart-line-up-bold';
+      label = 'Accumulating';
+    } else if (s === 'filed' || s === 'confirmed') {
+      bgClass = 'bg-[#ECFDF5]';
+      textClass = 'text-[#10B981]';
+      borderClass = 'border-[#A7F3D0]';
+      iconName = 'ph:check-circle-bold';
+      label = 'Filed';
+    } else {
+      bgClass = 'bg-grey-50';
+      textClass = 'text-secondary-30';
+      borderClass = 'border-grey-10';
+      iconName = 'ph:info-bold';
+      label = status.charAt(0).toUpperCase() + status.slice(1);
+    }
+
+    return (
+      <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-semibold border ${bgClass} ${textClass} ${borderClass} shrink-0`}>
+        <Icon icon={iconName} className="text-xs shrink-0" />
+        {label}
+      </span>
+    );
+  };
+
+  const getTaxTypeName = (type: string, authority?: string) => {
     const t = type.toLowerCase();
     if (t === 'vat') return 'Value Added Tax (VAT)';
     if (t === 'wht') return 'Withholding Tax (WHT)';
     if (t === 'cit') return 'Company Income Tax (CIT)';
-    if (t === 'paye') return 'PAYE Income Tax';
+    if (t === 'paye') return `PAYE - Lagos State (${authority ?? 'LIRS'})`;
     return type.toUpperCase();
   };
 
   const getObligationMeta = (ob: TaxObligationResponse) => {
     const t = ob.tax_type.toLowerCase();
-    const formattedDue = formatFilingDate(ob.due_date);
-    if (t === 'vat') return `7.5% · Monthly · ${ob.authority} · Due ${formattedDue}`;
-    if (t === 'wht') return `At source · Monthly · ${ob.authority} · Due ${formattedDue}`;
-    if (t === 'cit') return `CIT Rate · Annual · ${ob.authority} · Due ${formattedDue}`;
-    if (t === 'paye') return `Monthly · ${ob.authority} · Due ${formattedDue}`;
-    return `${ob.authority} · Due ${formattedDue}`;
+    const isFiled = ob.status.toLowerCase() === 'filed' || ob.status.toLowerCase() === 'confirmed';
+    
+    // Find filing date if filed
+    let dateStr = '';
+    if (isFiled) {
+      const matchingFiling = filingsList.find(f => f.obligation_id === ob.id);
+      const filedDate = matchingFiling?.submitted_at || ob.computed_at || ob.due_date;
+      dateStr = `Filed ${formatFilingDate(filedDate)}`;
+    } else {
+      dateStr = `Due ${formatFilingDate(ob.due_date)}`;
+    }
+
+    if (t === 'vat') return `7.5% | Monthly | ${ob.authority} | ${dateStr}`;
+    if (t === 'wht') return `At source | Monthly | ${ob.authority} | ${dateStr}`;
+    if (t === 'cit') return `30% | Annual | ${dateStr}`;
+    if (t === 'paye') return `Monthly | ${ob.authority} | ${dateStr}`;
+    return `${ob.authority} | ${dateStr}`;
   };
 
   const getObligationStatusClass = (status: string) => {
@@ -410,7 +477,9 @@ export default function TaxPage() {
   const filteredHistory = filingsList.filter((f) => {
     const type = f.tax_type.toUpperCase();
     if (activeFilingTab === 'All') return true;
-    if (activeFilingTab === 'LIRS') return f.authority.toUpperCase() === 'LIRS';
+    if (activeFilingTab === 'PAYE') {
+      return type === 'PAYE' || f.authority.toUpperCase() === 'LIRS';
+    }
     return type === activeFilingTab.toUpperCase();
   });
 
@@ -694,16 +763,21 @@ export default function TaxPage() {
 
         <div className='grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-5'>
           {/* Breakdown Card */}
-          <div ref={breakdownRef} className='bg-white rounded-xl border border-grey-10/60 p-6 flex flex-col lg:sticky lg:top-[96px] lg:max-h-[calc(100vh-130px)] min-h-[400px] shadow-sm overflow-hidden'>
+          <div ref={breakdownRef} className='bg-white rounded-xl border border-grey-10/60 p-6 flex flex-col lg:sticky lg:top-[96px] lg:h-[calc(100vh-180px)] min-h-[550px] shadow-sm overflow-hidden'>
             {selectedObligation ? (
               <div className='flex flex-col flex-1 min-h-0'>
                 <div className='flex items-center justify-between mb-4 border-b border-grey-10 pb-3 shrink-0'>
                   <div>
-                    <h2 className='text-base font-semibold text-secondary-10'>{getTaxTypeName(selectedObligation.tax_type)} Breakdown</h2>
-                    <p className='text-xs text-secondary-30 mt-0.5'>{selectedObligation.authority} remittable ledger calculation</p>
+                    <h2 className='text-base font-semibold text-secondary-10'>
+                      {selectedObligation.tax_type.toUpperCase()} - {
+                        selectedObligation.tax_type.toLowerCase() === 'cit'
+                          ? String(new Date(selectedObligation.period_start).getFullYear())
+                          : new Date(selectedObligation.period_start).toLocaleDateString('en-US', { month: 'long' })
+                      } Breakdown
+                    </h2>
                   </div>
                   <Link href='/books' className='text-sm text-primary-30 hover:underline flex items-center gap-1 font-medium'>
-                    View Ledger <Icon icon='ph:arrow-right' />
+                    View Transactions <Icon icon='ph:arrow-right' />
                   </Link>
                 </div>
 
@@ -729,16 +803,16 @@ export default function TaxPage() {
                                 onClick={() => setVatTab(t)}
                                 className={`pb-2.5 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${vatTab === t ? 'border-primary-30 text-primary-30' : 'border-transparent text-secondary-30'}`}
                               >
-                                {t === 'input' ? 'Input VAT (Expenses)' : 'Output VAT (Sales)'}
+                                {t === 'input' ? 'Input VAT' : 'Output VAT'}
                               </button>
                             ))}
                           </div>
 
                           <div className='border border-grey-10 rounded-xl overflow-hidden shadow-sm'>
-                            <div className='grid grid-cols-3 bg-primary-40 text-white text-xs px-4 py-3 font-medium'>
-                              <span>Category / Client</span>
-                              <span>VAT Amount</span>
-                              <span>Transactions</span>
+                            <div className='grid grid-cols-3 bg-primary-40 text-white text-xs px-4 py-3 font-semibold'>
+                              <span>Category</span>
+                              <span>VAT Collected</span>
+                              <span className='text-right'>Transactions</span>
                             </div>
                             {/* Map grouped breakdown */}
                             {(() => {
@@ -787,7 +861,7 @@ export default function TaxPage() {
                                       <div key={idx} className={`grid grid-cols-3 px-4 py-3 text-sm border-b border-grey-10/40 bg-white`}>
                                         <span className='text-secondary-10 font-medium'>{row.category}</span>
                                         <span className='text-secondary-10 font-semibold'>{formatNaira(row.collected)}</span>
-                                        <span className='text-secondary-30'>{row.txns}</span>
+                                        <span className='text-secondary-30 text-right'>{row.txns}</span>
                                       </div>
                                     ))
                                   )}
@@ -797,16 +871,17 @@ export default function TaxPage() {
                                     <div className='grid grid-cols-3 px-4 py-2.5 text-xs text-secondary-20 border-b border-grey-10/40 items-center'>
                                       <span>Output Total</span>
                                       <span className='text-secondary-10 font-bold'>{formatNaira(totalOutputVat)}</span>
-                                      <span className='text-secondary-30'>{totalOutputTxns}</span>
+                                      <span className='text-secondary-30 text-right'>{totalOutputTxns}</span>
                                     </div>
                                     <div className='grid grid-cols-3 px-4 py-2.5 text-xs text-secondary-20 border-b border-grey-10/40 items-center'>
                                       <span>Input VAT Paid</span>
                                       <span className='text-secondary-10 font-bold'>{formatNaira(totalInputVat)}</span>
-                                      <span className='text-secondary-30'>{totalInputTxns}</span>
+                                      <span className='text-secondary-30 text-right'>{totalInputTxns}</span>
                                     </div>
-                                    <div className='grid grid-cols-3 px-4 py-3 text-sm font-bold bg-primary-50/20 text-primary-30 items-center'>
-                                      <span className='text-secondary-10'>Net VAT Payable</span>
-                                      <span className='col-span-2 text-primary-30 text-base'>{formatNaira(netVatPayableValue)}</span>
+                                    <div className='grid grid-cols-3 px-4 py-3 text-sm font-bold bg-primary-50/20 items-center'>
+                                      <span className='text-primary-30'>Net VAT Payable</span>
+                                      <span className='text-primary-30 text-base font-bold'>{formatNaira(netVatPayableValue)}</span>
+                                      <span></span>
                                     </div>
                                   </div>
                                 </>
@@ -960,7 +1035,7 @@ export default function TaxPage() {
                   <div className='flex items-center gap-4'>
                     {selectedObligation.tax_type.toLowerCase() === 'vat' && (
                       <button onClick={() => setShowEdit(true)} className='flex items-center gap-1.5 text-sm font-semibold text-secondary-30 hover:text-secondary-10 transition-colors'>
-                        <Icon icon='ph:pencil-simple' /> Adjust Values
+                        Edit Breakdown <Icon icon='ph:note-pencil' className='text-base' />
                       </button>
                     )}
                     <button 
@@ -968,7 +1043,7 @@ export default function TaxPage() {
                       disabled={selectedObligation.status.toLowerCase() === 'under_review' || selectedObligation.status.toLowerCase() === 'confirmed' || selectedObligation.status.toLowerCase() === 'filed'}
                       className='flex items-center gap-1.5 text-sm font-semibold text-secondary-30 hover:text-secondary-10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed'
                     >
-                      <Icon icon='ph:warning' /> Flag an Issue
+                      Flag an Issue <Icon icon='ph:warning' className='text-base' />
                     </button>
                   </div>
                 </div>
@@ -989,7 +1064,7 @@ export default function TaxPage() {
                       Filing Paused (Under Review)
                     </>
                   ) : (
-                    'Record Manual Filing'
+                    'Approve & Submit'
                   )}
                 </button>
               </div>
@@ -997,8 +1072,8 @@ export default function TaxPage() {
           </div>
 
           {/* Active Obligations */}
-          <div className='bg-white rounded-xl border border-grey-10/60 p-6'>
-            <div className='flex items-center justify-between mb-4'>
+          <div className='bg-white rounded-xl border border-grey-10/60 p-6 flex flex-col lg:sticky lg:top-[96px] lg:h-[calc(100vh-180px)] min-h-[550px] shadow-sm overflow-hidden'>
+            <div className='flex items-center justify-between mb-4 shrink-0'>
               <div>
                 <h2 className='text-base font-semibold text-secondary-10'>Active Obligations</h2>
                 <p className='text-xs text-secondary-30 flex items-center gap-1 mt-0.5'>
@@ -1017,7 +1092,7 @@ export default function TaxPage() {
                 {recalculatingAll ? 'Recalculating All...' : 'Recalculate All'}
               </button>
             </div>
-            <div className='space-y-3'>
+            <div className='space-y-3 flex-1 overflow-y-auto min-h-0 pr-1 my-2'>
               {obligationsLoading ? (
                 [0, 1, 2, 3].map((i) => (
                   <div key={i} className='bg-white rounded-xl border border-grey-10 p-5 animate-pulse'>
@@ -1033,6 +1108,9 @@ export default function TaxPage() {
               ) : (
                 sortedObligations.map((ob, i) => {
                   const isSelected = selectedObligation?.id === ob.id;
+                  const isAccumulating = ob.status.toLowerCase() === 'pending';
+                  const formattedAmount = (isAccumulating ? 'Est. ' : '') + formatNaira(Number(ob.net_liability));
+
                   return (
                     <div
                       key={ob.id ?? i}
@@ -1042,55 +1120,62 @@ export default function TaxPage() {
                           breakdownRef.current?.scrollIntoView({ behavior: 'smooth' });
                         }
                       }}
-                      className={`border rounded-xl p-4 hover:border-primary-20 cursor-pointer transition-colors shadow-sm relative group ${isSelected ? 'border-primary-30 bg-primary-50/20' : 'border-grey-10 bg-white'}`}
+                      className={`border rounded-xl p-4 hover:border-primary-20 cursor-pointer transition-colors shadow-sm relative flex flex-col justify-between ${isSelected ? 'border-primary-30 bg-primary-50/20' : 'border-grey-10 bg-white'}`}
                     >
-                    <div className='flex items-start justify-between gap-2 mb-2'>
-                      <div>
-                        <p className='text-sm font-medium text-secondary-10'>{getTaxTypeName(ob.tax_type)}</p>
-                        <p className='text-xs text-secondary-30 mt-0.5'>{getObligationMeta(ob)}</p>
-                      </div>
-                      <span className={`text-[10px] px-2 py-1 rounded-full font-medium shrink-0 ${getObligationStatusClass(ob.status)}`}>
-                        {getObligationStatusLabel(ob.status)}
-                      </span>
-                    </div>
-                    <div className='flex items-baseline justify-between mb-1'>
-                      <p className='text-lg font-bold text-secondary-10'>{formatNaira(Number(ob.net_liability))}</p>
-                      
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRecalculate(ob.tax_type);
-                        }}
-                        disabled={recalculating[ob.tax_type.toLowerCase()]}
-                        className='text-xs text-primary-30 hover:text-primary-40 transition-colors flex items-center gap-1 bg-primary-50 hover:bg-primary-10 rounded-full px-2.5 py-1 font-medium border border-primary-20/40 shadow-sm disabled:opacity-50'
-                      >
-                        <Icon 
-                          icon='ph:arrows-clockwise' 
-                          className={`text-xs ${recalculating[ob.tax_type.toLowerCase()] ? 'animate-spin' : ''}`} 
-                        />
-                        {recalculating[ob.tax_type.toLowerCase()] ? 'Recalculating...' : 'Recalculate'}
-                      </button>
-                    </div>
-                    
-                    {getZeroStateExplanation(ob) && (
-                      <p className='text-xs text-orange-400 mt-1 font-medium bg-orange-50/50 rounded px-2.5 py-1 inline-block border border-orange-100/50'>
-                        💡 {getZeroStateExplanation(ob)}
-                      </p>
-                    )}
+                      <div className='flex items-start justify-between gap-4'>
+                        {/* Left column */}
+                        <div className='flex-1 min-w-0'>
+                          <p className='text-sm font-semibold text-secondary-10 truncate'>
+                            {getTaxTypeName(ob.tax_type, ob.authority)}
+                          </p>
+                          <p className='text-xs text-secondary-30 mt-1 font-medium'>
+                            {getObligationMeta(ob)}
+                          </p>
+                        </div>
 
-                    {ob.computed_at && (
-                      <p className='text-[10px] text-secondary-30 mt-2 block font-normal'>
-                        {formatComputedAt(ob.computed_at)}
-                      </p>
-                    )}
-                  </div>
+                        {/* Right column */}
+                        <div className='flex flex-col items-end shrink-0 gap-2'>
+                          {renderStatusBadge(ob.status)}
+                          
+                          <div className='flex items-center gap-1.5'>
+                            <p className='text-sm sm:text-base font-bold text-secondary-10'>
+                              {formattedAmount}
+                            </p>
+                            
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRecalculate(ob.tax_type);
+                              }}
+                              disabled={recalculating[ob.tax_type.toLowerCase()]}
+                              className='p-1 text-secondary-30 hover:text-primary-30 hover:bg-primary-50 rounded-full transition-all disabled:opacity-50'
+                              title="Recalculate obligation"
+                            >
+                              <Icon 
+                                icon='ph:arrows-clockwise' 
+                                className={`text-xs ${recalculating[ob.tax_type.toLowerCase()] ? 'animate-spin' : ''}`} 
+                              />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {getZeroStateExplanation(ob) && (
+                        <p className='text-xs text-orange-400 mt-2 font-medium bg-orange-50/50 rounded px-2.5 py-1 inline-block border border-orange-100/50 self-start'>
+                          💡 {getZeroStateExplanation(ob)}
+                        </p>
+                      )}
+                    </div>
                   );
                 })
               )}
             </div>
-            <Link href='/settings' className='w-full mt-4 py-3 block text-center rounded-full bg-primary-40 text-white text-sm font-medium hover:bg-primary-30 transition-colors shadow-sm'>
-              Configure Obligations in Settings
-            </Link>
+            
+            <div className='mt-auto pt-4 border-t border-grey-10 shrink-0'>
+              <Link href='/settings' className='w-full py-3 block text-center rounded-full bg-primary-40 text-white text-sm font-medium hover:bg-primary-30 transition-colors shadow-sm'>
+                View Full List
+              </Link>
+            </div>
           </div>
         </div>
 
