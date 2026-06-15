@@ -762,4 +762,32 @@ export const tax = {
     const query = taxType ? `?tax_type=${taxType}` : '';
     return request<TaxRateRuleResponse[]>(`/api/v1/tax/rates${query}`);
   },
+  recordFiling(
+    businessId: string,
+    data: { obligation_id: string; nrs_reference: string; amount_filed: number }
+  ): Promise<TaxFilingResponse> {
+    return request<TaxFilingResponse>(`/api/v1/tax/filings/record?business_id=${businessId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  flagObligation(
+    businessId: string,
+    obligationId: string,
+    data: { issue_type: string; description: string; affected_transaction_ids?: string[] }
+  ): Promise<{ status: string; ticket_reference: string; obligation_status: string }> {
+    return request<{ status: string; ticket_reference: string; obligation_status: string }>(
+      `/api/v1/tax/obligations/${obligationId}/flag?business_id=${businessId}`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    );
+  },
+  getObligationBreakdown(
+    businessId: string,
+    obligationId: string
+  ): Promise<any> {
+    return request<any>(`/api/v1/tax/obligations/${obligationId}/breakdown?business_id=${businessId}`);
+  },
 };

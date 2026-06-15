@@ -7,6 +7,7 @@ import Link from 'next/link';
 import FlagIssueModal from '@/components/dashboard/tax/FlagIssueModal';
 
 import EditVATModal from '@/components/dashboard/tax/EditVATModal';
+import RecordFilingModal from '@/components/dashboard/tax/RecordFilingModal';
 import { dashboard, business, tax, type DashboardData, type BusinessProfile, type TaxFilingResponse, type TaxObligationResponse, type TaxLawUpdateResponse } from '@/lib/api';
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
@@ -48,13 +49,47 @@ export default function TaxPage() {
   const [recalculating, setRecalculating] = useState<Record<string, boolean>>({});
   const [recalculatingAll, setRecalculatingAll] = useState(false);
 
+  const [selectedObligation, setSelectedObligation] = useState<TaxObligationResponse | null>(null);
+  const [breakdownData, setBreakdownData] = useState<any>(null);
+  const [breakdownLoading, setBreakdownLoading] = useState(false);
+  const [showRecordFiling, setShowRecordFiling] = useState(false);
+
   const loadObligations = (bizId: string) => {
     setObligationsLoading(true);
     tax.getOverview(bizId)
-      .then((res) => setObligationsList(res.obligations))
+      .then((res) => {
+        setObligationsList(res.obligations);
+        const active = res.obligations.filter(o => 
+          isObligationActive(o.tax_type) &&
+          o.status.toLowerCase() !== 'filed' &&
+          o.status.toLowerCase() !== 'confirmed'
+        );
+        if (active.length > 0) {
+          setSelectedObligation(prev => {
+            if (prev && active.some(a => a.id === prev.id)) {
+              return active.find(a => a.id === prev.id) || null;
+            }
+            return active[0];
+          });
+        } else {
+          setSelectedObligation(null);
+        }
+      })
       .catch((e) => console.error('Failed to load obligations:', e))
       .finally(() => setObligationsLoading(false));
   };
+
+  useEffect(() => {
+    if (!profile?.business_id || !selectedObligation) {
+      setBreakdownData(null);
+      return;
+    }
+    setBreakdownLoading(true);
+    tax.getObligationBreakdown(profile.business_id, selectedObligation.id)
+      .then((res) => setBreakdownData(res))
+      .catch((e) => console.error('Failed to load breakdown details:', e))
+      .finally(() => setBreakdownLoading(false));
+  }, [selectedObligation, profile?.business_id]);
 
   useEffect(() => {
     Promise.all([dashboard.get(), business.getProfile()])
@@ -128,19 +163,11 @@ export default function TaxPage() {
     return true; // WHT and other general tax types always apply
   };
 
-  const activeObligations = obligationsList.filter(o => isObligationActive(o.tax_type));
-
-  const deduplicatedObligations = useMemo(() => {
-    const map = new Map<string, TaxObligationResponse>();
-    activeObligations.forEach(o => {
-      const type = o.tax_type.toLowerCase();
-      const existing = map.get(type);
-      if (!existing || (o.due_date && (!existing.due_date || new Date(o.due_date) > new Date(existing.due_date)))) {
-        map.set(type, o);
-      }
-    });
-    return Array.from(map.values());
-  }, [activeObligations]);
+  const activeObligations = obligationsList.filter(o => 
+    isObligationActive(o.tax_type) &&
+    o.status.toLowerCase() !== 'filed' &&
+    o.status.toLowerCase() !== 'confirmed'
+  );
 
   const handleRecalculateAll = async () => {
     if (!profile?.business_id) return;
@@ -212,9 +239,49 @@ export default function TaxPage() {
           return acc;
         }, {} as Record<string, boolean>)
       );
-      setRecalculatingAll(false);
     }
   };
+
+  const reloadAllData = (bizId: string) => {
+    loadObligations(bizId);
+    setFilingsLoading(true);
+    tax.getFilings(bizId)
+      .then((res) => setFilingsList(res))
+      .catch((e) => console.error('Failed to load filings:', e))
+      .finally(() => setFilingsLoading(false));
+    dashboard.get()
+      .then((dash) => setData(dash))
+      .catch((e) => console.error('Failed to load dashboard stats:', e));
+  };
+
+  const handleRecordFilingSubmit = async (reference: string, amount: number) => {
+    if (!profile?.business_id || !selectedObligation) return;
+    try {
+      await tax.recordFiling(profile.business_id, {
+        obligation_id: selectedObligation.id,
+        nrs_reference: reference,
+        amount_filed: amount,
+      });
+      reloadAllData(profile.business_id);
+    } catch (err: any) {
+      throw new Error(err.message || 'Failed to record filing');
+    }
+  };
+
+  const handleFlagIssueSubmit = async (issueType: string, description: string, affectedTransactionIds?: string[]) => {
+    if (!profile?.business_id || !selectedObligation) return;
+    try {
+      await tax.flagObligation(profile.business_id, selectedObligation.id, {
+        issue_type: issueType,
+        description,
+        affected_transaction_ids: affectedTransactionIds,
+      });
+      reloadAllData(profile.business_id);
+    } catch (err: any) {
+      throw new Error(err.message || 'Failed to submit flag');
+    }
+  };
+
   // ── Derived values ───────────────────────────────────────────────────────
   const stats = data?.stats;
   const revenue = stats ? Number(stats.revenue_current_month) : 0;
@@ -373,6 +440,9 @@ export default function TaxPage() {
 
   const netVatPayable = Math.max(0, outputVatTotal - inputVatTotal);
 
+  const vatObligation = obligationsList.find(o => o.tax_type.toLowerCase() === 'vat');
+  const vatDueDate = vatObligation?.due_date ?? null;
+
   const inputVatTxns = data?.recent_transactions
     ? data.recent_transactions.filter(t => t.type === 'debit' && t.vat_amount && Number(t.vat_amount) > 0).length
     : 0;
@@ -387,8 +457,7 @@ export default function TaxPage() {
   ).length;
 
   // Sum non-filed liabilities for active obligations
-  const activeObligationsDue = deduplicatedObligations
-    .filter(o => o.status.toLowerCase() !== 'filed' && o.status.toLowerCase() !== 'confirmed')
+  const activeObligationsDue = activeObligations
     .reduce((sum, o) => {
       if (o.tax_type.toLowerCase() === 'vat') return sum; // Add netVatPayable separately for live offset calculations
       return sum + Number(o.net_liability);
@@ -424,14 +493,51 @@ export default function TaxPage() {
     },
   ];
 
-  const flagTxns = data?.recent_transactions
-    ? data.recent_transactions.map(tx => ({
-        id: tx.id.substring(0, 8).toUpperCase(),
-        date: new Date(tx.transaction_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
-        desc: tx.counterparty_name ?? tx.category ?? 'General Transaction',
-        amount: formatNaira(Number(tx.amount))
-      }))
-    : [];
+  const flagTxns = useMemo(() => {
+    if (!selectedObligation || !breakdownData) return [];
+    const taxType = selectedObligation.tax_type.toLowerCase();
+    if (taxType === 'vat') {
+      const list = vatTab === 'output' ? (breakdownData.output_vat || []) : (breakdownData.input_vat || []);
+      return list.map((tx: any) => ({
+        id: tx.id,
+        displayId: tx.id.substring(0, 8).toUpperCase(),
+        date: tx.issue_date ? new Date(tx.issue_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : new Date(tx.expense_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+        desc: tx.invoice_number ? `Invoice #${tx.invoice_number} - ${tx.client_name}` : `${tx.vendor_name || 'Vendor'} (${tx.category})`,
+        amount: formatNaira(tx.total_amount || tx.amount)
+      }));
+    }
+    if (taxType === 'wht') {
+      const bills = breakdownData.wht_bills || [];
+      const expenses = breakdownData.wht_expenses || [];
+      return [
+        ...bills.map((b: any) => ({
+          id: b.id,
+          displayId: b.id.substring(0, 8).toUpperCase(),
+          date: new Date(b.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+          desc: `${b.vendor_name} (Bill #${b.bill_number})`,
+          amount: formatNaira(b.wht_amount)
+        })),
+        ...expenses.map((e: any) => ({
+          id: e.id,
+          displayId: e.id.substring(0, 8).toUpperCase(),
+          date: new Date(e.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+          desc: `${e.vendor_name || 'Expense'} (${e.category})`,
+          amount: formatNaira(e.wht_amount)
+        }))
+      ];
+    }
+    if (taxType === 'paye') {
+      const payments = breakdownData.payments || [];
+      return payments.map((p: any) => ({
+        id: p.id,
+        displayId: p.id.substring(0, 8).toUpperCase(),
+        date: 'Payroll',
+        desc: p.employee_name,
+        amount: formatNaira(p.paye_deducted)
+      }));
+    }
+    return [];
+  }, [selectedObligation, breakdownData, vatTab]);
 
   // ── CSV Export ──────────────────────────────────────────────────────────────
   function handleExportCSV() {
@@ -496,111 +602,335 @@ export default function TaxPage() {
               ))}
         </div>
 
-        {/* VAT Return banner */}
-        {stats && (
+        {/* Stepper / Compliance Banner */}
+        {selectedObligation && (
           <div className='bg-primary-50 border border-primary-10 rounded-xl p-6'>
-            <h2 className='text-xl font-semibold text-secondary-10 mb-1'>
-              {isVatSubmitted ? 'VAT Return submitted successfully' : 'VAT Return is ready for your review'}
+            <h2 className='text-xl font-semibold text-secondary-10 mb-1 flex items-center gap-2'>
+              {getTaxTypeName(selectedObligation.tax_type)} Return 
+              {selectedObligation.status.toLowerCase() === 'under_review' && (
+                <span className='text-xs px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-700 font-semibold border border-orange-200 flex items-center gap-1 uppercase tracking-wider'>
+                  ⚠️ Under Review
+                </span>
+              )}
+              {(selectedObligation.status.toLowerCase() === 'confirmed' || selectedObligation.status.toLowerCase() === 'filed') && (
+                <span className='text-xs px-2.5 py-0.5 rounded-full bg-success/20 text-success font-semibold border border-success/30 flex items-center gap-1 uppercase tracking-wider'>
+                  ✓ Confirmed
+                </span>
+              )}
             </h2>
             <div className='flex flex-wrap items-center gap-x-4 gap-y-2 text-xs sm:text-sm text-secondary-30 mb-5'>
-              <span>Net VAT Payable: <strong className='text-secondary-10'>{formatNaira(netVatPayable)}</strong></span>
+              <span>Net Liability: <strong className='text-secondary-10'>{formatNaira(Number(selectedObligation.net_liability))}</strong></span>
               <span className='hidden md:inline text-secondary-40'>|</span>
-              <span>Output: {formatNaira(outputVatTotal)}</span>
-              <span className='hidden md:inline text-secondary-40'>·</span>
-              <span>Input: {formatNaira(inputVatTotal)}</span>
+              <span>Period: {formatPeriod(selectedObligation.period_start)} to {formatPeriod(selectedObligation.period_end)}</span>
               <span className='hidden md:inline text-secondary-40'>|</span>
-              <span className={isVatSubmitted ? 'text-success font-medium' : 'text-danger font-medium'}>
-                {isVatSubmitted ? 'Awaiting FIRS Confirmation' : `Due ${stats.next_filing_date ? formatFilingDate(stats.next_filing_date) : '21st of next month'}`}
+              <span className={(selectedObligation.status.toLowerCase() === 'confirmed' || selectedObligation.status.toLowerCase() === 'filed') ? 'text-success font-medium' : 'text-danger font-medium'}>
+                {(selectedObligation.status.toLowerCase() === 'confirmed' || selectedObligation.status.toLowerCase() === 'filed') ? 'Remitted & Recorded' : `Due ${formatFilingDate(selectedObligation.due_date)}`}
               </span>
             </div>
+            
             <div className='flex flex-wrap items-center gap-y-3 gap-x-4 sm:gap-x-6'>
-              {steps.map((s, i) => (
-                <div key={s.n} className='flex items-center shrink-0'>
-                  <div className='flex items-center gap-2'>
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${s.done ? 'bg-primary-30 text-white' : 'bg-secondary-40 text-secondary-30'}`}>
-                      {s.done ? <Icon icon='ph:check-bold' className='text-sm' /> : s.n}
+              {(() => {
+                const s = selectedObligation.status.toLowerCase();
+                const isUnderReview = s === 'under_review';
+                const isConfirmed = s === 'confirmed' || s === 'filed';
+                const filingSteps = [
+                  { n: 1, label: 'Computed', done: true },
+                  { n: 2, label: isUnderReview ? 'Under Review' : 'Ready for review', done: true, isWarn: isUnderReview },
+                  { n: 3, label: 'Record Filing', done: isConfirmed },
+                  { n: 4, label: 'Filing Confirmed', done: isConfirmed },
+                ];
+                return filingSteps.map((step, idx) => (
+                  <div key={step.n} className='flex items-center shrink-0'>
+                    <div className='flex items-center gap-2'>
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${step.isWarn ? 'bg-orange-500 text-white' : (step.done ? 'bg-primary-30 text-white' : 'bg-secondary-40 text-secondary-30')}`}>
+                        {step.isWarn ? <Icon icon='ph:warning-bold' className='text-sm' /> : (step.done ? <Icon icon='ph:check-bold' className='text-sm' /> : step.n)}
+                      </div>
+                      <span className={`text-xs sm:text-sm ${step.done ? 'text-primary-30 font-medium' : 'text-secondary-30'}`}>{step.label}</span>
                     </div>
-                    <span className={`text-xs sm:text-sm ${s.done ? 'text-primary-30 font-medium' : 'text-secondary-30'}`}>{s.label}</span>
+                    {idx < 3 && (
+                      <div className={`hidden lg:block h-px w-6 lg:w-12 mx-2 lg:mx-3 ${step.done ? 'bg-primary-30' : 'bg-secondary-40'}`} />
+                    )}
                   </div>
-                  {i < steps.length - 1 && (
-                    <div className={`hidden lg:block h-px w-6 lg:w-12 mx-2 lg:mx-3 ${s.done ? 'bg-primary-30' : 'bg-secondary-40'}`} />
-                  )}
-                </div>
-              ))}
+                ));
+              })()}
             </div>
           </div>
         )}
 
-        {/* VAT Breakdown + Active Obligations */}
         <div className='grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-5'>
-          {/* VAT Breakdown */}
-          <div className='bg-white rounded-xl border border-grey-10/60 p-6'>
-            <div className='flex items-center justify-between mb-4'>
-              <h2 className='text-base font-semibold text-secondary-10'>VAT Breakdown</h2>
-              <Link href='/books' className='text-sm text-primary-30 hover:underline flex items-center gap-1'>
-                View Transactions <Icon icon='ph:arrow-right' />
-              </Link>
-            </div>
+          {/* Breakdown Card */}
+          <div className='bg-white rounded-xl border border-grey-10/60 p-6 flex flex-col justify-between min-h-[400px] shadow-sm'>
+            {selectedObligation ? (
+              <div>
+                <div className='flex items-center justify-between mb-4 border-b border-grey-10 pb-3'>
+                  <div>
+                    <h2 className='text-base font-semibold text-secondary-10'>{getTaxTypeName(selectedObligation.tax_type)} Breakdown</h2>
+                    <p className='text-xs text-secondary-30 mt-0.5'>{selectedObligation.authority} remittable ledger calculation</p>
+                  </div>
+                  <Link href='/books' className='text-sm text-primary-30 hover:underline flex items-center gap-1 font-medium'>
+                    View Ledger <Icon icon='ph:arrow-right' />
+                  </Link>
+                </div>
 
-            {/* Input/Output tabs */}
-            <div className='flex flex-wrap gap-4 sm:gap-6 border-b border-grey-10 mb-4'>
-              {(['input', 'output'] as const).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setVatTab(t)}
-                  className={`pb-2.5 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${vatTab === t ? 'border-primary-30 text-primary-30' : 'border-transparent text-secondary-30'}`}
+                {breakdownLoading ? (
+                  <div className='py-20 flex flex-col items-center justify-center gap-3'>
+                    <Icon icon='ph:circle-notch' className='text-3xl animate-spin text-primary-30' />
+                    <p className='text-sm text-secondary-30'>Retrieving live calculation data...</p>
+                  </div>
+                ) : !breakdownData ? (
+                  <div className='py-20 text-center text-sm text-secondary-30'>
+                    No breakdown details available for this obligation.
+                  </div>
+                ) : (
+                  <div>
+                    {/* Render VAT Breakdown */}
+                    {selectedObligation.tax_type.toLowerCase() === 'vat' && (
+                      <div className='space-y-4 animate-fadeIn'>
+                        <div className='flex flex-wrap gap-4 sm:gap-6 border-b border-grey-10 mb-4'>
+                          {(['input', 'output'] as const).map((t) => (
+                            <button
+                              key={t}
+                              onClick={() => setVatTab(t)}
+                              className={`pb-2.5 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${vatTab === t ? 'border-primary-30 text-primary-30' : 'border-transparent text-secondary-30'}`}
+                            >
+                              {t === 'input' ? 'Input VAT (Expenses)' : 'Output VAT (Sales)'}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className='border border-grey-10 rounded-xl overflow-hidden shadow-sm'>
+                          <div className='grid grid-cols-3 bg-primary-40 text-white text-xs px-4 py-3 font-medium'>
+                            <span>Category / Client</span>
+                            <span>VAT Amount</span>
+                            <span>Transactions</span>
+                          </div>
+                          {/* Map grouped breakdown */}
+                          {(() => {
+                            const outputList = breakdownData.output_vat || [];
+                            const inputList = breakdownData.input_vat || [];
+                            const breakdownRows: Array<{ category: string; collected: number; txns: number }> = [];
+                            
+                            if (vatTab === 'output') {
+                              const categoriesMap: Record<string, { collected: number; txns: number }> = {};
+                              outputList.forEach((inv: any) => {
+                                const cat = inv.client_name || 'Sales';
+                                if (!categoriesMap[cat]) categoriesMap[cat] = { collected: 0, txns: 0 };
+                                categoriesMap[cat].collected += Number(inv.vat_total);
+                                categoriesMap[cat].txns += 1;
+                              });
+                              Object.entries(categoriesMap).forEach(([category, val]) => {
+                                breakdownRows.push({ category, collected: val.collected, txns: val.txns });
+                              });
+                            } else {
+                              const categoriesMap: Record<string, { collected: number; txns: number }> = {};
+                              inputList.forEach((exp: any) => {
+                                const cat = exp.category ? (exp.category.charAt(0).toUpperCase() + exp.category.slice(1)) : 'Expenses';
+                                if (!categoriesMap[cat]) categoriesMap[cat] = { collected: 0, txns: 0 };
+                                categoriesMap[cat].collected += Number(exp.vat_amount);
+                                categoriesMap[cat].txns += 1;
+                              });
+                              Object.entries(categoriesMap).forEach(([category, val]) => {
+                                breakdownRows.push({ category, collected: val.collected, txns: val.txns });
+                              });
+                            }
+
+                            if (breakdownRows.length === 0) {
+                              return (
+                                <div className='py-6 text-center text-xs text-secondary-30 bg-primary-50/10'>
+                                  No transactions with VAT tracked in this period.
+                                </div>
+                              );
+                            }
+
+                            return breakdownRows.map((row, idx) => (
+                              <div key={idx} className={`grid grid-cols-3 px-4 py-3 text-sm border-b border-grey-10/40 bg-white`}>
+                                <span className='text-secondary-10 font-medium'>{row.category}</span>
+                                <span className='text-secondary-10 font-semibold'>{formatNaira(row.collected)}</span>
+                                <span className='text-secondary-30'>{row.txns}</span>
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Render WHT Breakdown */}
+                    {selectedObligation.tax_type.toLowerCase() === 'wht' && (
+                      <div className='space-y-4 animate-fadeIn'>
+                        <div className='border border-grey-10 rounded-xl overflow-hidden shadow-sm'>
+                          <div className='grid grid-cols-4 bg-primary-40 text-white text-xs px-4 py-3 font-medium'>
+                            <span>Vendor / Item</span>
+                            <span>Date</span>
+                            <span>Gross Amount</span>
+                            <span>WHT Withheld</span>
+                          </div>
+                          {(() => {
+                            const bills = breakdownData.wht_bills || [];
+                            const expenses = breakdownData.wht_expenses || [];
+                            const whtItems = [
+                              ...bills.map((b: any) => ({
+                                name: b.vendor_name,
+                                date: b.date,
+                                amount: b.amount,
+                                wht: b.wht_amount,
+                              })),
+                              ...expenses.map((e: any) => ({
+                                name: e.vendor_name || 'General Expense',
+                                date: e.date,
+                                amount: e.amount,
+                                wht: e.wht_amount,
+                              })),
+                            ];
+
+                            if (whtItems.length === 0) {
+                              return (
+                                <div className='py-6 text-center text-xs text-secondary-30 bg-primary-50/10'>
+                                  No withholding transactions recorded for this period.
+                                </div>
+                              );
+                            }
+
+                            return whtItems.map((item, idx) => (
+                              <div key={idx} className='grid grid-cols-4 px-4 py-3 text-sm border-b border-grey-10/40 bg-white items-center'>
+                                <span className='text-secondary-10 font-medium truncate'>{item.name}</span>
+                                <span className='text-secondary-30 text-xs'>{new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+                                <span className='text-secondary-30'>{formatNaira(item.amount)}</span>
+                                <span className='text-primary-30 font-semibold'>{formatNaira(item.wht)}</span>
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Render PAYE Breakdown */}
+                    {selectedObligation.tax_type.toLowerCase() === 'paye' && (
+                      <div className='space-y-4 animate-fadeIn'>
+                        <div className='border border-grey-10 rounded-xl overflow-hidden shadow-sm'>
+                          <div className='grid grid-cols-4 bg-primary-40 text-white text-xs px-4 py-3 font-medium'>
+                            <span>Employee</span>
+                            <span>Gross Pay</span>
+                            <span>Pension (EE)</span>
+                            <span>PAYE Deducted</span>
+                          </div>
+                          {(() => {
+                            const payments = breakdownData.payments || [];
+                            if (payments.length === 0) {
+                              return (
+                                <div className='py-6 text-center text-xs text-secondary-30 bg-primary-50/10'>
+                                  No payroll records generated in this period.
+                                </div>
+                              );
+                            }
+                            return payments.map((p: any, idx: number) => (
+                              <div key={idx} className='grid grid-cols-4 px-4 py-3 text-sm border-b border-grey-10/40 bg-white items-center'>
+                                <span className='text-secondary-10 font-medium'>{p.employee_name}</span>
+                                <span className='text-secondary-30'>{formatNaira(p.gross_salary)}</span>
+                                <span className='text-secondary-30'>{formatNaira(p.pension_employee)}</span>
+                                <span className='text-primary-30 font-semibold'>{p.is_paye_exempt ? 'EXEMPT' : formatNaira(p.paye_deducted)}</span>
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Render CIT Breakdown */}
+                    {selectedObligation.tax_type.toLowerCase() === 'cit' && (
+                      <div className='space-y-4 animate-fadeIn text-secondary-10'>
+                        <div className='grid grid-cols-2 gap-4'>
+                          <div className='p-4 bg-primary-50/30 border border-grey-10 rounded-xl'>
+                            <p className='text-xs text-secondary-30 font-medium uppercase'>Annual Revenue</p>
+                            <p className='text-xl font-bold mt-1'>{formatNaira(breakdownData.annual_revenue || 0)}</p>
+                          </div>
+                          <div className='p-4 bg-primary-50/30 border border-grey-10 rounded-xl'>
+                            <p className='text-xs text-secondary-30 font-medium uppercase'>Annual Expenses</p>
+                            <p className='text-xl font-bold mt-1 text-danger'>{formatNaira(breakdownData.annual_expenses || 0)}</p>
+                          </div>
+                        </div>
+
+                        <div className='border border-grey-10 rounded-xl p-4 bg-white space-y-3 shadow-sm'>
+                          <div className='flex justify-between text-sm'>
+                            <span className='text-secondary-30'>Estimated Net Profit</span>
+                            <span className='font-semibold'>{formatNaira((breakdownData.annual_revenue || 0) - (breakdownData.annual_expenses || 0))}</span>
+                          </div>
+                          <div className='flex justify-between text-sm'>
+                            <span className='text-secondary-30'>CIT Company Band</span>
+                            <span className='font-semibold text-primary-30 capitalize'>{breakdownData.band || 'Exempt'}</span>
+                          </div>
+                          <div className='flex justify-between text-sm border-t border-grey-10/40 pt-2.5'>
+                            <span className='text-secondary-30'>Company Income Tax Estimate</span>
+                            <span className='font-semibold'>{formatNaira(breakdownData.cit_estimate || 0)}</span>
+                          </div>
+                          <div className='flex justify-between text-sm'>
+                            <span className='text-secondary-30'>Education Tax Estimate (3%)</span>
+                            <span className='font-semibold'>{formatNaira(breakdownData.education_tax || 0)}</span>
+                          </div>
+                          <div className='flex justify-between text-base font-bold border-t border-primary-10 pt-3 text-secondary-10'>
+                            <span>Total Estimated Due</span>
+                            <span className='text-primary-30'>{formatNaira(breakdownData.total_tax_estimate || 0)}</span>
+                          </div>
+                        </div>
+
+                        {breakdownData.notes && (
+                          <div className='p-4 bg-yellow-50 border border-yellow-200/60 rounded-xl flex gap-3 text-xs text-secondary-30 leading-relaxed shadow-sm'>
+                            <Icon icon='ph:warning' className='text-lg text-yellow-600 shrink-0 mt-0.5' />
+                            <p>{breakdownData.notes}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className='py-20 text-center text-sm text-secondary-30 flex-1 flex flex-col justify-center items-center gap-2'>
+                <Icon icon='ph:shield-alert' className='text-3xl text-secondary-40' />
+                <p>No active obligation selected</p>
+              </div>
+            )}
+
+            {/* CTAs at the bottom */}
+            {selectedObligation && !breakdownLoading && (
+              <div className='mt-6 pt-5 border-t border-grey-10'>
+                <div className='flex items-center gap-4 mb-4 justify-between'>
+                  <div className='flex items-center gap-4'>
+                    {selectedObligation.tax_type.toLowerCase() === 'vat' && (
+                      <button onClick={() => setShowEdit(true)} className='flex items-center gap-1.5 text-sm font-semibold text-secondary-30 hover:text-secondary-10 transition-colors'>
+                        <Icon icon='ph:pencil-simple' /> Adjust Values
+                      </button>
+                    )}
+                    <button 
+                      onClick={() => setShowFlag(true)} 
+                      disabled={selectedObligation.status.toLowerCase() === 'under_review' || selectedObligation.status.toLowerCase() === 'confirmed' || selectedObligation.status.toLowerCase() === 'filed'}
+                      className='flex items-center gap-1.5 text-sm font-semibold text-secondary-30 hover:text-secondary-10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed'
+                    >
+                      <Icon icon='ph:warning' /> Flag an Issue
+                    </button>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={() => setShowRecordFiling(true)}
+                  disabled={selectedObligation.status.toLowerCase() === 'under_review' || selectedObligation.status.toLowerCase() === 'confirmed' || selectedObligation.status.toLowerCase() === 'filed'}
+                  className={`w-full py-3 rounded-full text-white text-sm font-semibold transition-all shadow-md flex items-center justify-center gap-2 ${selectedObligation.status.toLowerCase() === 'confirmed' || selectedObligation.status.toLowerCase() === 'filed' ? 'bg-success cursor-default' : (selectedObligation.status.toLowerCase() === 'under_review' ? 'bg-orange-400 cursor-not-allowed' : 'bg-primary-30 hover:bg-primary-40')}`}
                 >
-                  {t === 'input' ? 'Input VAT' : 'Output VAT'}
+                  {selectedObligation.status.toLowerCase() === 'confirmed' || selectedObligation.status.toLowerCase() === 'filed' ? (
+                    <>
+                      <Icon icon='ph:check-circle-bold' className='text-base' />
+                      Filing Remitted & Confirmed
+                    </>
+                  ) : selectedObligation.status.toLowerCase() === 'under_review' ? (
+                    <>
+                      <Icon icon='ph:warning-bold' className='text-base' />
+                      Filing Paused (Under Review)
+                    </>
+                  ) : (
+                    'Record Manual Filing'
+                  )}
                 </button>
-              ))}
-            </div>
-
-            <div className='border border-grey-10 rounded-xl overflow-hidden mb-4'>
-              <div className='grid grid-cols-3 bg-primary-40 text-white text-xs px-4 py-3 font-medium'>
-                <span>Category</span>
-                <span>VAT Collected</span>
-                <span>Transactions</span>
               </div>
-              {vatBreakdown.map((row, i) => (
-                <div key={i} className={`grid grid-cols-3 px-4 py-3 text-sm ${i > 0 ? 'border-t border-grey-10' : ''}`}>
-                  <span className='text-secondary-10'>{row.category}</span>
-                  <span className='text-secondary-10'>{formatNaira(row.collected)}</span>
-                  <span className='text-secondary-30'>{row.txns}</span>
-                </div>
-              ))}
-              {[
-                { label: 'Output Total', val: formatNaira(outputVatTotal), txns: outputVatTxns },
-                { label: 'Input VAT Paid', val: formatNaira(inputVatTotal), txns: inputVatTxns },
-              ].map((r) => (
-                <div key={r.label} className='grid grid-cols-3 px-4 py-3 text-sm border-t border-grey-10 font-semibold text-secondary-10'>
-                  <span>{r.label}</span>
-                  <span>{r.val}</span>
-                  <span className='font-normal text-secondary-30'>{r.txns}</span>
-                </div>
-              ))}
-              <div className='grid grid-cols-3 px-4 py-3 border-t border-grey-10 bg-primary-50/50'>
-                <span className='text-sm font-bold text-primary-30'>Net VAT Payable</span>
-                <span className='text-sm font-bold text-secondary-10'>{formatNaira(netVatPayable)}</span>
-                <span />
-              </div>
-            </div>
-
-            <div className='flex items-center gap-4 mb-4'>
-              <button onClick={() => setShowEdit(true)} className='flex items-center gap-1.5 text-sm text-secondary-30 hover:text-secondary-10 transition-colors'>
-                <Icon icon='ph:pencil-simple' /> Edit Breakdown
-              </button>
-              <button onClick={() => setShowFlag(true)} className='flex items-center gap-1.5 text-sm text-secondary-30 hover:text-secondary-10 transition-colors'>
-                <Icon icon='ph:warning' /> Flag an Issue
-              </button>
-            </div>
-
-            <button 
-              onClick={() => setIsVatSubmitted(true)}
-              disabled={isVatSubmitted}
-              className={`w-full py-3 rounded-full text-white text-sm font-medium transition-colors shadow-sm ${isVatSubmitted ? 'bg-secondary-40 cursor-not-allowed' : 'bg-primary-30 hover:bg-primary-40'}`}
-            >
-              {isVatSubmitted ? 'Submitted' : 'Approve & Submit'}
-            </button>
+            )}
           </div>
 
           {/* Active Obligations */}
@@ -633,13 +963,19 @@ export default function TaxPage() {
                     <div className='h-3 bg-grey-10 rounded w-20' />
                   </div>
                 ))
-              ) : deduplicatedObligations.length === 0 ? (
+              ) : activeObligations.length === 0 ? (
                 <p className='text-sm text-secondary-30 text-center py-4'>
                   No active tax obligations found. Use settings to configure your business profile.
                 </p>
               ) : (
-                deduplicatedObligations.map((ob, i) => (
-                  <div key={ob.id ?? i} className='border border-grey-10 rounded-xl p-4 hover:border-primary-20 cursor-pointer transition-colors shadow-sm relative group'>
+                activeObligations.map((ob, i) => {
+                  const isSelected = selectedObligation?.id === ob.id;
+                  return (
+                    <div
+                      key={ob.id ?? i}
+                      onClick={() => setSelectedObligation(ob)}
+                      className={`border rounded-xl p-4 hover:border-primary-20 cursor-pointer transition-colors shadow-sm relative group ${isSelected ? 'border-primary-30 bg-primary-50/20' : 'border-grey-10 bg-white'}`}
+                    >
                     <div className='flex items-start justify-between gap-2 mb-2'>
                       <div>
                         <p className='text-sm font-medium text-secondary-10'>{getTaxTypeName(ob.tax_type)}</p>
@@ -680,7 +1016,8 @@ export default function TaxPage() {
                       </p>
                     )}
                   </div>
-                ))
+                  );
+                })
               )}
             </div>
             <Link href='/settings' className='w-full mt-4 py-3 block text-center rounded-full bg-primary-40 text-white text-sm font-medium hover:bg-primary-30 transition-colors shadow-sm'>
@@ -847,15 +1184,23 @@ export default function TaxPage() {
         </div>
       </main>
 
-      {showFlag && (
+      {showFlag && selectedObligation && (
         <FlagIssueModal 
           onClose={() => setShowFlag(false)} 
+          onSubmit={handleFlagIssueSubmit}
           transactions={flagTxns}
-          period={stats?.next_filing_date 
-            ? new Date(stats.next_filing_date).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
-            : new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
-          }
-          authority='FIRS'
+          period={formatPeriod(selectedObligation.period_start)}
+          authority={selectedObligation.authority}
+        />
+      )}
+      {showRecordFiling && selectedObligation && (
+        <RecordFilingModal
+          onClose={() => setShowRecordFiling(false)}
+          onSubmit={handleRecordFilingSubmit}
+          computedAmount={Number(selectedObligation.net_liability)}
+          taxType={selectedObligation.tax_type}
+          period={formatPeriod(selectedObligation.period_start)}
+          authority={selectedObligation.authority}
         />
       )}
       {showEdit && (
