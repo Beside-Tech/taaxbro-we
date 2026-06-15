@@ -272,14 +272,14 @@ export default function ChatButton() {
       // ── Parse and execute ACTION hints from Elon ─────────────────────────
       // Elon can embed action directives in his response that trigger
       // frontend navigation or modals, matching his WhatsApp capabilities.
-      const actionRegex = /ACTION:(navigate|show|tab):([a-z0-9\-\/]+)/gi;
+      const actionRegex = /ACTION:(navigate|show|tab|download):([a-z0-9\-\/]+)/gi;
       const actions: Array<{ type: string; target: string }> = [];
       let match;
       while ((match = actionRegex.exec(answer)) !== null) {
         actions.push({ type: match[1].toLowerCase(), target: match[2].toLowerCase() });
       }
       // Strip action hints from displayed answer
-      answer = answer.replace(/ACTION:(navigate|show|tab):[a-z0-9\-\/]+/gi, '').trim();
+      answer = answer.replace(/ACTION:(navigate|show|tab|download):[a-z0-9\-\/]+/gi, '').trim();
 
       setMessages((prev) => [
         ...prev,
@@ -298,6 +298,17 @@ export default function ChatButton() {
               window.dispatchEvent(new CustomEvent('elon-action', { detail: { show: action.target } }));
             } else if (action.type === 'tab') {
               window.dispatchEvent(new CustomEvent('elon-action', { detail: { tab: action.target } }));
+            } else if (action.type === 'download') {
+              // Trigger a file download via the authenticated export API endpoint
+              const today = new Date();
+              const start = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+              const end = today.toISOString().split('T')[0];
+              const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+              const downloadUrl = `${baseUrl}/api/v1/ai/export/${action.target}?start=${start}&end=${end}`;
+              // Open in a new tab which will prompt browser download dialog (cookies passed)
+              window.open(downloadUrl, '_blank', 'noopener');
+              // Also show a toast message if one exists
+              window.dispatchEvent(new CustomEvent('elon-action', { detail: { download: action.target } }));
             }
           }
         }, 600);
