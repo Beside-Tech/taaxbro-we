@@ -96,6 +96,49 @@ async function request<T>(
   return res.json() as Promise<T>;
 }
 
+async function requestBlob(
+  path: string,
+  options: RequestInit = {},
+  retry = true,
+): Promise<Blob> {
+  const headers: Record<string, string> = {};
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
+  const res = await fetch(`${BASE}${path}`, {
+    ...options,
+    credentials: 'include',
+    headers: { ...headers, ...options.headers },
+  });
+
+  const shouldRetry = res.status === 401 && retry && !NO_RETRY_PATHS.includes(path);
+  if (shouldRetry) {
+    const refreshedOk = await executeSilentRefresh();
+    if (refreshedOk) {
+      return requestBlob(path, options, false);
+    }
+    if (sessionExpiredCallback) {
+      const isProtectedRoute = typeof window !== 'undefined' &&
+        ['/overview', '/books', '/pay', '/tax', '/settings', '/onboarding'].some(p => window.location.pathname.startsWith(p));
+      if (isProtectedRoute) {
+        sessionExpiredCallback();
+      }
+    }
+    throw new ApiError(401, 'Session expired. Please log in again.');
+  }
+
+  if (!res.ok) {
+    let detail = `Request failed (${res.status})`;
+    try {
+      const body = await res.json();
+      detail = body.detail ?? body.message ?? detail;
+    } catch { /* non-JSON body */ }
+    throw new ApiError(res.status, detail);
+  }
+
+  return res.blob();
+}
+
 // ─── Auth ──────────────────────────────────────────────────────────────────
 
 export interface AuthUser {
@@ -789,5 +832,12 @@ export const tax = {
     obligationId: string
   ): Promise<any> {
     return request<any>(`/api/v1/tax/obligations/${obligationId}/breakdown?business_id=${businessId}`);
+  },
+  downloadExport(exportType: string, start?: string, end?: string): Promise<Blob> {
+    const params = new URLSearchParams();
+    if (start) params.append('start', start);
+    if (end) params.append('end', end);
+    const query = params.toString();
+    return requestBlob(`/api/v1/ai/export/${exportType}${query ? `?${query}` : ''}`);
   },
 };

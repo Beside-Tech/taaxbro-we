@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Icon } from '@iconify/react';
 import { useChatContext } from '@/context/ChatContext';
+import { tax } from '@/lib/api';
 
 interface Props {
   onClose: () => void;
@@ -14,6 +15,8 @@ interface Props {
   grossOutput?: number;
   grossInput?: number;
   breakdownData?: any;
+  periodStart?: string;
+  periodEnd?: string;
 }
 
 function formatNaira(value: number): string {
@@ -49,6 +52,8 @@ export default function RecordFilingModal({
   grossOutput = 0,
   grossInput = 0,
   breakdownData,
+  periodStart,
+  periodEnd,
 }: Props) {
   const [reference, setReference] = useState('');
   const [amount, setAmount] = useState(computedAmount.toString());
@@ -90,7 +95,8 @@ export default function RecordFilingModal({
   };
 
   // CSV Exporters
-  const handleDownloadVatSales = () => {
+  // CSV Backup Exporters (Local Fallbacks)
+  const handleDownloadVatSalesBackup = () => {
     if (!breakdownData || !breakdownData.output_vat) return;
     const headers = ["Customer Name", "Customer TIN", "Invoice Date", "Invoice Number", "Description", "Gross Amount", "VAT Rate", "VAT Amount"];
     const rows = breakdownData.output_vat.map((inv: any) => [
@@ -106,7 +112,7 @@ export default function RecordFilingModal({
     downloadCSV(`FIRS_VAT_Sales_Schedule_${period.replace(/ /g, "_")}.csv`, headers, rows);
   };
 
-  const handleDownloadVatPurchases = () => {
+  const handleDownloadVatPurchasesBackup = () => {
     if (!breakdownData || !breakdownData.input_vat) return;
     const headers = ["Supplier Name", "Supplier TIN", "Invoice Date", "Invoice Number", "Description", "Gross Amount", "VAT Paid"];
     const rows = breakdownData.input_vat.map((exp: any) => [
@@ -121,7 +127,7 @@ export default function RecordFilingModal({
     downloadCSV(`FIRS_VAT_Purchase_Schedule_${period.replace(/ /g, "_")}.csv`, headers, rows);
   };
 
-  const handleDownloadPayeSchedule = () => {
+  const handleDownloadPayeScheduleBackup = () => {
     if (!breakdownData || !breakdownData.payments) return;
     const headers = ["Taxpayer ID", "Staff Name", "BVN", "Gross Income", "PAYE", "Phone Number", "Email"];
     const rows = breakdownData.payments.map((p: any) => [
@@ -138,7 +144,7 @@ export default function RecordFilingModal({
     downloadCSV(`${filenamePrefix}_PAYE_Remittance_Schedule_${period.replace(/ /g, "_")}.csv`, headers, rows);
   };
 
-  const handleDownloadWhtSchedule = () => {
+  const handleDownloadWhtScheduleBackup = () => {
     if (!breakdownData) return;
     const headers = ["Vendor Name", "Vendor TIN", "Service Category", "Invoice Date", "Invoice Number", "Gross Amount", "WHT Rate (%)", "WHT Amount"];
     const bills = breakdownData.wht_bills || [];
@@ -167,6 +173,50 @@ export default function RecordFilingModal({
       ])
     ];
     downloadCSV(`FIRS_WHT_Schedule_${period.replace(/ /g, "_")}.csv`, headers, rows);
+  };
+
+  const downloadBackendExport = async (exportType: string, filename: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const start = periodStart ? periodStart.split('T')[0] : undefined;
+      const end = periodEnd ? periodEnd.split('T')[0] : undefined;
+      
+      const blob = await tax.downloadExport(exportType, start, end);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      console.warn("Failed to download backend export, falling back to client-side CSV generation:", err);
+      // Run local CSV download as a fallback
+      if (exportType === 'vat-sales-csv') handleDownloadVatSalesBackup();
+      else if (exportType === 'vat-purchase-csv') handleDownloadVatPurchasesBackup();
+      else if (exportType === 'paye-csv') handleDownloadPayeScheduleBackup();
+      else if (exportType === 'wht-csv') handleDownloadWhtScheduleBackup();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDownloadVatSales = () => {
+    downloadBackendExport('vat-sales-csv', `FIRS_VAT_Sales_Schedule_${period.replace(/ /g, "_")}.csv`);
+  };
+
+  const handleDownloadVatPurchases = () => {
+    downloadBackendExport('vat-purchase-csv', `FIRS_VAT_Purchase_Schedule_${period.replace(/ /g, "_")}.csv`);
+  };
+
+  const handleDownloadPayeSchedule = () => {
+    const isLirs = authority.toUpperCase() === 'LIRS' || authority.toLowerCase().includes('lagos');
+    const filenamePrefix = isLirs ? 'LIRS' : authority.replace(/[^a-zA-Z0-9]/g, '_');
+    downloadBackendExport('paye-csv', `${filenamePrefix}_PAYE_Remittance_Schedule_${period.replace(/ /g, "_")}.csv`);
+  };
+
+  const handleDownloadWhtSchedule = () => {
+    downloadBackendExport('wht-csv', `FIRS_WHT_Schedule_${period.replace(/ /g, "_")}.csv`);
   };
 
   const typeLower = taxType.toLowerCase();

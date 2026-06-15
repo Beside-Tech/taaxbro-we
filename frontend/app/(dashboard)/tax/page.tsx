@@ -1365,6 +1365,8 @@ export default function TaxPage() {
           grossOutput={Number(selectedObligation.gross_output)}
           grossInput={Number(selectedObligation.gross_input)}
           breakdownData={breakdownData}
+          periodStart={selectedObligation.period_start}
+          periodEnd={selectedObligation.period_end}
         />
       )}
       {showEdit && (
