@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { Icon } from '@iconify/react';
 import {
   BarChart,
@@ -21,6 +21,7 @@ import CreateInvoiceModal from '@/components/dashboard/books/CreateInvoiceModal'
 import EditInvoiceModal from '@/components/dashboard/books/EditInvoiceModal';
 import LogPaymentModal from '@/components/dashboard/books/LogPaymentModal';
 import ReviewScannedExpenseModal from '@/components/dashboard/books/ReviewScannedExpenseModal';
+import CreateExpenseModal from '@/components/dashboard/books/CreateExpenseModal';
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 
@@ -69,9 +70,8 @@ function BooksTabs({ active, onChange }: { active: string; onChange: (t: string)
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 
-function OverviewTab({ data, loading, onTabChange, customStart, setCustomStart, customEnd, setCustomEnd }: TabProps) {
+function OverviewTab({ data, loading, onTabChange }: TabProps) {
   const [alertDismissed, setAlertDismissed] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState('current');
 
   const stats = data?.stats;
   const recentTransactions = data?.recent_transactions ?? [];
@@ -81,37 +81,8 @@ function OverviewTab({ data, loading, onTabChange, customStart, setCustomStart, 
   const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const prevMonthName = prevMonthDate.toLocaleString('en-US', { month: 'long' });
 
-  // Generate dynamic dropdown options (last 6 months)
-  const dropdownOptions = [];
-  for (let i = 0; i < 6; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const label = d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-    dropdownOptions.push(label);
-  }
-
-  // Filter transactions based on selected month or custom date range
-  const filteredTxsForMonth = recentTransactions.filter(tx => {
-    if (selectedMonth === 'current') {
-      return true; // Use all loaded transactions for "Current" summary stats fallback
-    } else if (selectedMonth === 'custom') {
-      if (!customStart || !customEnd) return true;
-      const txDate = tx.transaction_date.split('T')[0];
-      return txDate >= customStart && txDate <= customEnd;
-    } else {
-      const txDate = new Date(tx.transaction_date);
-      const label = txDate.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-      return label === selectedMonth;
-    }
-  });
-
-  const totalReceived = selectedMonth === 'current'
-    ? (stats?.revenue_current_month ?? 0)
-    : filteredTxsForMonth.filter(t => t.type === 'credit').reduce((sum, t) => sum + Number(t.amount || 0), 0);
-
-  const totalSent = selectedMonth === 'current'
-    ? (stats?.expenses_current_month ?? filteredTxsForMonth.filter(t => t.type === 'debit').reduce((sum, t) => sum + Number(t.amount || 0), 0))
-    : filteredTxsForMonth.filter(t => t.type === 'debit').reduce((sum, t) => sum + Number(t.amount || 0), 0);
-
+  const totalReceived = recentTransactions.filter(t => t.type === 'credit').reduce((sum, t) => sum + Number(t.amount || 0), 0);
+  const totalSent = recentTransactions.filter(t => t.type === 'debit').reduce((sum, t) => sum + Number(t.amount || 0), 0);
   const netFlow = totalReceived - totalSent;
 
   const statCards = [
@@ -191,50 +162,12 @@ function OverviewTab({ data, loading, onTabChange, customStart, setCustomStart, 
   };
 
   const chartData = generateChartData();
-  const creditTransactions = filteredTxsForMonth.filter((tx) => tx.type === 'credit');
+  const creditTransactions = recentTransactions.filter((tx) => tx.type === 'credit');
 
   return (
     <div className='space-y-5'>
       <div className='flex flex-col sm:flex-row sm:items-center justify-between gap-3'>
         <h2 className='text-xl font-semibold text-secondary-10'>Books Summary</h2>
-        <div className='flex flex-wrap items-center gap-3'>
-          <div className='flex items-center gap-2'>
-            <label className='text-sm text-secondary-30'>Filter</label>
-            <div className='relative'>
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className='border border-grey-10 rounded-lg px-3 py-1.5 text-sm text-secondary-10 outline-none appearance-none pr-7 bg-white'
-              >
-                {dropdownOptions.map((opt, idx) => (
-                  <option key={opt} value={idx === 0 ? 'current' : opt}>
-                    {idx === 0 ? `Current (${opt})` : opt}
-                  </option>
-                ))}
-                <option value='custom'>Custom Range</option>
-              </select>
-              <Icon icon='ph:caret-down' className='absolute right-2 top-1/2 -translate-y-1/2 text-secondary-30 pointer-events-none text-sm' />
-            </div>
-          </div>
-
-          {selectedMonth === 'custom' && (
-            <div className='flex items-center gap-2 animate-fade-in'>
-              <input
-                type='date'
-                value={customStart}
-                onChange={(e) => setCustomStart?.(e.target.value)}
-                className='border border-grey-10 rounded-lg px-3 py-1.5 text-sm text-secondary-10 outline-none focus:border-primary-30 transition-colors bg-white'
-              />
-              <span className='text-sm text-secondary-30'>to</span>
-              <input
-                type='date'
-                value={customEnd}
-                onChange={(e) => setCustomEnd?.(e.target.value)}
-                className='border border-grey-10 rounded-lg px-3 py-1.5 text-sm text-secondary-10 outline-none focus:border-primary-30 transition-colors bg-white'
-              />
-            </div>
-          )}
-        </div>
       </div>
 
       <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4'>
@@ -531,9 +464,10 @@ interface ExpensesTabProps {
   loading: boolean;
   businessId: string;
   onRefresh: () => void;
+  onNewExpense: () => void;
 }
 
-function ExpensesTab({ expensesList, loading, businessId, onRefresh }: ExpensesTabProps) {
+function ExpensesTab({ expensesList, loading, businessId, onRefresh, onNewExpense }: ExpensesTabProps) {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
   
@@ -622,6 +556,12 @@ function ExpensesTab({ expensesList, loading, businessId, onRefresh }: ExpensesT
               className={`flex items-center gap-1.5 border rounded-full px-4 py-2 text-sm transition-colors ${showFilters ? 'bg-primary-30 border-primary-30 text-white' : 'border-grey-10 text-secondary-10 hover:bg-primary-50'}`}
             >
               Filter <Icon icon='ph:sliders-horizontal' />
+            </button>
+            <button
+              onClick={onNewExpense}
+              className='flex items-center gap-1.5 bg-primary-30 text-white rounded-full px-4 py-2 text-sm font-medium hover:bg-primary-40 transition-colors shadow-sm'
+            >
+              Add Expense <Icon icon='ph:plus' />
             </button>
             <button
               onClick={handleScanReceiptClick}
@@ -792,8 +732,9 @@ interface ReportsTabProps extends TabProps {
 function ReportsTab({ data, loading, expensesList, expensesLoading }: ReportsTabProps) {
   const stats = data?.stats;
 
-  const totalReceived = stats?.revenue_current_month ?? 0;
-  // Use real expenses data (sum of all logged expenses) instead of dashboard transactions
+  // Calculate totalReceived from date-filtered transactions for accuracy across all periods
+  const creditTransactions = (data?.recent_transactions ?? []).filter((tx) => tx.type === 'credit');
+  const totalReceived = creditTransactions.reduce((sum, t) => sum + Number(t.amount || 0), 0);
   const totalSent = expensesList.reduce((sum, exp) => sum + Number(exp.amount ?? 0), 0);
   const totalVAT = expensesList.reduce((sum, exp) => sum + Number(exp.vat_amount ?? 0), 0);
   const netFlow = totalReceived - totalSent;
@@ -900,6 +841,25 @@ function ReportsTab({ data, loading, expensesList, expensesLoading }: ReportsTab
   );
 }
 
+function getDateRange(selectedMonth: string, customStart: string, customEnd: string) {
+  const now = new Date();
+  if (selectedMonth === 'current') {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    const end = now.toISOString().split('T')[0];
+    return { start, end };
+  } else if (selectedMonth === 'custom') {
+    return { start: customStart, end: customEnd };
+  } else {
+    const d = new Date(Date.parse(selectedMonth + " 1"));
+    if (isNaN(d.getTime())) {
+      return { start: '', end: '' };
+    }
+    const start = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
+    const end = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
+    return { start, end };
+  }
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function BooksPage() {
@@ -920,9 +880,11 @@ export default function BooksPage() {
 
   const [showPaymentLink, setShowPaymentLink] = useState(false);
   const [showCreateInvoice, setShowCreateInvoice] = useState(false);
+  const [showCreateExpense, setShowCreateExpense] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
   const [editingInvoice, setEditingInvoice] = useState<any | null>(null);
   const [paymentInvoice, setPaymentInvoice] = useState<any | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState('current');
   const [customStart, setCustomStart] = useState(() => {
     const d = new Date();
     d.setDate(1);
@@ -932,6 +894,60 @@ export default function BooksPage() {
     const d = new Date();
     return d.toISOString().split('T')[0];
   });
+
+  const dropdownOptions = useMemo(() => {
+    const now = new Date();
+    const options = [];
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const label = d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+      options.push(label);
+    }
+    return options;
+  }, []);
+
+  const dateRange = useMemo(() => {
+    return getDateRange(selectedMonth, customStart, customEnd);
+  }, [selectedMonth, customStart, customEnd]);
+
+  const filteredTransactions = useMemo(() => {
+    const start = dateRange.start;
+    const end = dateRange.end;
+    if (!data?.recent_transactions) return [];
+    if (!start || !end) return data.recent_transactions;
+    return data.recent_transactions.filter((tx) => {
+      const txDate = tx.transaction_date.split('T')[0];
+      return txDate >= start && txDate <= end;
+    });
+  }, [data?.recent_transactions, dateRange]);
+
+  const filteredData = useMemo(() => {
+    if (!data) return null;
+    return {
+      ...data,
+      recent_transactions: filteredTransactions,
+    };
+  }, [data, filteredTransactions]);
+
+  const filteredInvoices = useMemo(() => {
+    const start = dateRange.start;
+    const end = dateRange.end;
+    if (!start || !end) return invoicesList;
+    return invoicesList.filter((inv) => {
+      const invDate = inv.created_at.split('T')[0];
+      return invDate >= start && invDate <= end;
+    });
+  }, [invoicesList, dateRange]);
+
+  const filteredExpenses = useMemo(() => {
+    const start = dateRange.start;
+    const end = dateRange.end;
+    if (!start || !end) return expensesList;
+    return expensesList.filter((exp) => {
+      const expDate = exp.expense_date;
+      return expDate >= start && expDate <= end;
+    });
+  }, [expensesList, dateRange]);
 
   const loadInvoices = (force = false) => {
     if (user?.business_id && (!invoicesLoaded || force)) {
@@ -1004,20 +1020,73 @@ export default function BooksPage() {
         )}
 
         <BooksTabs active={activeTab} onChange={setActiveTab} />
+
+        {/* Global Period Filter Bar */}
+        <div className='bg-white rounded-xl border border-grey-10/60 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in'>
+          <div className='flex items-center gap-3'>
+            <div className='w-8 h-8 rounded-lg bg-primary-30/10 text-primary-30 flex items-center justify-center shrink-0 border border-primary-30/20'>
+              <Icon icon='ph:calendar-blank' className='text-lg' />
+            </div>
+            <div>
+              <p className='text-xs font-semibold text-secondary-20'>Accounting Period</p>
+              <p className='text-[10px] text-secondary-30 mt-0.5 font-medium'>
+                {dateRange.start && dateRange.end 
+                  ? `${new Date(dateRange.start).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} to ${new Date(dateRange.end).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                  : 'All time'}
+              </p>
+            </div>
+          </div>
+          
+          <div className='flex flex-wrap items-center gap-3'>
+            <div className='flex items-center gap-2'>
+              <label className='text-xs font-semibold text-secondary-30'>Period</label>
+              <div className='relative'>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className='border border-grey-10 rounded-lg px-3 py-1.5 text-xs text-secondary-10 outline-none appearance-none pr-7 bg-white font-medium cursor-pointer hover:border-primary-30 transition-colors'
+                >
+                  {dropdownOptions.map((opt, idx) => (
+                    <option key={opt} value={idx === 0 ? 'current' : opt}>
+                      {idx === 0 ? `Current Month (${opt})` : opt}
+                    </option>
+                  ))}
+                  <option value='custom'>Custom Range</option>
+                </select>
+                <Icon icon='ph:caret-down' className='absolute right-2 top-1/2 -translate-y-1/2 text-secondary-30 pointer-events-none text-xs' />
+              </div>
+            </div>
+
+            {selectedMonth === 'custom' && (
+              <div className='flex items-center gap-2 animate-fade-in'>
+                <input
+                  type='date'
+                  value={customStart}
+                  onChange={(e) => setCustomStart(e.target.value)}
+                  className='border border-grey-10 rounded-lg px-3 py-1.5 text-xs text-secondary-10 outline-none focus:border-primary-30 transition-colors bg-white font-medium'
+                />
+                <span className='text-xs text-secondary-30'>to</span>
+                <input
+                  type='date'
+                  value={customEnd}
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                  className='border border-grey-10 rounded-lg px-3 py-1.5 text-xs text-secondary-10 outline-none focus:border-primary-30 transition-colors bg-white font-medium'
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
         {activeTab === 'Overview' && (
           <OverviewTab
-            data={data}
+            data={filteredData}
             loading={loading}
             onTabChange={setActiveTab}
-            customStart={customStart}
-            setCustomStart={setCustomStart}
-            customEnd={customEnd}
-            setCustomEnd={setCustomEnd}
           />
         )}
         {activeTab === 'Invoices' && (
           <InvoicesTab
-            invoicesList={invoicesList}
+            invoicesList={filteredInvoices}
             loading={invoicesLoading}
             onNewInvoice={() => setShowCreateInvoice(true)}
             onViewInvoice={setSelectedInvoice}
@@ -1026,9 +1095,10 @@ export default function BooksPage() {
         )}
         {activeTab === 'Expenses' && user?.business_id && (
           <ExpensesTab
-            expensesList={expensesList}
+            expensesList={filteredExpenses}
             loading={expensesLoading}
             businessId={user.business_id}
+            onNewExpense={() => setShowCreateExpense(true)}
             onRefresh={() => {
               loadExpenses(true);
               dashboard
@@ -1038,7 +1108,14 @@ export default function BooksPage() {
             }}
           />
         )}
-        {activeTab === 'Reports' && <ReportsTab data={data} loading={loading} expensesList={expensesList} expensesLoading={expensesLoading} />}
+        {activeTab === 'Reports' && (
+          <ReportsTab
+            data={filteredData}
+            loading={loading}
+            expensesList={filteredExpenses}
+            expensesLoading={expensesLoading}
+          />
+        )}
       </main>
 
       {showPaymentLink && (
@@ -1097,6 +1174,22 @@ export default function BooksPage() {
             setPaymentInvoice(null);
             loadInvoices(true);
             // Also refresh dashboard stats
+            dashboard
+              .get()
+              .then(setData)
+              .catch((e) => setError(e.message ?? 'Failed to load books data'));
+          }}
+        />
+      )}
+
+      {showCreateExpense && user?.business_id && (
+        <CreateExpenseModal
+          businessId={user.business_id}
+          onClose={() => setShowCreateExpense(false)}
+          onSuccess={() => {
+            setShowCreateExpense(false);
+            loadExpenses(true);
+            // Refresh stats
             dashboard
               .get()
               .then(setData)

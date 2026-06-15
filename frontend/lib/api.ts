@@ -666,6 +666,7 @@ export interface ExpenseResponse {
   wht_applicable: boolean;
   wht_amount: number;
   receipt_url: string | null;
+  warnings?: string[] | null;
 }
 
 export interface OcrStructuredResult {

@@ -2,10 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { Icon } from '@iconify/react';
-import { expenses, OcrStructuredResult } from '@/lib/api';
+import { expenses } from '@/lib/api';
 
-interface ReviewScannedExpenseModalProps {
-  ocrData: OcrStructuredResult;
+interface CreateExpenseModalProps {
   businessId: string;
   onClose: () => void;
   onSuccess: () => void;
@@ -16,29 +15,28 @@ function formatNaira(value: number): string {
 }
 
 const CATEGORIES = [
-  { value: 'rent', label: 'Rent' },
+  { value: 'office', label: 'Office Supplies' },
+  { value: 'software', label: 'Software / SaaS' },
+  { value: 'utility', label: 'Utilities (Power, Internet)' },
   { value: 'fuel', label: 'Fuel / Gas' },
+  { value: 'travel', label: 'Travel / Logistics' },
+  { value: 'rent', label: 'Rent' },
   { value: 'legal', label: 'Legal Fees' },
   { value: 'accounting', label: 'Accounting / Audit' },
-  { value: 'software', label: 'Software / SaaS' },
-  { value: 'travel', label: 'Travel / Logistics' },
-  { value: 'utility', label: 'Utilities (Power, Internet)' },
   { value: 'groceries', label: 'Groceries / Pantry' },
   { value: 'equipment', label: 'Equipment / Tools' },
-  { value: 'office', label: 'Office Supplies' },
   { value: 'professional_services', label: 'Professional Services' },
   { value: 'other', label: 'Other' },
 ];
 
-export default function ReviewScannedExpenseModal({
-  ocrData,
+export default function CreateExpenseModal({
   businessId,
   onClose,
   onSuccess,
-}: ReviewScannedExpenseModalProps) {
+}: CreateExpenseModalProps) {
   const [vendorName, setVendorName] = useState('');
-  const [category, setCategory] = useState('other');
-  const [expenseDate, setExpenseDate] = useState('');
+  const [category, setCategory] = useState('office');
+  const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [amount, setAmount] = useState('');
   const [vatAmount, setVatAmount] = useState('0');
   const [description, setDescription] = useState('');
@@ -51,38 +49,6 @@ export default function ReviewScannedExpenseModal({
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
-
-  // Initialize fields from OCR extraction results
-  useEffect(() => {
-    if (ocrData) {
-      setVendorName(ocrData.vendor_name || '');
-      
-      // Attempt to map category
-      const ocrCat = (ocrData.category || '').toLowerCase().trim();
-      const matchedCat = CATEGORIES.find(
-        (c) =>
-          c.value === ocrCat ||
-          ocrCat.includes(c.value) ||
-          c.value.includes(ocrCat)
-      );
-      setCategory(matchedCat ? matchedCat.value : 'other');
-
-      // Date parsing
-      if (ocrData.transaction_date) {
-        setExpenseDate(ocrData.transaction_date);
-      } else {
-        setExpenseDate(new Date().toISOString().split('T')[0]);
-      }
-
-      setAmount(String(ocrData.total_amount || 0));
-      setVatAmount(String(ocrData.total_vat || 0));
-      setDescription(ocrData.description || ocrData.notes || '');
-
-      setWhtApplicable(!!ocrData.wht_applicable);
-      setWhtRate(ocrData.wht_rate || 5);
-      setWhtAmount(String(ocrData.wht_amount || 0));
-    }
-  }, [ocrData]);
 
   // Recalculate WHT if amount, rate, or status changes
   useEffect(() => {
@@ -194,11 +160,11 @@ export default function ReviewScannedExpenseModal({
 
         <div className='flex items-center gap-3 mb-6'>
           <div className='w-12 h-12 rounded-xl bg-primary-30/10 text-primary-30 flex items-center justify-center shrink-0 shadow-sm'>
-            <Icon icon='ph:file-search-bold' className='text-2xl' />
+            <Icon icon='ph:plus-circle' className='text-2xl' />
           </div>
           <div>
-            <h2 className='text-xl font-bold text-secondary-10'>Review Scanned Receipt</h2>
-            <p className='text-xs text-secondary-30 mt-0.5'>Confirm or adjust details extracted from your scan</p>
+            <h2 className='text-xl font-bold text-secondary-10'>Add Expense</h2>
+            <p className='text-xs text-secondary-30 mt-0.5'>Record a new expense to your books</p>
           </div>
         </div>
 
@@ -209,13 +175,6 @@ export default function ReviewScannedExpenseModal({
               {errorMsg}
             </div>
           )}
-
-          <div className='p-3 bg-primary-50/20 border border-primary-50/50 rounded-xl text-xs text-secondary-20 flex gap-2'>
-            <Icon icon='ph:info-bold' className='text-base shrink-0 mt-0.5 text-primary-30' />
-            <p className='leading-relaxed'>
-              We successfully ran OCR scan on your receipt. Please inspect the populated fields below to ensure correct logging.
-            </p>
-          </div>
 
           <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
             <div>
@@ -311,12 +270,12 @@ export default function ReviewScannedExpenseModal({
               <div className='flex items-center gap-2'>
                 <input
                   type='checkbox'
-                  id='wht_applicable_toggle'
+                  id='create_wht_applicable_toggle'
                   checked={whtApplicable}
                   onChange={(e) => setWhtApplicable(e.target.checked)}
                   className='w-4 h-4 text-primary-30 border-grey-10 rounded focus:ring-primary-30'
                 />
-                <label htmlFor='wht_applicable_toggle' className='font-semibold text-secondary-20 cursor-pointer select-none'>
+                <label htmlFor='create_wht_applicable_toggle' className='font-semibold text-secondary-20 cursor-pointer select-none'>
                   Subject to Withholding Tax (WHT)
                 </label>
               </div>
