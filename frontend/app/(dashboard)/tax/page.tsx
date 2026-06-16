@@ -9,6 +9,7 @@ import FlagIssueModal from '@/components/dashboard/tax/FlagIssueModal';
 import EditVATModal from '@/components/dashboard/tax/EditVATModal';
 import RecordFilingModal from '@/components/dashboard/tax/RecordFilingModal';
 import { dashboard, business, tax, type DashboardData, type BusinessProfile, type TaxFilingResponse, type TaxObligationResponse, type TaxLawUpdateResponse, type ComplianceAnomalyResponse } from '@/lib/api';
+import { useChatContext } from '@/context/ChatContext';
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 
@@ -27,6 +28,7 @@ function formatFilingDate(iso: string | null): string {
 const filingTabs = ['All', 'VAT', 'WHT', 'CIT', 'PAYE'];
 
 export default function TaxPage() {
+  const { triggerOpen } = useChatContext();
   const breakdownRef = useRef<HTMLDivElement>(null);
   const [vatTab, setVatTab] = useState<'input' | 'output'>('input');
   const [activeFilingTab, setActiveFilingTab] = useState('All');
@@ -1664,13 +1666,15 @@ export default function TaxPage() {
                               
                               <div className='flex flex-wrap items-center gap-2'>
                                 {!anomaly.resolved && (
-                                  <Link
-                                    href={`/chat?anomalyId=${anomaly.id}`}
+                                  <button
+                                    onClick={() => triggerOpen(
+                                      `Hi Elon, I want to discuss the compliance anomaly: "${anomaly.title}". Description: "${anomaly.description}". Required action: "${anomaly.action_required}". How can I resolve this under Nigerian tax law?`
+                                    )}
                                     className='px-3 py-1 rounded bg-primary-50 text-primary-30 hover:bg-primary-20 text-xs font-semibold transition-colors flex items-center gap-1 shadow-sm'
                                   >
                                     <Icon icon='ph:robot-bold' />
                                     Discuss with Elon
-                                  </Link>
+                                  </button>
                                 )}
                                 {(() => {
                                   const isAutoFixable = !anomaly.resolved && 
