@@ -654,7 +654,19 @@ export const invoices = {
       body: JSON.stringify(data),
     });
   },
+  listClients(businessId: string): Promise<ClientResponse[]> {
+    return request<ClientResponse[]>(`/api/v1/invoices/clients?business_id=${businessId}`);
+  },
 };
+
+export interface ClientResponse {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  whatsapp_number: string | null;
+}
+
 
 // ─── Expenses ────────────────────────────────────────────────────────────────
 
@@ -910,5 +922,55 @@ export const tax = {
   },
   downloadComplianceReport(businessId: string, scope: 'all' | 'unresolved' | 'resolved'): Promise<Blob> {
     return requestBlob(`/api/v1/tax/compliance/report?business_id=${businessId}&scope=${scope}`);
+  },
+};
+
+export interface ReminderResponse {
+  id: string;
+  business_id: string;
+  phone_number: string;
+  reminder_text: string;
+  remind_at: string;
+  sent_at: string | null;
+  cancelled: boolean;
+  delivery_channel: string;
+  recipient_email: string | null;
+  reminder_type: string;
+  client_id: string | null;
+  invoice_id: string | null;
+  client_name: string | null;
+  invoice_number: string | null;
+  created_at: string;
+}
+
+export interface ReminderCreatePayload {
+  reminder_text: string;
+  remind_at: string; // ISO date string
+  delivery_channel: 'whatsapp' | 'email' | 'both';
+  reminder_type: 'self' | 'client';
+  recipient_email?: string | null;
+  client_id?: string | null;
+  invoice_id?: string | null;
+}
+
+export const reminders = {
+  list(): Promise<ReminderResponse[]> {
+    return request<ReminderResponse[]>('/api/v1/reminders');
+  },
+  create(data: ReminderCreatePayload): Promise<ReminderResponse> {
+    return request<ReminderResponse>('/api/v1/reminders', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  cancel(id: string): Promise<ReminderResponse> {
+    return request<ReminderResponse>(`/api/v1/reminders/${id}/cancel`, {
+      method: 'POST',
+    });
+  },
+  delete(id: string): Promise<void> {
+    return request<void>(`/api/v1/reminders/${id}`, {
+      method: 'DELETE',
+    });
   },
 };

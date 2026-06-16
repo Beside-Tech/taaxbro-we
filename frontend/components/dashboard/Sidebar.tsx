@@ -30,6 +30,12 @@ const navItems = [
     icon: 'solar:book-broken',
     iconFill: 'solar:book-bold',
   },
+  {
+    label: 'Reminders',
+    href: '/reminders',
+    icon: 'solar:bell-bing-broken',
+    iconFill: 'solar:bell-bing-bold',
+  },
 ];
 
 const bottomItems = [
