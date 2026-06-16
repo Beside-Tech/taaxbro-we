@@ -14,7 +14,7 @@ export default function TopBar({ children }: TopBarProps) {
   const name = user?.full_name || email.split('@')[0] || '';
 
   return (
-    <header className='flex flex-wrap items-center justify-between gap-4 px-4 sm:px-8 py-4 z-40 relative'>
+    <header className='flex flex-wrap items-center justify-between gap-4 px-4 sm:px-8 py-4 z-20 relative'>
       <div className='flex-1 min-w-[200px]'>{children}</div>
       <div className='hidden lg:flex items-center gap-3 shrink-0 ml-auto'>
         {/* Notifications Dropdown */}

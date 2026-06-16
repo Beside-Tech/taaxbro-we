@@ -66,6 +66,9 @@ export default function TaxPage() {
   const [anomaliesLoading, setAnomaliesLoading] = useState(true);
   const [showComplianceCenter, setShowComplianceCenter] = useState(true);
   const [complianceTab, setComplianceTab] = useState<'active' | 'resolved'>('active');
+  const [autoFixingAll, setAutoFixingAll] = useState(false);
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
+  const [autoFixingId, setAutoFixingId] = useState<string | null>(null);
 
   const [selectedObligation, setSelectedObligation] = useState<TaxObligationResponse | null>(null);
   const [breakdownData, setBreakdownData] = useState<any>(null);
@@ -380,6 +383,63 @@ export default function TaxPage() {
       alert(err.message || 'Failed to resolve compliance anomaly');
     }
   };
+
+  const handleAutoFixAnomaly = async (anomalyId: string) => {
+    if (!profile?.business_id) return;
+    setAutoFixingId(anomalyId);
+    try {
+      await tax.autoFixComplianceAnomaly(profile.business_id, anomalyId);
+      showInfoMessage(
+        "Elon is correcting your records in the background. Please wait for a moment while we recalculate obligations..."
+      );
+      loadAnomalies(profile.business_id);
+      loadObligations(profile.business_id);
+    } catch (err: any) {
+      alert(err.message || 'Auto-fix failed. Please resolve manually.');
+    } finally {
+      setAutoFixingId(null);
+    }
+  };
+
+  const handleAutoFixAll = async () => {
+    if (!profile?.business_id) return;
+    setAutoFixingAll(true);
+    showInfoMessage(
+      "Elon is currently correcting your transaction records in the background. Please feel free to continue with your other activities. You will be notified via WhatsApp or your in-app notification center when the auto-fixes are complete."
+    );
+    try {
+      await tax.autoFixAllComplianceAnomalies(profile.business_id);
+      
+      // Poll overview/anomalies after a short delay
+      setTimeout(() => {
+        if (profile?.business_id) {
+          loadAnomalies(profile.business_id);
+          loadObligations(profile.business_id);
+        }
+      }, 5000);
+    } catch (err: any) {
+      alert(err.message || 'Auto-fix all failed.');
+    } finally {
+      setAutoFixingAll(false);
+    }
+  };
+
+  const handleDownloadReport = async (scope: 'all' | 'unresolved' | 'resolved') => {
+    if (!profile?.business_id) return;
+    setShowExportDropdown(false);
+    try {
+      const blob = await tax.downloadComplianceReport(profile.business_id, scope);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Taaxbro_Compliance_Report_${scope}_${new Date().toISOString().slice(0, 10)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(err.message || 'Failed to download report.');
+    }
+  };
+
 
   // ── Derived values ───────────────────────────────────────────────────────
   const stats = data?.stats;
@@ -928,7 +988,7 @@ export default function TaxPage() {
                           <div className='border border-grey-10 rounded-xl overflow-hidden shadow-sm'>
                             <div className='grid grid-cols-3 bg-primary-40 text-white text-xs px-4 py-3 font-semibold'>
                               <span>Category</span>
-                              <span>VAT Collected</span>
+                              <span>{vatTab === 'input' ? 'VAT Paid' : 'VAT Collected'}</span>
                               <span className='text-right'>Transactions</span>
                             </div>
                             {/* Map grouped breakdown */}
@@ -961,12 +1021,6 @@ export default function TaxPage() {
                                 });
                               }
 
-                              const totalOutputVat = outputList.reduce((sum: number, inv: any) => sum + Number(inv.vat_total || 0), 0);
-                              const totalInputVat = inputList.reduce((sum: number, exp: any) => sum + Number(exp.vat_amount || 0), 0);
-                              const netVatPayableValue = Math.max(0, totalOutputVat - totalInputVat);
-                              const totalOutputTxns = outputList.length;
-                              const totalInputTxns = inputList.length;
-
                               return (
                                 <>
                                   {breakdownRows.length === 0 ? (
@@ -982,29 +1036,43 @@ export default function TaxPage() {
                                       </div>
                                     ))
                                   )}
-                                  
-                                  {/* Summary Rows matching designer mockup */}
-                                  <div className='border-t border-grey-10/80 bg-grey-10/5 font-semibold shrink-0'>
-                                    <div className='grid grid-cols-3 px-4 py-2.5 text-xs text-secondary-20 border-b border-grey-10/40 items-center'>
-                                      <span>Output Total</span>
-                                      <span className='text-secondary-10 font-bold'>{formatNaira(totalOutputVat)}</span>
-                                      <span className='text-secondary-30 text-right'>{totalOutputTxns}</span>
-                                    </div>
-                                    <div className='grid grid-cols-3 px-4 py-2.5 text-xs text-secondary-20 border-b border-grey-10/40 items-center'>
-                                      <span>Input VAT Paid</span>
-                                      <span className='text-secondary-10 font-bold'>{formatNaira(totalInputVat)}</span>
-                                      <span className='text-secondary-30 text-right'>{totalInputTxns}</span>
-                                    </div>
-                                    <div className='grid grid-cols-3 px-4 py-3 text-sm font-bold bg-primary-50/20 items-center'>
-                                      <span className='text-primary-30'>Net VAT Payable</span>
-                                      <span className='text-primary-30 text-base font-bold'>{formatNaira(netVatPayableValue)}</span>
-                                      <span></span>
-                                    </div>
-                                  </div>
                                 </>
                               );
                             })()}
                           </div>
+
+                          {/* Dedicated VAT Summary Panel */}
+                          {(() => {
+                            const outputList = breakdownData.output_vat || [];
+                            const inputList = breakdownData.input_vat || [];
+                            const totalOutputVat = outputList.reduce((sum: number, inv: any) => sum + Number(inv.vat_total || 0), 0);
+                            const totalInputVat = inputList.reduce((sum: number, exp: any) => sum + Number(exp.vat_amount || 0), 0);
+                            const netVatPayableValue = Math.max(0, totalOutputVat - totalInputVat);
+                            const totalOutputTxns = outputList.length;
+                            const totalInputTxns = inputList.length;
+
+                            return (
+                              <div className='bg-primary-50/10 border border-grey-10/60 rounded-xl p-4 space-y-3 shadow-sm'>
+                                <h3 className='text-xs font-bold text-secondary-20 uppercase tracking-wider mb-1'>VAT Calculation Summary</h3>
+                                <div className='grid grid-cols-3 gap-3 text-center'>
+                                  <div className='bg-white border border-grey-10/40 rounded-lg p-2 flex flex-col justify-center min-h-[72px] shadow-sm'>
+                                    <span className='text-[9px] text-secondary-30 font-semibold uppercase block leading-none'>Total Output VAT</span>
+                                    <span className='text-xs sm:text-sm font-bold text-secondary-10 block mt-1'>{formatNaira(totalOutputVat)}</span>
+                                    <span className='text-[8px] text-secondary-30 block mt-0.5'>{totalOutputTxns} sales txns</span>
+                                  </div>
+                                  <div className='bg-white border border-grey-10/40 rounded-lg p-2 flex flex-col justify-center min-h-[72px] shadow-sm'>
+                                    <span className='text-[9px] text-secondary-30 font-semibold uppercase block leading-none'>Total Input VAT</span>
+                                    <span className='text-xs sm:text-sm font-bold text-secondary-10 block mt-1'>{formatNaira(totalInputVat)}</span>
+                                    <span className='text-[8px] text-secondary-30 block mt-0.5'>{totalInputTxns} expense txns</span>
+                                  </div>
+                                  <div className='bg-primary-30 text-white rounded-lg p-2 flex flex-col justify-center min-h-[72px] shadow-sm'>
+                                    <span className='text-[9px] text-white/80 font-bold uppercase block leading-none'>Net VAT Payable</span>
+                                    <span className='text-sm sm:text-base font-black block mt-1'>{formatNaira(netVatPayableValue)}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </div>
                       )}
 
@@ -1433,20 +1501,70 @@ export default function TaxPage() {
 
           {showComplianceCenter && (
             <div className='border-t border-grey-10/60 p-6 bg-primary-50/10 space-y-4'>
-              {/* Tabs */}
-              <div className='flex gap-2 border-b border-grey-10/40 pb-3'>
-                <button
-                  onClick={() => setComplianceTab('active')}
-                  className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-colors ${complianceTab === 'active' ? 'bg-primary-30 text-white' : 'border border-grey-10 text-secondary-10 hover:bg-primary-50'}`}
-                >
-                  Active Alerts ({activeAnomalies.length})
-                </button>
-                <button
-                  onClick={() => setComplianceTab('resolved')}
-                  className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-colors ${complianceTab === 'resolved' ? 'bg-primary-30 text-white' : 'border border-grey-10 text-secondary-10 hover:bg-primary-50'}`}
-                >
-                  Audit History ({resolvedAnomalies.length})
-                </button>
+              {/* Tabs and Actions Row */}
+              <div className='flex flex-wrap items-center justify-between gap-4 border-b border-grey-10/40 pb-3'>
+                <div className='flex gap-2'>
+                  <button
+                    onClick={() => setComplianceTab('active')}
+                    className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-colors ${complianceTab === 'active' ? 'bg-primary-30 text-white' : 'border border-grey-10 text-secondary-10 hover:bg-primary-50'}`}
+                  >
+                    Active Alerts ({activeAnomalies.length})
+                  </button>
+                  <button
+                    onClick={() => setComplianceTab('resolved')}
+                    className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-colors ${complianceTab === 'resolved' ? 'bg-primary-30 text-white' : 'border border-grey-10 text-secondary-10 hover:bg-primary-50'}`}
+                  >
+                    Audit History ({resolvedAnomalies.length})
+                  </button>
+                </div>
+
+                <div className='flex flex-wrap items-center gap-2'>
+                  {/* Auto-Fix All Button (only visible when there are active anomalies) */}
+                  {activeAnomalies.length > 0 && (
+                    <button
+                      onClick={handleAutoFixAll}
+                      disabled={autoFixingAll}
+                      className='inline-flex items-center gap-1.5 bg-[#10B981] hover:bg-[#059669] text-white px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm disabled:opacity-50'
+                    >
+                      <Icon icon='ph:sparkle-bold' className={autoFixingAll ? 'animate-spin' : ''} />
+                      {autoFixingAll ? 'Auto-fixing All...' : 'Auto-Fix All'}
+                    </button>
+                  )}
+
+                  {/* Export PDF Compliance Report Dropdown */}
+                  <div className='relative'>
+                    <button
+                      onClick={() => setShowExportDropdown(!showExportDropdown)}
+                      className='inline-flex items-center gap-1.5 border border-grey-10 bg-white hover:bg-primary-50 text-secondary-10 px-3 py-1.5 rounded-full text-xs font-semibold transition-all shadow-sm'
+                    >
+                      <Icon icon='ph:file-pdf-bold' className='text-red-500' />
+                      Export Audit Report
+                      <Icon icon='ph:caret-down-bold' className='text-[10px]' />
+                    </button>
+                    {showExportDropdown && (
+                      <div className='absolute right-0 mt-1.5 w-48 bg-white border border-grey-10 rounded-xl shadow-lg z-30 py-1 text-xs text-secondary-10 animate-fade-in'>
+                        <button
+                          onClick={() => handleDownloadReport('all')}
+                          className='w-full text-left px-4 py-2 hover:bg-primary-50 transition-colors'
+                        >
+                          Export Full Report
+                        </button>
+                        <button
+                          onClick={() => handleDownloadReport('unresolved')}
+                          className='w-full text-left px-4 py-2 hover:bg-primary-50 transition-colors'
+                        >
+                          Export Active Alerts Only
+                        </button>
+                        <button
+                          onClick={() => handleDownloadReport('resolved')}
+                          className='w-full text-left px-4 py-2 hover:bg-primary-50 transition-colors'
+                        >
+                          Export Resolved History Only
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {anomaliesLoading ? (
@@ -1520,6 +1638,17 @@ export default function TaxPage() {
                                 <p className='text-xs text-secondary-30 mt-1 leading-relaxed'>
                                   {anomaly.description}
                                 </p>
+                                {anomaly.law_citation_name && anomaly.law_citation_url && (
+                                  <a
+                                    href={anomaly.law_citation_url}
+                                    target='_blank'
+                                    rel='noopener noreferrer'
+                                    className='mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-primary-30 hover:underline bg-primary-50 border border-primary-20/40 rounded-full px-2 py-0.5'
+                                  >
+                                    <Icon icon='ph:file-pdf-bold' className='text-red-500 text-xs shrink-0' />
+                                    Exempt under [{anomaly.law_citation_name}]
+                                  </a>
+                                )}
                               </div>
 
                               <div className='bg-primary-50/50 rounded-lg p-3 border border-primary-10/40 text-[11px] text-secondary-20 space-y-1'>
@@ -1533,11 +1662,38 @@ export default function TaxPage() {
                                 Detected: {new Date(anomaly.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                               </span>
                               
-                              <div className='flex gap-2'>
+                              <div className='flex flex-wrap items-center gap-2'>
+                                {!anomaly.resolved && (
+                                  <Link
+                                    href={`/chat?anomalyId=${anomaly.id}`}
+                                    className='px-3 py-1 rounded bg-primary-50 text-primary-30 hover:bg-primary-20 text-xs font-semibold transition-colors flex items-center gap-1 shadow-sm'
+                                  >
+                                    <Icon icon='ph:robot-bold' />
+                                    Discuss with Elon
+                                  </Link>
+                                )}
+                                {(() => {
+                                  const isAutoFixable = !anomaly.resolved && 
+                                    ['vat_exempt_item_charged', 'vat_exemption_violation'].includes(anomaly.anomaly_type) && 
+                                    anomaly.entity_type && anomaly.entity_id;
+                                  
+                                  if (!isAutoFixable) return null;
+                                  
+                                  return (
+                                    <button
+                                      onClick={() => handleAutoFixAnomaly(anomaly.id)}
+                                      disabled={autoFixingId === anomaly.id}
+                                      className='inline-flex items-center gap-1 px-3 py-1 rounded bg-[#10B981] hover:bg-[#059669] text-white text-xs font-semibold transition-colors disabled:opacity-50 shadow-sm'
+                                    >
+                                      <Icon icon='ph:sparkle-bold' className={autoFixingId === anomaly.id ? 'animate-spin' : ''} />
+                                      {autoFixingId === anomaly.id ? 'Fixing...' : 'Auto-Fix'}
+                                    </button>
+                                  );
+                                })()}
                                 {anomaly.action_link && !anomaly.resolved && (
                                   <a 
                                     href={anomaly.action_link}
-                                    className='px-3 py-1 rounded bg-primary-10 text-primary-30 hover:bg-primary-20 text-xs font-semibold transition-colors'
+                                    className='px-3 py-1 rounded bg-primary-10 text-primary-30 hover:bg-primary-20 text-xs font-semibold transition-colors shadow-sm'
                                   >
                                     Review
                                   </a>
@@ -1545,13 +1701,13 @@ export default function TaxPage() {
                                 {!anomaly.resolved && (
                                   <button
                                     onClick={() => handleResolveAnomaly(anomaly.id)}
-                                    className='px-3 py-1 rounded border border-grey-10 text-secondary-10 hover:bg-primary-50 text-xs font-semibold transition-colors'
+                                    className='px-3 py-1 rounded border border-grey-10 text-secondary-10 hover:bg-primary-50 text-xs font-semibold transition-colors shadow-sm'
                                   >
                                     Mark Resolved
                                   </button>
                                 )}
                                 {anomaly.resolved && (
-                                  <span className='text-xs text-green-600 font-semibold flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-50'>
+                                  <span className='text-xs text-green-600 font-semibold flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-50 border border-green-200/50 shadow-sm'>
                                     <Icon icon='ph:check-bold' /> Resolved
                                   </span>
                                 )}

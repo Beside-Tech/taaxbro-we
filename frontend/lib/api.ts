@@ -808,6 +808,9 @@ export interface ComplianceAnomalyResponse {
   entity_id: string | null;
   action_required: string;
   action_link: string | null;
+  citation_code: string | null;
+  law_citation_name: string | null;
+  law_citation_url: string | null;
   resolved: boolean;
   resolved_at: string | null;
   created_at: string;
@@ -892,5 +895,20 @@ export const tax = {
       `/api/v1/tax/compliance/anomalies/${anomalyId}/resolve?business_id=${businessId}`,
       { method: 'POST' }
     );
+  },
+  autoFixComplianceAnomaly(businessId: string, anomalyId: string): Promise<{ status: string; message: string }> {
+    return request<{ status: string; message: string }>(
+      `/api/v1/tax/compliance/anomalies/${anomalyId}/autofix?business_id=${businessId}`,
+      { method: 'POST' }
+    );
+  },
+  autoFixAllComplianceAnomalies(businessId: string): Promise<{ task_id: string; status: string }> {
+    return request<{ task_id: string; status: string }>(
+      `/api/v1/tax/compliance/anomalies/autofix-all?business_id=${businessId}`,
+      { method: 'POST' }
+    );
+  },
+  downloadComplianceReport(businessId: string, scope: 'all' | 'unresolved' | 'resolved'): Promise<Blob> {
+    return requestBlob(`/api/v1/tax/compliance/report?business_id=${businessId}&scope=${scope}`);
   },
 };

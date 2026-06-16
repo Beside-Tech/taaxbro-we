@@ -81,7 +81,7 @@ export default function DashboardLayout({
   return (
     <div className='min-h-screen bg-[#fafafa] relative'>
       {/* Mobile Top Navigation Bar */}
-      <header className='lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-b-secondary-40 flex items-center justify-between px-4 z-30 shadow-sm'>
+      <header className='lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-b-secondary-40 flex items-center justify-between px-4 z-40 shadow-sm'>
         <div className='flex items-center gap-2'>
           <button
             onClick={() => setIsSidebarOpen(true)}
@@ -109,7 +109,7 @@ export default function DashboardLayout({
       {isSidebarOpen && (
         <div
           onClick={() => setIsSidebarOpen(false)}
-          className='fixed inset-0 z-40 bg-black/40 lg:hidden transition-opacity'
+          className='fixed inset-0 z-[45] bg-black/40 lg:hidden transition-opacity'
         />
       )}
 
