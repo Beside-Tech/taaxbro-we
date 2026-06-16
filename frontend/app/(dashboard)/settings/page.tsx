@@ -64,11 +64,6 @@ export default function SettingsPage() {
   const [waSettings, setWaSettings] = useState<WhatsAppSettings | null>(null);
   const [waLoading, setWaLoading] = useState(false);
   const [waPhoneNumber, setWaPhoneNumber] = useState('');
-  const [clients, setClients] = useState<ClientResponse[]>([]);
-  const [clientsLoading, setClientsLoading] = useState(false);
-  const [waSaving, setWaSaving] = useState(false);
-  const [waSaveSuccess, setWaSaveSuccess] = useState(false);
-  const [waSaveError, setWaSaveError] = useState<string | null>(null);
 
   // Active sessions state
   const [sessions, setSessions] = useState<UserSessionInfo[]>([]);
@@ -308,17 +303,7 @@ export default function SettingsPage() {
     }
   }, [activeTab]);
 
-  // Load clients when tab changes to whatsapp
-  useEffect(() => {
-    if (activeTab === 'whatsapp' && profile?.business_id) {
-      setClientsLoading(true);
-      invoices
-        .listClients(profile.business_id)
-        .then(setClients)
-        .catch((e) => console.error('Failed to load clients:', e.message))
-        .finally(() => setClientsLoading(false));
-    }
-  }, [activeTab, profile]);
+
 
   const handleRevokeSession = async (sessionId: string) => {
     if (!confirm('Are you sure you want to revoke this session? The device will be logged out.')) {
@@ -488,49 +473,7 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSaveWhatsAppSettings = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!profile?.business_id || !waSettings) return;
 
-    setWaSaving(true);
-    setWaSaveError(null);
-    setWaSaveSuccess(false);
-
-    try {
-      const updated = await integrations.updateWhatsAppSettings(profile.business_id, {
-        ocr_mode: waSettings.ocr_mode,
-        notifications_enabled: waSettings.notifications_enabled,
-        auto_reply_enabled: waSettings.auto_reply_enabled,
-        auto_reply_text: waSettings.auto_reply_text ?? '',
-        client_reminders_enabled: waSettings.client_reminders_enabled,
-        reminder_days_before: waSettings.reminder_days_before,
-        reminder_interval_days: waSettings.reminder_interval_days,
-        reminder_max_count: waSettings.reminder_max_count,
-      });
-      setWaSettings(updated);
-      setWaSaveSuccess(true);
-      setTimeout(() => setWaSaveSuccess(false), 3000);
-    } catch (err: any) {
-      setWaSaveError(err.message ?? 'Failed to save WhatsApp settings.');
-    } finally {
-      setWaSaving(false);
-    }
-  };
-
-  const handleToggleClientReminderExclusion = async (clientId: string) => {
-    if (!profile?.business_id) return;
-
-    try {
-      const res = await invoices.toggleClientReminders(profile.business_id, clientId);
-      setClients((prev) =>
-        prev.map((c) =>
-          c.id === clientId ? { ...c, exclude_from_reminders: res.exclude_from_reminders } : c
-        )
-      );
-    } catch (err: any) {
-      alert(err.message ?? 'Failed to update client reminders status.');
-    }
-  };
 
   // ── 2FA & Password Change Handlers ───────────────────────────────────────
   
@@ -1296,205 +1239,6 @@ export default function SettingsPage() {
                         </div>
                       </div>
 
-                      {/* Reminders & Automation Config */}
-                      <form onSubmit={handleSaveWhatsAppSettings} className="bg-white rounded-3xl p-8 border border-grey-10 shadow-sm space-y-6 animate-fade-in relative overflow-hidden">
-                        <div className="flex items-center gap-3 pb-4 border-b border-grey-10">
-                          <div className="w-10 h-10 rounded-2xl bg-primary-30/10 flex items-center justify-center text-primary-30">
-                            <Icon icon="ph:bell-ringing" className="text-xl" />
-                          </div>
-                          <div>
-                            <h3 className="text-lg font-bold text-secondary-10">Payment Reminders</h3>
-                            <p className="text-xs text-secondary-30">Configure Elon to automatically remind clients of upcoming or overdue payments.</p>
-                          </div>
-                        </div>
-
-                        {/* Toggle */}
-                        <div className="flex items-center justify-between p-4 rounded-2xl bg-grey-0 border border-grey-10">
-                          <div>
-                            <span className="font-bold text-sm text-secondary-10 block">Enable Automated Reminders</span>
-                            <span className="text-xs text-secondary-30 block mt-0.5">Elon will send direct friendly WhatsApp messages to clients for payment.</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setWaSettings({
-                              ...waSettings,
-                              client_reminders_enabled: !waSettings.client_reminders_enabled
-                            })}
-                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out outline-none ${
-                              waSettings.client_reminders_enabled ? 'bg-primary-30' : 'bg-secondary-40'
-                            }`}
-                          >
-                            <span
-                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                                waSettings.client_reminders_enabled ? 'translate-x-5' : 'translate-x-0'
-                              }`}
-                            />
-                          </button>
-                        </div>
-
-                        {/* Parameter Fields (Accordion/Expanded state) */}
-                        {waSettings.client_reminders_enabled && (
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2 animate-fade-in">
-                            <label className="space-y-2 text-xs font-bold text-secondary-10 flex flex-col">
-                              First Nudge Offset (Days Before Due)
-                              <input
-                                type="number"
-                                min={1}
-                                max={30}
-                                value={waSettings.reminder_days_before}
-                                onChange={(e) => setWaSettings({
-                                  ...waSettings,
-                                  reminder_days_before: parseInt(e.target.value) || 0
-                                })}
-                                className="mt-1 w-full rounded-2xl border border-grey-10 bg-grey-0 px-4 py-3 text-sm font-medium outline-none focus:border-primary-30 focus:bg-white transition-all"
-                              />
-                              <span className="text-[10px] text-secondary-30 font-normal leading-normal">
-                                How many days before due date to start nudging.
-                              </span>
-                            </label>
-
-                            <label className="space-y-2 text-xs font-bold text-secondary-10 flex flex-col">
-                              Follow-Up Interval (Days)
-                              <input
-                                type="number"
-                                min={1}
-                                max={30}
-                                value={waSettings.reminder_interval_days}
-                                onChange={(e) => setWaSettings({
-                                  ...waSettings,
-                                  reminder_interval_days: parseInt(e.target.value) || 0
-                                })}
-                                className="mt-1 w-full rounded-2xl border border-grey-10 bg-grey-0 px-4 py-3 text-sm font-medium outline-none focus:border-primary-30 focus:bg-white transition-all"
-                              />
-                              <span className="text-[10px] text-secondary-30 font-normal leading-normal">
-                                Gap in days between subsequent reminders.
-                              </span>
-                            </label>
-
-                            <label className="space-y-2 text-xs font-bold text-secondary-10 flex flex-col">
-                              Maximum Reminders Limit
-                              <input
-                                type="number"
-                                min={1}
-                                max={10}
-                                value={waSettings.reminder_max_count}
-                                onChange={(e) => setWaSettings({
-                                  ...waSettings,
-                                  reminder_max_count: parseInt(e.target.value) || 0
-                                })}
-                                className="mt-1 w-full rounded-2xl border border-grey-10 bg-grey-0 px-4 py-3 text-sm font-medium outline-none focus:border-primary-30 focus:bg-white transition-all"
-                              />
-                              <span className="text-[10px] text-secondary-30 font-normal leading-normal">
-                                Max reminders to send per invoice.
-                              </span>
-                            </label>
-                          </div>
-                        )}
-
-                        {/* Error and Success banners */}
-                        {waSaveError && (
-                          <div className='px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2 animate-fade-in'>
-                            <Icon icon='ph:warning-circle' className='text-base shrink-0' />
-                            {waSaveError}
-                          </div>
-                        )}
-                        {waSaveSuccess && (
-                          <div className='px-4 py-3 rounded-xl bg-green-50 border border-green-200 text-xs text-green-700 flex items-center gap-2 animate-fade-in'>
-                            <Icon icon='ph:check-circle' className='text-base shrink-0' />
-                            WhatsApp settings saved successfully.
-                          </div>
-                        )}
-
-                        {/* Save Button */}
-                        <div className="flex justify-end pt-4 border-t border-grey-10">
-                          <button
-                            type="submit"
-                            disabled={waSaving}
-                            className="bg-primary-30 text-white text-xs font-bold px-6 py-3 rounded-full hover:bg-primary-40 transition shadow-sm flex items-center gap-2 disabled:opacity-55"
-                          >
-                            {waSaving ? (
-                              <Icon icon="ph:circle-notch" className="animate-spin text-sm" />
-                            ) : (
-                              <Icon icon="ph:floppy-disk" className="text-sm" />
-                            )}
-                            Save Reminders Config
-                          </button>
-                        </div>
-                      </form>
-
-                      {/* Client-level exclusions list */}
-                      <div className="bg-white rounded-3xl p-8 border border-grey-10 shadow-sm space-y-6 animate-fade-in">
-                        <div className="flex items-center justify-between pb-4 border-b border-grey-10">
-                          <div>
-                            <h3 className="text-lg font-bold text-secondary-10">Client Recipient Exclusions</h3>
-                            <p className="text-xs text-secondary-30 mt-0.5">Toggle to exclude/include specific clients from automated payment reminders.</p>
-                          </div>
-                        </div>
-
-                        {clientsLoading ? (
-                          <div className="flex flex-col items-center justify-center py-8">
-                            <Icon icon="ph:circle-notch" className="animate-spin text-2xl text-primary-30" />
-                            <p className="text-[11px] text-secondary-30 mt-2">Loading client status...</p>
-                          </div>
-                        ) : clients.length === 0 ? (
-                          <div className="text-center py-8 border border-dashed border-grey-10 rounded-2xl bg-grey-0">
-                            <Icon icon="ph:users" className="text-3xl text-secondary-40 mx-auto" />
-                            <p className="text-xs text-secondary-30 font-semibold mt-2">No clients found</p>
-                            <p className="text-[10px] text-secondary-40 mt-1">Clients created during invoicing will appear here.</p>
-                          </div>
-                        ) : (
-                          <div className="divide-y divide-grey-10 max-h-[400px] overflow-y-auto pr-2">
-                            {clients.map((client) => {
-                              const isExcluded = client.exclude_from_reminders;
-                              return (
-                                <div key={client.id} className="flex items-center justify-between py-4 first:pt-0 last:pb-0">
-                                  <div className="space-y-1">
-                                    <span className="font-bold text-sm text-secondary-10 block">{client.name}</span>
-                                    <div className="flex flex-wrap items-center gap-3 text-xs text-secondary-30">
-                                      {client.email && (
-                                        <span className="flex items-center gap-1">
-                                          <Icon icon="ph:envelope" className="text-sm shrink-0" />
-                                          {client.email}
-                                        </span>
-                                      )}
-                                      {client.phone && (
-                                        <span className="flex items-center gap-1">
-                                          <Icon icon="ph:phone" className="text-sm shrink-0" />
-                                          {client.phone}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-4">
-                                    {/* Status Badge */}
-                                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
-                                      isExcluded
-                                        ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                        : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                    }`}>
-                                      {isExcluded ? 'Excluded' : 'Auto-Remind'}
-                                    </span>
-                                    {/* Exclude Toggle */}
-                                    <button
-                                      type="button"
-                                      onClick={() => handleToggleClientReminderExclusion(client.id)}
-                                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out outline-none ${
-                                        !isExcluded ? 'bg-primary-30' : 'bg-secondary-40'
-                                      }`}
-                                    >
-                                      <span
-                                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                                          !isExcluded ? 'translate-x-5' : 'translate-x-0'
-                                        }`}
-                                      />
-                                    </button>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
                     </div>
                   ) : otpSent ? (
                     /* OTP (Verification Code) View */

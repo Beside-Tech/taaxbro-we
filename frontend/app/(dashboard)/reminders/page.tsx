@@ -7,10 +7,12 @@ import { useAuth } from '@/context/AuthContext';
 import {
   reminders,
   invoices,
+  integrations,
   type ReminderResponse,
   type ClientResponse,
   type InvoiceResponse,
   type ReminderCreatePayload,
+  type WhatsAppSettings,
 } from '@/lib/api';
 
 // ─── Formatting Helpers ──────────────────────────────────────────────────────

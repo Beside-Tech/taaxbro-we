@@ -436,6 +436,7 @@ export interface WhatsAppSettings {
   reminder_days_before: number;
   reminder_interval_days: number;
   reminder_max_count: number;
+  reminder_channel?: 'whatsapp' | 'email' | 'both';
 }
 
 export interface WhatsAppSettingsUpdate {
@@ -449,6 +450,7 @@ export interface WhatsAppSettingsUpdate {
   reminder_days_before?: number;
   reminder_interval_days?: number;
   reminder_max_count?: number;
+  reminder_channel?: 'whatsapp' | 'email' | 'both';
 }
 
 export const integrations = {
