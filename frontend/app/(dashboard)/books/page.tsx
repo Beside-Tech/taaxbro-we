@@ -81,8 +81,8 @@ function OverviewTab({ data, loading, onTabChange }: TabProps) {
   const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const prevMonthName = prevMonthDate.toLocaleString('en-US', { month: 'long' });
 
-  const totalReceived = recentTransactions.filter(t => t.type === 'credit').reduce((sum, t) => sum + Number(t.amount || 0), 0);
-  const totalSent = recentTransactions.filter(t => t.type === 'debit').reduce((sum, t) => sum + Number(t.amount || 0), 0);
+  const totalReceived = stats?.revenue_current_month ?? 0;
+  const totalSent = stats?.expenses_current_month ?? 0;
   const netFlow = totalReceived - totalSent;
 
   const statCards = [
