@@ -432,6 +432,10 @@ export interface WhatsAppSettings {
   auto_reply_enabled: boolean;
   auto_reply_text: string | null;
   last_tested_at: string | null;
+  client_reminders_enabled: boolean;
+  reminder_days_before: number;
+  reminder_interval_days: number;
+  reminder_max_count: number;
 }
 
 export interface WhatsAppSettingsUpdate {
@@ -441,6 +445,10 @@ export interface WhatsAppSettingsUpdate {
   ocr_mode?: 'manual' | 'auto';
   auto_reply_enabled?: boolean;
   auto_reply_text?: string;
+  client_reminders_enabled?: boolean;
+  reminder_days_before?: number;
+  reminder_interval_days?: number;
+  reminder_max_count?: number;
 }
 
 export const integrations = {
@@ -657,6 +665,12 @@ export const invoices = {
   listClients(businessId: string): Promise<ClientResponse[]> {
     return request<ClientResponse[]>(`/api/v1/invoices/clients?business_id=${businessId}`);
   },
+  toggleClientReminders(businessId: string, clientId: string): Promise<{ status: string; exclude_from_reminders: boolean }> {
+    return request<{ status: string; exclude_from_reminders: boolean }>(
+      `/api/v1/invoices/clients/${clientId}/toggle-reminders?business_id=${businessId}`,
+      { method: 'PATCH' }
+    );
+  },
 };
 
 export interface ClientResponse {
@@ -665,6 +679,7 @@ export interface ClientResponse {
   email: string | null;
   phone: string | null;
   whatsapp_number: string | null;
+  exclude_from_reminders: boolean;
 }
 
 
