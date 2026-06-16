@@ -93,8 +93,44 @@ export default function RemindersPage() {
   const [dateStr, setDateStr] = useState('');
   const [timeStr, setTimeStr] = useState('');
 
+  // Automated settings states
+  const [waSettings, setWaSettings] = useState<WhatsAppSettings | null>(null);
+  const [waSettingsLoading, setWaSettingsLoading] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [settingsModalLoading, setSettingsModalLoading] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+
+  const [clientRemindersEnabled, setClientRemindersEnabled] = useState(false);
+  const [reminderDaysBefore, setReminderDaysBefore] = useState(3);
+  const [reminderIntervalDays, setReminderIntervalDays] = useState(3);
+  const [reminderMaxCount, setReminderMaxCount] = useState(5);
+  const [reminderChannel, setReminderChannel] = useState<'whatsapp' | 'email' | 'both'>('whatsapp');
+  
+  // Search state for client exclusions in settings modal
+  const [exclusionsSearchQuery, setExclusionsSearchQuery] = useState('');
+  
+  // Client search query in creation modal
+  const [clientSearchQuery, setClientSearchQuery] = useState('');
+
   // Actions Loading State
   const [actioningId, setActioningId] = useState<string | null>(null);
+
+  // Sync waSettings to form fields
+  useEffect(() => {
+    if (waSettings) {
+      setClientRemindersEnabled(waSettings.client_reminders_enabled);
+      setReminderDaysBefore(waSettings.reminder_days_before);
+      setReminderIntervalDays(waSettings.reminder_interval_days);
+      setReminderMaxCount(waSettings.reminder_max_count);
+      setReminderChannel(waSettings.reminder_channel ?? 'whatsapp');
+    } else {
+      setClientRemindersEnabled(false);
+      setReminderDaysBefore(3);
+      setReminderIntervalDays(3);
+      setReminderMaxCount(5);
+      setReminderChannel('whatsapp');
+    }
+  }, [waSettings]);
 
   // Fetch Reminders & Select Helpers
   const fetchData = async () => {
@@ -104,12 +140,26 @@ export default function RemindersPage() {
       setRemindersList(res);
       
       if (user?.business_id) {
-        const [clientsRes, invoicesRes] = await Promise.all([
+        setWaSettingsLoading(true);
+        const [clientsRes, invoicesRes, waSettingsRes] = await Promise.allSettled([
           invoices.listClients(user.business_id),
           invoices.list(user.business_id),
+          integrations.getWhatsAppSettings(user.business_id)
         ]);
-        setClients(clientsRes);
-        setAllInvoices(invoicesRes);
+        
+        if (clientsRes.status === 'fulfilled') {
+          setClients(clientsRes.value);
+        }
+        if (invoicesRes.status === 'fulfilled') {
+          setAllInvoices(invoicesRes.value);
+        }
+        if (waSettingsRes.status === 'fulfilled') {
+          setWaSettings(waSettingsRes.value);
+        } else {
+          console.log('No WhatsApp settings or error:', waSettingsRes.reason);
+          setWaSettings(null);
+        }
+        setWaSettingsLoading(false);
       }
     } catch (err: any) {
       console.error('Failed to load reminders data:', err);
@@ -155,6 +205,15 @@ export default function RemindersPage() {
   };
 
   const filteredInvoices = getFilteredInvoices();
+
+  // Filter clients by search query in reminder creation modal
+  const getFilteredClients = () => {
+    return clients.filter(c =>
+      c.name.toLowerCase().includes(clientSearchQuery.toLowerCase())
+    );
+  };
+
+  const filteredClients = getFilteredClients();
 
   // Handle reminder creation
   const handleCreateReminder = async (e: React.FormEvent) => {
@@ -249,6 +308,39 @@ export default function RemindersPage() {
     }
   };
 
+  // Save Automated Nudges Settings
+  const handleSaveSettings = async () => {
+    if (!user?.business_id) return;
+    try {
+      setSettingsModalLoading(true);
+      setSettingsError(null);
+      const updated = await integrations.updateWhatsAppSettings(user.business_id, {
+        client_reminders_enabled: clientRemindersEnabled,
+        reminder_days_before: reminderDaysBefore,
+        reminder_interval_days: reminderIntervalDays,
+        reminder_max_count: reminderMaxCount,
+        reminder_channel: reminderChannel,
+      });
+      setWaSettings(updated);
+      setIsSettingsModalOpen(false);
+    } catch (err: any) {
+      setSettingsError(err.message ?? 'Failed to update reminder settings.');
+    } finally {
+      setSettingsModalLoading(false);
+    }
+  };
+
+  // Toggle Client exclusion status
+  const handleToggleClientReminder = async (clientId: string) => {
+    if (!user?.business_id) return;
+    try {
+      const res = await invoices.toggleClientReminders(user.business_id, clientId);
+      setClients(prev => prev.map(c => c.id === clientId ? { ...c, exclude_from_reminders: res.exclude_from_reminders } : c));
+    } catch (err: any) {
+      alert(err.message ?? 'Failed to toggle client reminders exclusion.');
+    }
+  };
+
   // Metrics calculation
   const totalActive = remindersList.filter(r => !r.sent_at && !r.cancelled).length;
   const totalDelivered = remindersList.filter(r => r.sent_at !== null).length;
@@ -280,13 +372,25 @@ export default function RemindersPage() {
               Schedule personal tasks or configure client payment alerts via WhatsApp and Email.
             </p>
           </div>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className='bg-primary-40 text-white text-sm font-semibold px-5 py-2.5 rounded-full hover:bg-primary-30 hover:scale-[1.02] active:scale-[0.98] transition shadow-md flex items-center gap-2 self-start sm:self-auto shrink-0'
-          >
-            <Icon icon='ph:plus-bold' className='text-base' />
-            Set a Reminder
-          </button>
+          <div className='flex items-center gap-2.5 self-start sm:self-auto shrink-0'>
+            <button
+              onClick={() => setIsSettingsModalOpen(true)}
+              className='p-2.5 border border-grey-10 text-secondary-20 hover:text-secondary-10 hover:bg-grey-0 rounded-full transition shadow-sm bg-white'
+              title='Automated Reminder Settings'
+            >
+              <Icon icon='ph:gear-six-bold' className='text-xl' />
+            </button>
+            <button
+              onClick={() => {
+                setClientSearchQuery('');
+                setIsModalOpen(true);
+              }}
+              className='bg-primary-40 text-white text-sm font-semibold px-5 py-2.5 rounded-full hover:bg-primary-30 hover:scale-[1.02] active:scale-[0.98] transition shadow-md flex items-center gap-2'
+            >
+              <Icon icon='ph:plus-bold' className='text-base' />
+              Set a Reminder
+            </button>
+          </div>
         </div>
       </TopBar>
 
