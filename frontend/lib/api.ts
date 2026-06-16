@@ -790,6 +790,24 @@ export interface TaxProfileSettings {
   fiscal_year_end: string; // "MM-DD"
 }
 
+export interface ComplianceAnomalyResponse {
+  id: string;
+  business_id: string;
+  anomaly_type: string;
+  severity: string;
+  title: string;
+  description: string;
+  affected_period: string | null;
+  tax_type: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  action_required: string;
+  action_link: string | null;
+  resolved: boolean;
+  resolved_at: string | null;
+  created_at: string;
+}
+
 export const tax = {
   getFilings(businessId: string): Promise<TaxFilingResponse[]> {
     return request<TaxFilingResponse[]>(`/api/v1/tax/filings?business_id=${businessId}`);
@@ -859,5 +877,15 @@ export const tax = {
       method: 'PATCH',
       body: JSON.stringify(data),
     });
+  },
+  getComplianceAnomalies(businessId: string, resolved?: boolean): Promise<ComplianceAnomalyResponse[]> {
+    const query = resolved !== undefined ? `&resolved=${resolved}` : '';
+    return request<ComplianceAnomalyResponse[]>(`/api/v1/tax/compliance/anomalies?business_id=${businessId}${query}`);
+  },
+  resolveComplianceAnomaly(businessId: string, anomalyId: string): Promise<{ status: string; message: string }> {
+    return request<{ status: string; message: string }>(
+      `/api/v1/tax/compliance/anomalies/${anomalyId}/resolve?business_id=${businessId}`,
+      { method: 'POST' }
+    );
   },
 };

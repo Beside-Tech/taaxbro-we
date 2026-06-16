@@ -8,7 +8,7 @@ import FlagIssueModal from '@/components/dashboard/tax/FlagIssueModal';
 
 import EditVATModal from '@/components/dashboard/tax/EditVATModal';
 import RecordFilingModal from '@/components/dashboard/tax/RecordFilingModal';
-import { dashboard, business, tax, type DashboardData, type BusinessProfile, type TaxFilingResponse, type TaxObligationResponse, type TaxLawUpdateResponse } from '@/lib/api';
+import { dashboard, business, tax, type DashboardData, type BusinessProfile, type TaxFilingResponse, type TaxObligationResponse, type TaxLawUpdateResponse, type ComplianceAnomalyResponse } from '@/lib/api';
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 
@@ -62,6 +62,10 @@ export default function TaxPage() {
   const [showLawMonitor, setShowLawMonitor] = useState(true);
   const [recalculating, setRecalculating] = useState<Record<string, boolean>>({});
   const [recalculatingAll, setRecalculatingAll] = useState(false);
+  const [anomalies, setAnomalies] = useState<ComplianceAnomalyResponse[]>([]);
+  const [anomaliesLoading, setAnomaliesLoading] = useState(true);
+  const [showComplianceCenter, setShowComplianceCenter] = useState(true);
+  const [complianceTab, setComplianceTab] = useState<'active' | 'resolved'>('active');
 
   const [selectedObligation, setSelectedObligation] = useState<TaxObligationResponse | null>(null);
   const [breakdownData, setBreakdownData] = useState<any>(null);
@@ -93,6 +97,14 @@ export default function TaxPage() {
       .finally(() => setObligationsLoading(false));
   };
 
+  const loadAnomalies = (bizId: string) => {
+    setAnomaliesLoading(true);
+    tax.getComplianceAnomalies(bizId)
+      .then((res) => setAnomalies(res))
+      .catch((e) => console.error('Failed to load compliance anomalies:', e))
+      .finally(() => setAnomaliesLoading(false));
+  };
+
   useEffect(() => {
     if (!profile?.business_id || !selectedObligation) {
       setBreakdownData(null);
@@ -121,6 +133,7 @@ export default function TaxPage() {
       .finally(() => setFilingsLoading(false));
 
     loadObligations(profile.business_id);
+    loadAnomalies(profile.business_id);
     
     tax.getLawUpdates()
       .then((res) => setLawUpdates(res))
@@ -158,6 +171,7 @@ export default function TaxPage() {
           );
           if (hasUpdated || attempts >= 10) {
             setObligationsList(res.obligations);
+            loadAnomalies(profile.business_id!);
             setRecalculating(prev => ({ ...prev, [typeLower]: false }));
             clearInterval(interval);
           }
@@ -257,8 +271,8 @@ export default function TaxPage() {
     setRecalculating(initialRecalculating);
 
     try {
-      // Trigger calculation only for active ones in parallel
-      await Promise.all(activeTypes.map(t => tax.triggerCompute(profile.business_id!, t)));
+      // Trigger calculation for all obligations sequentially via single Celery task
+      await tax.triggerCompute(profile.business_id!, 'all');
       
       const startTime = new Date().getTime();
       let attempts = 0;
@@ -286,8 +300,9 @@ export default function TaxPage() {
 
           setRecalculating(nextRecalculating);
           
-          if (finishedCount === activeTypes.length || attempts >= 10) {
+          if (finishedCount === activeTypes.length || attempts >= 15) {
             setObligationsList(res.obligations);
+            loadAnomalies(profile.business_id!);
             setRecalculating(
               allTypes.reduce((acc, t) => {
                 acc[t] = false;
@@ -311,11 +326,13 @@ export default function TaxPage() {
           return acc;
         }, {} as Record<string, boolean>)
       );
+      setRecalculatingAll(false);
     }
   };
 
   const reloadAllData = (bizId: string) => {
     loadObligations(bizId);
+    loadAnomalies(bizId);
     setFilingsLoading(true);
     tax.getFilings(bizId)
       .then((res) => setFilingsList(res))
@@ -349,15 +366,24 @@ export default function TaxPage() {
         affected_transaction_ids: affectedTransactionIds,
       });
       reloadAllData(profile.business_id);
+    }
+  };
+
+  const handleResolveAnomaly = async (anomalyId: string) => {
+    if (!profile?.business_id) return;
+    try {
+      await tax.resolveComplianceAnomaly(profile.business_id, anomalyId);
+      loadAnomalies(profile.business_id);
     } catch (err: any) {
-      throw new Error(err.message || 'Failed to submit flag');
+      alert(err.message || 'Failed to resolve compliance anomaly');
     }
   };
 
   // ── Derived values ───────────────────────────────────────────────────────
   const stats = data?.stats;
   const revenue = stats ? Number(stats.revenue_current_month) : 0;
-  const state = profile?.state ?? 'Lagos';
+  const activeAnomalies = useMemo(() => anomalies.filter(a => !a.resolved), [anomalies]);
+  const resolvedAnomalies = useMemo(() => anomalies.filter(a => a.resolved), [anomalies]);
 
   const steps = [
     { n: 1, label: 'Computed', done: true },
@@ -1369,6 +1395,175 @@ export default function TaxPage() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* AI Compliance & Audit Center collapsible section */}
+        <div className='bg-white rounded-xl border border-grey-10/60 overflow-hidden shadow-sm'>
+          <button 
+            onClick={() => setShowComplianceCenter(!showComplianceCenter)}
+            className='w-full flex items-center justify-between px-6 py-4 hover:bg-primary-50/20 transition-colors'
+          >
+            <div className='flex items-center gap-2'>
+              <div className={`w-8 h-8 rounded-lg ${activeAnomalies.length > 0 ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'} flex items-center justify-center shrink-0`}>
+                <Icon icon={activeAnomalies.length > 0 ? 'ph:shield-warning' : 'ph:shield-check'} className='text-lg' />
+              </div>
+              <div className='text-left'>
+                <h2 className='text-base font-semibold text-secondary-10'>AI Compliance & Audit Center</h2>
+                <p className='text-xs text-secondary-30'>Real-time regulatory audits by Elon. Unresolved anomalies require immediate review.</p>
+              </div>
+            </div>
+            <div className='flex items-center gap-3 shrink-0'>
+              {activeAnomalies.length > 0 ? (
+                <span className='text-xs px-2.5 py-0.5 rounded-full bg-orange-50 text-orange-600 border border-orange-200 font-semibold'>
+                  {activeAnomalies.length} Anomaly{activeAnomalies.length > 1 ? 'ies' : ''}
+                </span>
+              ) : (
+                <span className='text-xs px-2.5 py-0.5 rounded-full bg-green-50 text-green-600 border border-green-200 font-semibold'>
+                  Fully Compliant
+                </span>
+              )}
+              <Icon 
+                icon={showComplianceCenter ? 'ph:caret-up' : 'ph:caret-down'} 
+                className='text-secondary-30 text-lg' 
+              />
+            </div>
+          </button>
+
+          {showComplianceCenter && (
+            <div className='border-t border-grey-10/60 p-6 bg-primary-50/10 space-y-4'>
+              {/* Tabs */}
+              <div className='flex gap-2 border-b border-grey-10/40 pb-3'>
+                <button
+                  onClick={() => setComplianceTab('active')}
+                  className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-colors ${complianceTab === 'active' ? 'bg-primary-30 text-white' : 'border border-grey-10 text-secondary-10 hover:bg-primary-50'}`}
+                >
+                  Active Alerts ({activeAnomalies.length})
+                </button>
+                <button
+                  onClick={() => setComplianceTab('resolved')}
+                  className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-colors ${complianceTab === 'resolved' ? 'bg-primary-30 text-white' : 'border border-grey-10 text-secondary-10 hover:bg-primary-50'}`}
+                >
+                  Audit History ({resolvedAnomalies.length})
+                </button>
+              </div>
+
+              {anomaliesLoading ? (
+                <div className='py-8 flex flex-col items-center justify-center gap-2'>
+                  <Icon icon='ph:circle-notch' className='text-2xl animate-spin text-primary-30' />
+                  <p className='text-xs text-secondary-30'>Loading compliance details...</p>
+                </div>
+              ) : (
+                (() => {
+                  const items = complianceTab === 'active' ? activeAnomalies : resolvedAnomalies;
+                  if (items.length === 0) {
+                    return complianceTab === 'active' ? (
+                      <div className='py-8 px-6 bg-white border border-grey-10/40 rounded-xl shadow-sm text-center flex flex-col items-center justify-center gap-2'>
+                        <div className='w-12 h-12 rounded-full bg-green-50 flex items-center justify-center text-green-500'>
+                          <Icon icon='ph:check-circle-bold' className='text-2xl' />
+                        </div>
+                        <h3 className='text-sm font-semibold text-secondary-10'>Your business is fully tax compliant</h3>
+                        <p className='text-xs text-secondary-30 max-w-md mx-auto'>
+                          Elon has audited your transactions, invoices, expenses, and payroll. No compliance anomalies detected for the active periods.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className='py-8 text-center text-xs text-secondary-30'>
+                        No compliance history found.
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                      {items.map((anomaly) => {
+                        const isCritical = anomaly.severity.toLowerCase() === 'critical';
+                        const isWarning = anomaly.severity.toLowerCase() === 'warning';
+                        
+                        let borderStyle = 'border-l-blue-500';
+                        let iconName = 'ph:info-bold';
+                        let badgeColor = 'bg-blue-50 text-blue-600 border-blue-200';
+                        
+                        if (isCritical) {
+                          borderStyle = 'border-l-red-500';
+                          iconName = 'ph:warning-octagon-bold';
+                          badgeColor = 'bg-red-50 text-red-600 border-red-200';
+                        } else if (isWarning) {
+                          borderStyle = 'border-l-orange-500';
+                          iconName = 'ph:warning-bold';
+                          badgeColor = 'bg-orange-50 text-orange-600 border-orange-200';
+                        }
+
+                        return (
+                          <div 
+                            key={anomaly.id} 
+                            className={`bg-white border border-grey-10/40 border-l-4 ${borderStyle} rounded-xl p-4 shadow-sm flex flex-col justify-between`}
+                          >
+                            <div className='space-y-3'>
+                              <div className='flex items-center justify-between'>
+                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border uppercase ${badgeColor} tracking-wider`}>
+                                  {anomaly.severity}
+                                </span>
+                                {anomaly.tax_type && (
+                                  <span className='text-xs font-semibold text-secondary-30 uppercase'>
+                                    {anomaly.tax_type}
+                                  </span>
+                                )}
+                              </div>
+                              
+                              <div>
+                                <h4 className='text-sm font-bold text-secondary-10 flex items-center gap-1.5'>
+                                  <Icon icon={iconName} className='text-base shrink-0' />
+                                  {anomaly.title}
+                                </h4>
+                                <p className='text-xs text-secondary-30 mt-1 leading-relaxed'>
+                                  {anomaly.description}
+                                </p>
+                              </div>
+
+                              <div className='bg-primary-50/50 rounded-lg p-3 border border-primary-10/40 text-[11px] text-secondary-20 space-y-1'>
+                                <strong className='text-secondary-10 block font-semibold'>Action Required:</strong>
+                                <p className='leading-relaxed'>{anomaly.action_required}</p>
+                              </div>
+                            </div>
+
+                            <div className='flex items-center justify-between gap-3 mt-4 pt-3 border-t border-grey-10/40'>
+                              <span className='text-[10px] text-secondary-40'>
+                                Detected: {new Date(anomaly.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              </span>
+                              
+                              <div className='flex gap-2'>
+                                {anomaly.action_link && !anomaly.resolved && (
+                                  <a 
+                                    href={anomaly.action_link}
+                                    className='px-3 py-1 rounded bg-primary-10 text-primary-30 hover:bg-primary-20 text-xs font-semibold transition-colors'
+                                  >
+                                    Review
+                                  </a>
+                                )}
+                                {!anomaly.resolved && (
+                                  <button
+                                    onClick={() => handleResolveAnomaly(anomaly.id)}
+                                    className='px-3 py-1 rounded border border-grey-10 text-secondary-10 hover:bg-primary-50 text-xs font-semibold transition-colors'
+                                  >
+                                    Mark Resolved
+                                  </button>
+                                )}
+                                {anomaly.resolved && (
+                                  <span className='text-xs text-green-600 font-semibold flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-50'>
+                                    <Icon icon='ph:check-bold' /> Resolved
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()
+              )}
+            </div>
+          )}
         </div>
 
         {/* AI Tax Law Monitor collapsible section */}
