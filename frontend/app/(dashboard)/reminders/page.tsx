@@ -215,6 +215,15 @@ export default function RemindersPage() {
 
   const filteredClients = getFilteredClients();
 
+  // Filter clients by search query in the automated settings modal's exclusion list
+  const getExclusionFilteredClients = () => {
+    return clients.filter(c =>
+      c.name.toLowerCase().includes(exclusionsSearchQuery.toLowerCase())
+    );
+  };
+
+  const exclusionFilteredClients = getExclusionFilteredClients();
+
   // Handle reminder creation
   const handleCreateReminder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -735,6 +744,15 @@ export default function RemindersPage() {
                 <div className='grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fade-in'>
                   <div className='flex flex-col gap-2'>
                     <label className='text-xs font-bold text-secondary-30 uppercase tracking-wider'>Select Client</label>
+                    {clients.length > 5 && (
+                      <input
+                        type='text'
+                        value={clientSearchQuery}
+                        onChange={(e) => setClientSearchQuery(e.target.value)}
+                        placeholder='Search clients...'
+                        className='w-full border border-grey-10 rounded-xl px-4 py-2 text-xs text-secondary-10 bg-white focus:outline-none focus:ring-2 focus:ring-primary-30/40 focus:border-primary-30 transition'
+                      />
+                    )}
                     <select
                       required
                       value={selectedClientId}
@@ -742,7 +760,7 @@ export default function RemindersPage() {
                       className='w-full border border-grey-10 rounded-xl px-4 py-3 text-xs text-secondary-10 bg-white focus:outline-none focus:ring-2 focus:ring-primary-30/40 focus:border-primary-30 transition'
                     >
                       <option value=''>Choose client...</option>
-                      {clients.map((c) => (
+                      {filteredClients.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.name}
                         </option>
@@ -904,6 +922,225 @@ export default function RemindersPage() {
                   <Icon icon='ph:circle-notch' className='animate-spin text-sm' />
                 ) : (
                   'Schedule Reminder'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Automated Reminder Settings Modal */}
+      {isSettingsModalOpen && (
+        <div className='fixed inset-0 z-50 flex items-center justify-center p-4 bg-secondary-10/40 backdrop-blur-sm animate-fade-in'>
+          <div className='bg-white rounded-3xl border border-grey-10 shadow-xl max-w-lg w-full max-h-[90vh] flex flex-col p-6 md:p-8 animate-scale-up overflow-hidden'>
+            {/* Modal Header */}
+            <div className='flex items-center justify-between pb-4 border-b border-grey-10/60 shrink-0'>
+              <div className='flex items-center gap-2.5'>
+                <div className='w-9 h-9 rounded-lg bg-primary-50 text-primary-30 flex items-center justify-center'>
+                  <Icon icon='ph:gear-six-bold' className='text-xl' />
+                </div>
+                <h2 className='text-xl font-bold text-secondary-10'>Automated Reminder Settings</h2>
+              </div>
+              <button
+                type='button'
+                onClick={() => setIsSettingsModalOpen(false)}
+                className='text-secondary-30 hover:text-secondary-10 transition p-1.5 hover:bg-grey-10/50 rounded-full'
+              >
+                <Icon icon='ph:x-bold' className='text-lg' />
+              </button>
+            </div>
+
+            {/* Modal Error */}
+            {settingsError && (
+              <div className='mt-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2 shrink-0'>
+                <Icon icon='ph:warning-circle' className='text-base shrink-0' />
+                {settingsError}
+              </div>
+            )}
+
+            {/* Scrollable Form Body */}
+            <div className='flex-1 overflow-y-auto py-5 pr-1 space-y-5'>
+              {/* Enable toggle */}
+              <div className='flex items-start justify-between gap-3 p-4 rounded-2xl border border-grey-10/80 bg-grey-0/40'>
+                <div className='flex items-start gap-3'>
+                  <input
+                    type='checkbox'
+                    id='client_reminders_enabled_toggle'
+                    checked={clientRemindersEnabled}
+                    onChange={(e) => setClientRemindersEnabled(e.target.checked)}
+                    className='w-4 h-4 mt-0.5 text-primary-30 border-grey-10 rounded focus:ring-primary-30'
+                  />
+                  <label htmlFor='client_reminders_enabled_toggle' className='cursor-pointer select-none'>
+                    <span className='block text-sm font-bold text-secondary-10'>Automated client nudges</span>
+                    <span className='block text-xs text-secondary-30 mt-0.5'>
+                      Automatically remind clients about outstanding invoices as their due date approaches.
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              {clientRemindersEnabled && (
+                <div className='space-y-5 animate-fade-in'>
+                  {/* Days before / Interval / Max count */}
+                  <div className='grid grid-cols-3 gap-3'>
+                    <div className='flex flex-col gap-2'>
+                      <label className='text-xs font-bold text-secondary-30 uppercase tracking-wider'>
+                        Start (days before)
+                      </label>
+                      <input
+                        type='number'
+                        min={1}
+                        max={30}
+                        value={reminderDaysBefore}
+                        onChange={(e) => setReminderDaysBefore(Math.max(1, Number(e.target.value) || 1))}
+                        className='w-full border border-grey-10 rounded-xl px-3 py-3 text-xs text-secondary-10 bg-white focus:outline-none focus:ring-2 focus:ring-primary-30/40 focus:border-primary-30 transition'
+                      />
+                    </div>
+                    <div className='flex flex-col gap-2'>
+                      <label className='text-xs font-bold text-secondary-30 uppercase tracking-wider'>
+                        Repeat every (days)
+                      </label>
+                      <input
+                        type='number'
+                        min={1}
+                        max={30}
+                        value={reminderIntervalDays}
+                        onChange={(e) => setReminderIntervalDays(Math.max(1, Number(e.target.value) || 1))}
+                        className='w-full border border-grey-10 rounded-xl px-3 py-3 text-xs text-secondary-10 bg-white focus:outline-none focus:ring-2 focus:ring-primary-30/40 focus:border-primary-30 transition'
+                      />
+                    </div>
+                    <div className='flex flex-col gap-2'>
+                      <label className='text-xs font-bold text-secondary-30 uppercase tracking-wider'>
+                        Max nudges
+                      </label>
+                      <input
+                        type='number'
+                        min={1}
+                        max={20}
+                        value={reminderMaxCount}
+                        onChange={(e) => setReminderMaxCount(Math.max(1, Number(e.target.value) || 1))}
+                        className='w-full border border-grey-10 rounded-xl px-3 py-3 text-xs text-secondary-10 bg-white focus:outline-none focus:ring-2 focus:ring-primary-30/40 focus:border-primary-30 transition'
+                      />
+                    </div>
+                  </div>
+
+                  {/* Delivery Channel */}
+                  <div className='flex flex-col gap-2'>
+                    <label className='text-xs font-bold text-secondary-30 uppercase tracking-wider'>Delivery Channel</label>
+                    <div className='grid grid-cols-3 gap-2'>
+                      <button
+                        type='button'
+                        onClick={() => setReminderChannel('whatsapp')}
+                        className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-2xl border text-center transition ${
+                          reminderChannel === 'whatsapp'
+                            ? 'border-emerald-500 bg-emerald-50 text-emerald-600 font-bold'
+                            : 'border-grey-10 hover:border-primary-20 bg-white text-secondary-20'
+                        }`}
+                      >
+                        <Icon icon='ph:whatsapp-logo' className='text-xl' />
+                        <span className='text-[10px]'>WhatsApp Only</span>
+                      </button>
+                      <button
+                        type='button'
+                        onClick={() => setReminderChannel('email')}
+                        className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-2xl border text-center transition ${
+                          reminderChannel === 'email'
+                            ? 'border-blue-500 bg-blue-50 text-blue-600 font-bold'
+                            : 'border-grey-10 hover:border-primary-20 bg-white text-secondary-20'
+                        }`}
+                      >
+                        <Icon icon='ph:envelope-simple' className='text-xl' />
+                        <span className='text-[10px]'>Email Only</span>
+                      </button>
+                      <button
+                        type='button'
+                        onClick={() => setReminderChannel('both')}
+                        className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-2xl border text-center transition ${
+                          reminderChannel === 'both'
+                            ? 'border-indigo-500 bg-indigo-50 text-indigo-600 font-bold'
+                            : 'border-grey-10 hover:border-primary-20 bg-white text-secondary-20'
+                        }`}
+                      >
+                        <div className='flex gap-1'>
+                          <Icon icon='ph:whatsapp-logo' className='text-lg' />
+                          <Icon icon='ph:envelope-simple' className='text-lg' />
+                        </div>
+                        <span className='text-[10px]'>Both Channels</span>
+                      </button>
+                    </div>
+                    {(reminderChannel === 'whatsapp' || reminderChannel === 'both') &&
+                      !(waSettings?.phone_number && waSettings?.enabled) && (
+                        <p className='text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mt-1 flex items-start gap-1.5'>
+                          <Icon icon='ph:info' className='shrink-0 mt-0.5' />
+                          WhatsApp isn&apos;t connected yet. Connect it from Settings to deliver nudges over WhatsApp.
+                        </p>
+                      )}
+                  </div>
+
+                  {/* Client Exclusions */}
+                  <div className='flex flex-col gap-2'>
+                    <label className='text-xs font-bold text-secondary-30 uppercase tracking-wider'>
+                      Exclude specific clients
+                    </label>
+                    <div className='relative'>
+                      <Icon icon='ph:magnifying-glass' className='absolute left-3.5 top-1/2 -translate-y-1/2 text-secondary-30 text-sm' />
+                      <input
+                        type='text'
+                        value={exclusionsSearchQuery}
+                        onChange={(e) => setExclusionsSearchQuery(e.target.value)}
+                        placeholder='Search clients...'
+                        className='w-full border border-grey-10 rounded-xl pl-9 pr-4 py-2.5 text-xs text-secondary-10 bg-white focus:outline-none focus:ring-2 focus:ring-primary-30/40 focus:border-primary-30 transition'
+                      />
+                    </div>
+                    <div className='border border-grey-10/80 rounded-2xl divide-y divide-grey-10/60 max-h-48 overflow-y-auto'>
+                      {exclusionFilteredClients.length === 0 ? (
+                        <p className='text-xs text-secondary-30 text-center py-6'>No clients found.</p>
+                      ) : (
+                        exclusionFilteredClients.map((c) => (
+                          <div key={c.id} className='flex items-center justify-between gap-3 px-4 py-2.5'>
+                            <div className='min-w-0'>
+                              <p className='text-xs font-semibold text-secondary-10 truncate'>{c.name}</p>
+                              <p className='text-[10px] text-secondary-30 truncate'>{c.email || c.phone || 'No contact on file'}</p>
+                            </div>
+                            <button
+                              type='button'
+                              onClick={() => handleToggleClientReminder(c.id)}
+                              className={`shrink-0 text-[10px] font-bold px-3 py-1.5 rounded-full transition ${
+                                c.exclude_from_reminders
+                                  ? 'bg-grey-10 text-secondary-20 hover:bg-grey-10/70'
+                                  : 'bg-primary-50 text-primary-30 hover:bg-primary-40/20'
+                              }`}
+                            >
+                              {c.exclude_from_reminders ? 'Excluded' : 'Included'}
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Action Buttons Footer */}
+            <div className='flex items-center gap-3 pt-4 border-t border-grey-10/60 shrink-0'>
+              <button
+                type='button'
+                onClick={() => setIsSettingsModalOpen(false)}
+                className='flex-1 border border-grey-10 text-secondary-10 text-xs font-bold py-3 rounded-full hover:bg-grey-10/40 transition-colors'
+              >
+                Cancel
+              </button>
+              <button
+                type='button'
+                onClick={handleSaveSettings}
+                disabled={settingsModalLoading}
+                className='flex-1 flex items-center justify-center gap-2 bg-primary-40 hover:bg-primary-30 text-white text-xs font-bold rounded-full py-3 transition disabled:opacity-40 disabled:cursor-not-allowed shadow-md'
+              >
+                {settingsModalLoading ? (
+                  <Icon icon='ph:circle-notch' className='animate-spin text-sm' />
+                ) : (
+                  'Save Settings'
                 )}
               </button>
             </div>
