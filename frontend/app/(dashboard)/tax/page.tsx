@@ -366,6 +366,8 @@ export default function TaxPage() {
         affected_transaction_ids: affectedTransactionIds,
       });
       reloadAllData(profile.business_id);
+    } catch (err: any) {
+      console.error('Failed to flag issue:', err);
     }
   };
 

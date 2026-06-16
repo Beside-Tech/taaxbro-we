@@ -339,6 +339,11 @@ export const dashboard = {
       method: 'PATCH',
     });
   },
+  markAllNotificationsRead(): Promise<{ status: string }> {
+    return request<{ status: string }>('/api/v1/dashboard/notifications/read-all', {
+      method: 'POST',
+    });
+  },
 };
 
 // ─── Onboarding ──────────────────────────────────────────────────────
