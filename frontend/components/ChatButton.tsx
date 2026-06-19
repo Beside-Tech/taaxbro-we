@@ -48,6 +48,8 @@ type Message = {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  action?: { type: string; target: string } | null;
+  actionDismissed?: boolean;
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -281,19 +283,24 @@ export default function ChatButton() {
       // Strip action hints from displayed answer
       answer = answer.replace(/ACTION:(navigate|show|tab|download):[a-z0-9\-\/]+/gi, '').trim();
 
+      const navAction = actions.find(a => a.type === 'navigate');
+
       setMessages((prev) => [
         ...prev,
-        { id: mkId(), role: 'assistant', content: answer },
+        {
+          id: mkId(),
+          role: 'assistant',
+          content: answer,
+          action: navAction ? { type: navAction.type, target: navAction.target } : null
+        },
       ]);
 
-      // Execute actions after a short delay so the user sees Elon's message first
-      if (actions.length > 0) {
+      // Execute non-navigation actions after a short delay so the user sees Elon's message first
+      const nonNavActions = actions.filter(a => a.type !== 'navigate');
+      if (nonNavActions.length > 0) {
         setTimeout(() => {
-          for (const action of actions) {
-            if (action.type === 'navigate') {
-              const route = action.target.startsWith('/') ? action.target : `/${action.target}`;
-              router.push(route);
-            } else if (action.type === 'show') {
+          for (const action of nonNavActions) {
+            if (action.type === 'show') {
               // Emit a custom event that page components can listen to
               window.dispatchEvent(new CustomEvent('elon-action', { detail: { show: action.target } }));
             } else if (action.type === 'tab') {
@@ -536,6 +543,36 @@ export default function ChatButton() {
                   }`}
                 >
                   {msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content}
+
+                  {msg.role === 'assistant' && msg.action && msg.action.type === 'navigate' && !msg.actionDismissed && (
+                    <div className="mt-3 pt-2.5 border-t border-grey-10/60 flex flex-col gap-2">
+                      <p className="text-[11px] text-secondary-30 font-medium">
+                        Elon suggested opening the {msg.action.target.replace(/^\//, '').charAt(0).toUpperCase() + msg.action.target.replace(/^\//, '').slice(1)} page. Go there?
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const route = msg.action!.target.startsWith('/') ? msg.action!.target : `/${msg.action!.target}`;
+                            router.push(route);
+                            setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, actionDismissed: true } : m));
+                          }}
+                          className="px-2.5 py-1.5 bg-[#1a1a2e] hover:bg-[#2a2a44] text-white text-[11px] font-semibold rounded-lg transition"
+                        >
+                          Yes, take me there
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, actionDismissed: true } : m));
+                          }}
+                          className="px-2.5 py-1.5 border border-grey-10 hover:bg-grey-0 text-secondary-20 text-[11px] font-semibold rounded-lg transition"
+                        >
+                          No, stay here
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

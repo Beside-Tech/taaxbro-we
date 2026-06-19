@@ -12,6 +12,8 @@ type Message = {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  action?: { type: string; target: string } | null;
+  actionDismissed?: boolean;
 };
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
@@ -247,18 +249,23 @@ function ChatContent() {
       }
       answer = answer.replace(/ACTION:(navigate|show|tab|download):[a-z0-9\-\/]+/gi, '').trim();
 
+      const navAction = actions.find(a => a.type === 'navigate');
+
       setMessages((prev) => [
         ...prev,
-        { id: mkId(), role: 'assistant', content: answer },
+        {
+          id: mkId(),
+          role: 'assistant',
+          content: answer,
+          action: navAction ? { type: navAction.type, target: navAction.target } : null
+        },
       ]);
 
-      if (actions.length > 0) {
+      const nonNavActions = actions.filter(a => a.type !== 'navigate');
+      if (nonNavActions.length > 0) {
         setTimeout(() => {
-          for (const action of actions) {
-            if (action.type === 'navigate') {
-              const route = action.target.startsWith('/') ? action.target : `/${action.target}`;
-              router.push(route);
-            } else if (action.type === 'show') {
+          for (const action of nonNavActions) {
+            if (action.type === 'show') {
               window.dispatchEvent(new CustomEvent('elon-action', { detail: { show: action.target } }));
             } else if (action.type === 'tab') {
               window.dispatchEvent(new CustomEvent('elon-action', { detail: { tab: action.target } }));
@@ -465,6 +472,36 @@ function ChatContent() {
                   }`}
                 >
                   {msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content}
+
+                  {msg.role === 'assistant' && msg.action && msg.action.type === 'navigate' && !msg.actionDismissed && (
+                    <div className="mt-3 pt-3 border-t border-grey-10/40 flex flex-col gap-2">
+                      <p className="text-xs text-secondary-30 font-medium">
+                        Elon suggested opening the {msg.action.target.replace(/^\//, '').charAt(0).toUpperCase() + msg.action.target.replace(/^\//, '').slice(1)} page. Go there?
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const route = msg.action!.target.startsWith('/') ? msg.action!.target : `/${msg.action!.target}`;
+                            router.push(route);
+                            setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, actionDismissed: true } : m));
+                          }}
+                          className="px-3 py-1.5 bg-[#1a1a2e] hover:bg-[#2a2a44] text-white text-xs font-semibold rounded-lg transition"
+                        >
+                          Yes, take me there
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, actionDismissed: true } : m));
+                          }}
+                          className="px-3 py-1.5 border border-grey-10 hover:bg-grey-0 text-secondary-20 text-xs font-semibold rounded-lg transition"
+                        >
+                          No, stay here
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
