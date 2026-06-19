@@ -390,10 +390,8 @@ export default function TaxPage() {
     if (!profile?.business_id) return;
     setAutoFixingId(anomalyId);
     try {
-      await tax.autoFixComplianceAnomaly(profile.business_id, anomalyId);
-      showInfoMessage(
-        "Elon is correcting your records in the background. Please wait for a moment while we recalculate obligations..."
-      );
+      const res = await tax.autoFixComplianceAnomaly(profile.business_id, anomalyId);
+      showInfoMessage(res.message || "Auto-fix applied successfully.");
       loadAnomalies(profile.business_id);
       loadObligations(profile.business_id);
     } catch (err: any) {
@@ -1678,7 +1676,7 @@ export default function TaxPage() {
                                 )}
                                 {(() => {
                                   const isAutoFixable = !anomaly.resolved && 
-                                    ['vat_exempt_item_charged', 'vat_exemption_violation'].includes(anomaly.anomaly_type) && 
+                                    ['vat_exempt_item_charged', 'vat_exemption_violation', 'vat_charged_on_exempt_sale', 'vat_missing_on_taxable_sale', 'vat_paid_on_exempt_expense', 'wht_missed_deduction'].includes(anomaly.anomaly_type) && 
                                     anomaly.entity_type && anomaly.entity_id;
                                   
                                   if (!isAutoFixable) return null;

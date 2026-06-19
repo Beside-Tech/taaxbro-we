@@ -26,6 +26,7 @@ const CATEGORIES = [
   { value: 'groceries', label: 'Groceries / Pantry' },
   { value: 'equipment', label: 'Equipment / Tools' },
   { value: 'professional_services', label: 'Professional Services' },
+  { value: 'payroll', label: '💼 Payroll / Salaries' },
   { value: 'other', label: 'Other' },
 ];
 
@@ -35,11 +36,14 @@ export default function CreateExpenseModal({
   onSuccess,
 }: CreateExpenseModalProps) {
   const [vendorName, setVendorName] = useState('');
+  const [vendorTin, setVendorTin] = useState('');
   const [category, setCategory] = useState('office');
   const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [amount, setAmount] = useState('');
   const [vatAmount, setVatAmount] = useState('0');
   const [description, setDescription] = useState('');
+
+  const isPayroll = category === 'payroll';
 
   // WHT state
   const [whtApplicable, setWhtApplicable] = useState(false);
@@ -68,6 +72,10 @@ export default function CreateExpenseModal({
       setErrorMsg('Vendor name is required.');
       return;
     }
+    if (isPayroll && !vendorTin.trim()) {
+      setErrorMsg('Employee / Vendor TIN is required for payroll expenses.');
+      return;
+    }
     if (!amount || Number(amount) <= 0) {
       setErrorMsg('Please enter a valid expense amount.');
       return;
@@ -85,6 +93,7 @@ export default function CreateExpenseModal({
         category,
         amount: Number(amount),
         vendor_name: vendorName.trim(),
+        vendor_tin: vendorTin.trim() || undefined,
         expense_date: expenseDate,
         description: description.trim() || undefined,
         vat_amount: Number(vatAmount) || 0,
@@ -178,11 +187,13 @@ export default function CreateExpenseModal({
 
           <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
             <div>
-              <label className='block text-xs font-semibold text-secondary-20 mb-1'>Vendor Name *</label>
+              <label className='block text-xs font-semibold text-secondary-20 mb-1'>
+                {isPayroll ? 'Employee / Payee Name *' : 'Vendor Name *'}
+              </label>
               <input
                 type='text'
                 required
-                placeholder='e.g. Shoprite Ltd'
+                placeholder={isPayroll ? 'e.g. John Adebayo' : 'e.g. Shoprite Ltd'}
                 value={vendorName}
                 onChange={(e) => setVendorName(e.target.value)}
                 className='w-full border border-grey-10 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-primary-30 transition-colors bg-white text-secondary-10 font-medium'
@@ -204,6 +215,33 @@ export default function CreateExpenseModal({
               </select>
             </div>
           </div>
+
+          {/* Payroll TIN field — shown only when category is payroll */}
+          {isPayroll && (
+            <div className='animate-fade-in'>
+              <label className='block text-xs font-semibold text-secondary-20 mb-1'>
+                Employee / Vendor TIN *
+                <span className='ml-1 text-[10px] font-normal text-secondary-30'>(Tax Identification Number — required for payroll)</span>
+              </label>
+              <div className='relative'>
+                <span className='absolute left-3.5 top-1/2 -translate-y-1/2 text-secondary-30'>
+                  <svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 256 256' fill='currentColor'><path d='M247.31,124.76c-.35-.79-8.82-19.58-27.65-38.41C194.57,61.26,162.88,48,128,48S61.43,61.26,36.34,86.35C17.51,105.18,9,124,8.69,124.76a8,8,0,0,0,0,6.5c.35.79,8.82,19.57,27.65,38.4C61.43,194.74,93.12,208,128,208s66.57-13.26,91.66-38.34c18.83-18.83,27.3-37.61,27.65-38.4A8,8,0,0,0,247.31,124.76ZM128,192c-30.78,0-57.67-11.19-79.93-33.25A133.47,133.47,0,0,1,25,128,133.33,133.33,0,0,1,48.07,97.25C70.33,75.19,97.22,64,128,64s57.67,11.19,79.93,33.25A133.46,133.46,0,0,1,231.05,128C223.84,141.46,192.43,192,128,192Zm0-112a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Z'/></svg>
+                </span>
+                <input
+                  type='text'
+                  required={isPayroll}
+                  placeholder='e.g. 12345678-0001'
+                  value={vendorTin}
+                  onChange={(e) => setVendorTin(e.target.value)}
+                  className='w-full border border-amber-300 rounded-xl pl-9 pr-4 py-2.5 text-sm outline-none focus:border-amber-500 transition-colors bg-amber-50/40 text-secondary-10 font-medium'
+                />
+              </div>
+              <p className='text-[10px] text-amber-700 mt-1 flex items-center gap-1'>
+                <svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 256 256' fill='currentColor'><path d='M236.8,188.09,149.35,36.22a24.76,24.76,0,0,0-42.7,0L19.2,188.09a23.51,23.51,0,0,0,0,23.72A24.35,24.35,0,0,0,40.55,224h174.9a24.35,24.35,0,0,0,21.33-12.19A23.51,23.51,0,0,0,236.8,188.09ZM120,104a8,8,0,0,1,16,0v40a8,8,0,0,1-16,0Zm8,88a12,12,0,1,1,12-12A12,12,0,0,1,128,192Z'/></svg>
+                Payroll payments require TIN for PAYE compliance (FIRS regulation)
+              </p>
+            </div>
+          )}
 
           <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
             <div>

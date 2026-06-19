@@ -731,6 +731,7 @@ export const expenses = {
     category: string;
     amount: number;
     vendor_name?: string | null;
+    vendor_tin?: string | null;
     expense_date?: string | null;
     description?: string | null;
     vat_amount?: number;
