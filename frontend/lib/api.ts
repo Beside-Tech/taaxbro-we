@@ -325,6 +325,8 @@ export interface WebNotification {
   action_url: string | null;
   read_at: string | null;
   created_at: string;
+  entity_type?: string | null;
+  entity_id?: string | null;
 }
 
 export const dashboard = {
@@ -752,6 +754,23 @@ export const expenses = {
       body: formData,
     });
   },
+  update(businessId: string, expenseId: string, data: Partial<{
+    category: string;
+    amount: number;
+    vendor_name: string | null;
+    vendor_tin: string | null;
+    expense_date: string | null;
+    description: string | null;
+    vat_amount: number;
+    wht_applicable: boolean;
+    wht_rate: number;
+    wht_amount: number;
+  }>): Promise<ExpenseResponse> {
+    return request<ExpenseResponse>(`/api/v1/expenses/${expenseId}?business_id=${businessId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
 };
 
 // ─── Tax ───────────────────────────────────────────────────────────────────
@@ -849,6 +868,10 @@ export interface ComplianceAnomalyResponse {
 export const tax = {
   getFilings(businessId: string): Promise<TaxFilingResponse[]> {
     return request<TaxFilingResponse[]>(`/api/v1/tax/filings?business_id=${businessId}`);
+  },
+  getObligations(businessId: string, status?: string): Promise<TaxObligationResponse[]> {
+    const query = status ? `&status=${status}` : '';
+    return request<TaxObligationResponse[]>(`/api/v1/tax/obligations?business_id=${businessId}${query}`);
   },
   getOverview(businessId: string): Promise<TaxOverviewResponse> {
     return request<TaxOverviewResponse>(`/api/v1/tax/overview?business_id=${businessId}`);
@@ -989,6 +1012,32 @@ export const reminders = {
   delete(id: string): Promise<void> {
     return request<void>(`/api/v1/reminders/${id}`, {
       method: 'DELETE',
+    });
+  },
+};
+
+export interface EmployeeResponse {
+  id: string;
+  name: string;
+  gross_monthly_salary?: number | null;
+  tin?: string | null;
+  state_of_employment?: string | null;
+  is_paye_exempt: boolean;
+}
+
+export const employees = {
+  list(businessId: string): Promise<EmployeeResponse[]> {
+    return request<EmployeeResponse[]>(`/api/v1/employees?business_id=${businessId}`);
+  },
+  create(businessId: string, data: {
+    name: string;
+    gross_monthly_salary: number;
+    tin?: string | null;
+    state_of_employment?: string | null;
+  }): Promise<EmployeeResponse> {
+    return request<EmployeeResponse>(`/api/v1/employees?business_id=${businessId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
     });
   },
 };

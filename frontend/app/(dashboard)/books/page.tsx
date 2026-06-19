@@ -13,8 +13,9 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import TopBar from '@/components/dashboard/TopBar';
-import { dashboard, invoices, expenses, ai, type DashboardData, type InvoiceResponse, type ExpenseResponse } from '@/lib/api';
+import { dashboard, invoices, expenses, tax, ai, type DashboardData, type InvoiceResponse, type ExpenseResponse, type TaxObligationResponse } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
+import ComplianceBubble from '@/components/dashboard/books/ComplianceBubble';
 import PaymentLinkModal from '@/components/dashboard/pay/PaymentLinkModal';
 import ViewInvoiceModal from '@/components/dashboard/books/ViewInvoiceModal';
 import CreateInvoiceModal from '@/components/dashboard/books/CreateInvoiceModal';
@@ -37,6 +38,26 @@ function formatDate(iso: string): { date: string; time: string } {
     date: d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
     time: d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true }),
   };
+}
+
+function isExpenseLocked(expense: ExpenseResponse, obligations: TaxObligationResponse[]): boolean {
+  const expenseDate = expense.expense_date;
+  const isPayroll = expense.category?.toLowerCase() === 'payroll';
+  const checkTypes = isPayroll ? ['paye'] : ['vat'];
+  if (expense.wht_applicable) {
+    checkTypes.push('wht');
+  }
+
+  return obligations.some((ob) => {
+    if (ob.status.toLowerCase() !== 'paid') return false;
+    if (!checkTypes.includes(ob.tax_type.toLowerCase())) return false;
+    
+    const start = ob.period_start.split('T')[0];
+    const end = ob.period_end.split('T')[0];
+    const exp = expenseDate.split('T')[0];
+    
+    return exp >= start && exp <= end;
+  });
 }
 
 interface TabProps {
@@ -465,9 +486,11 @@ interface ExpensesTabProps {
   businessId: string;
   onRefresh: () => void;
   onNewExpense: () => void;
+  obligations: TaxObligationResponse[];
+  onEditExpense: (expense: ExpenseResponse) => void;
 }
 
-function ExpensesTab({ expensesList, loading, businessId, onRefresh, onNewExpense }: ExpensesTabProps) {
+function ExpensesTab({ expensesList, loading, businessId, onRefresh, onNewExpense, obligations, onEditExpense }: ExpensesTabProps) {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
   
@@ -598,6 +621,7 @@ function ExpensesTab({ expensesList, loading, businessId, onRefresh, onNewExpens
               const { date: d } = formatDate(exp.expense_date);
               const cat = exp.category?.toLowerCase() || 'office';
               const icon = categoryIcons[cat] ?? 'ph:shopping-bag';
+              const locked = isExpenseLocked(exp, obligations);
 
               return (
                 <div key={exp.id} className='flex items-start gap-4 px-6 py-4 hover:bg-primary-50/30 transition-colors'>
@@ -631,16 +655,31 @@ function ExpensesTab({ expensesList, loading, businessId, onRefresh, onNewExpens
                       <p className='text-xs text-secondary-20 mt-1 italic leading-relaxed'>"{exp.description}"</p>
                     )}
 
-                    {exp.receipt_url && (
-                      <a
-                        href={exp.receipt_url}
-                        target='_blank'
-                        rel='noopener noreferrer'
-                        className='inline-flex items-center gap-1 text-xs text-primary-30 hover:underline mt-2 font-medium bg-primary-50 px-2.5 py-1 rounded-lg border border-primary-20/40 hover:bg-primary-50/80 transition-colors'
-                      >
-                        <Icon icon='ph:image' className='text-sm' /> View Scanned Receipt
-                      </a>
-                    )}
+                    <div className='flex flex-wrap items-center gap-2 mt-2'>
+                      {exp.receipt_url && (
+                        <a
+                          href={exp.receipt_url}
+                          target='_blank'
+                          rel='noopener noreferrer'
+                          className='inline-flex items-center gap-1 text-xs text-primary-30 hover:underline font-medium bg-primary-50 px-2.5 py-1 rounded-lg border border-primary-20/40 hover:bg-primary-50/80 transition-colors'
+                        >
+                          <Icon icon='ph:image' className='text-sm' /> View Scanned Receipt
+                        </a>
+                      )}
+
+                      {locked ? (
+                        <span className='inline-flex items-center gap-1 text-xs text-orange-600 font-semibold bg-orange-50 px-2.5 py-1 rounded-lg border border-orange-200/50' title="This period is locked because tax has been paid.">
+                          <Icon icon='ph:lock-key-fill' className='text-orange-500 text-sm' /> Paid &amp; Locked
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => onEditExpense(exp)}
+                          className='inline-flex items-center gap-1 text-xs text-primary-30 hover:underline font-medium bg-primary-50 px-2.5 py-1 rounded-lg border border-primary-20/40 hover:bg-primary-50/80 transition-colors'
+                        >
+                          <Icon icon='ph:pencil-simple' className='text-sm' /> Edit
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className='text-right shrink-0'>
                     <p className='text-sm font-semibold text-danger'>-{formatNaira(exp.amount)}</p>
@@ -878,6 +917,11 @@ export default function BooksPage() {
   const [expensesLoading, setExpensesLoading] = useState(false);
   const [expensesLoaded, setExpensesLoaded] = useState(false);
 
+  const [obligations, setObligations] = useState<TaxObligationResponse[]>([]);
+  const [obligationsLoading, setObligationsLoading] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<ExpenseResponse | null>(null);
+  const [lastSavedRecord, setLastSavedRecord] = useState<{ id: string; type: 'expense' | 'invoice' } | null>(null);
+
   const [showPaymentLink, setShowPaymentLink] = useState(false);
   const [showCreateInvoice, setShowCreateInvoice] = useState(false);
   const [showCreateExpense, setShowCreateExpense] = useState(false);
@@ -971,6 +1015,17 @@ export default function BooksPage() {
     }
   };
 
+  const loadObligations = () => {
+    if (user?.business_id) {
+      setObligationsLoading(true);
+      tax
+        .getObligations(user.business_id, 'paid')
+        .then((list) => setObligations(list))
+        .catch((e) => console.error('Failed to load obligations:', e))
+        .finally(() => setObligationsLoading(false));
+    }
+  };
+
   useEffect(() => {
     dashboard
       .get()
@@ -985,6 +1040,7 @@ export default function BooksPage() {
     if (user?.business_id) {
       loadInvoices();
       loadExpenses();
+      loadObligations();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.business_id]);
@@ -995,6 +1051,7 @@ export default function BooksPage() {
       loadInvoices(true);
     } else if (activeTab === 'Expenses' || activeTab === 'Reports') {
       loadExpenses(true);
+      loadObligations();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
@@ -1101,11 +1158,14 @@ export default function BooksPage() {
             onNewExpense={() => setShowCreateExpense(true)}
             onRefresh={() => {
               loadExpenses(true);
+              loadObligations();
               dashboard
                 .get()
                 .then(setData)
                 .catch((e) => setError(e.message ?? 'Failed to load books data'));
             }}
+            obligations={obligations}
+            onEditExpense={setEditingExpense}
           />
         )}
         {activeTab === 'Reports' && (
@@ -1186,15 +1246,48 @@ export default function BooksPage() {
         <CreateExpenseModal
           businessId={user.business_id}
           onClose={() => setShowCreateExpense(false)}
-          onSuccess={() => {
+          onSuccess={(savedId) => {
             setShowCreateExpense(false);
             loadExpenses(true);
+            loadObligations();
             // Refresh stats
             dashboard
               .get()
               .then(setData)
               .catch((e) => setError(e.message ?? 'Failed to load books data'));
+            // Set last saved record for compliance bubble
+            setLastSavedRecord({ id: savedId, type: 'expense' });
           }}
+        />
+      )}
+
+      {editingExpense && user?.business_id && (
+        <CreateExpenseModal
+          businessId={user.business_id}
+          editMode={true}
+          initialData={editingExpense}
+          onClose={() => setEditingExpense(null)}
+          onSuccess={(savedId) => {
+            setEditingExpense(null);
+            loadExpenses(true);
+            loadObligations();
+            // Refresh stats
+            dashboard
+              .get()
+              .then(setData)
+              .catch((e) => setError(e.message ?? 'Failed to load books data'));
+            // Set last saved record for compliance bubble
+            setLastSavedRecord({ id: savedId, type: 'expense' });
+          }}
+        />
+      )}
+
+      {lastSavedRecord && user?.business_id && (
+        <ComplianceBubble
+          businessId={user.business_id}
+          recordId={lastSavedRecord.id}
+          recordType={lastSavedRecord.type}
+          onDismiss={() => setLastSavedRecord(null)}
         />
       )}
     </div>
