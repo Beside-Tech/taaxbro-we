@@ -8,7 +8,7 @@ import PaymentLinkModal from '@/components/dashboard/pay/PaymentLinkModal';
 import TransferModal from '@/components/dashboard/pay/TransferModal';
 import ViewTransactionModal from '@/components/dashboard/pay/ViewTransactionModal';
 
-import { dashboard, integrations, type DashboardData } from '@/lib/api';
+import { dashboard, integrations, pay, type DashboardData } from '@/lib/api';
 
 import { useAuth } from '@/context/AuthContext';
 
@@ -42,6 +42,10 @@ export default function PayPage() {
   const [showCategoryFilters, setShowCategoryFilters] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
 
+  const [payTransactions, setPayTransactions] = useState<any[]>([]);
+  const [paySummary, setPaySummary] = useState<any | null>(null);
+  const [payTransactionsLoading, setPayTransactionsLoading] = useState(true);
+
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +68,16 @@ export default function PayPage() {
         .then(setAccounts)
         .catch((e) => console.error('Failed to load accounts:', e))
         .finally(() => setAccountsLoading(false));
+
+      setPayTransactionsLoading(true);
+      pay.getTransactions(user.business_id, 1, 100)
+        .then(setPayTransactions)
+        .catch((e) => console.error('Failed to load pay transactions:', e))
+        .finally(() => setPayTransactionsLoading(false));
+
+      pay.getSummary(user.business_id)
+        .then(setPaySummary)
+        .catch((e) => console.error('Failed to load pay summary:', e));
     }
 
     const d = new Date();
@@ -87,12 +101,12 @@ export default function PayPage() {
   const stats = data?.stats;
   const recentTransactions = data?.recent_transactions ?? [];
 
-  // Calculate sent/received from stats or recent txs
-  const totalReceived = stats?.revenue_current_month ?? 0;
-  const totalSent = recentTransactions
+  // Calculate sent/received from paySummary or fallback to stats / transaction calculations
+  const totalReceived = paySummary?.received_mtd ?? stats?.revenue_current_month ?? 0;
+  const totalSent = paySummary?.sent_mtd ?? payTransactions
     .filter((t) => t.type === 'debit')
     .reduce((sum, t) => sum + Number(t.amount || 0), 0);
-  const netFlow = totalReceived - totalSent;
+  const netFlow = paySummary?.net_mtd ?? (totalReceived - totalSent);
 
   const statCards = [
     {
@@ -144,20 +158,21 @@ export default function PayPage() {
 
 
   const tabs = [
-    { id: 'all', label: `All (${recentTransactions.length})` },
-    { id: 'inbound', label: `Inbound (${recentTransactions.filter(t => t.type === 'credit').length})` },
-    { id: 'outbound', label: `Outbound (${recentTransactions.filter(t => t.type === 'debit').length})` },
+    { id: 'all', label: `All (${payTransactions.length})` },
+    { id: 'inbound', label: `Inbound (${payTransactions.filter(t => t.type === 'credit').length})` },
+    { id: 'outbound', label: `Outbound (${payTransactions.filter(t => t.type === 'debit').length})` },
     { id: 'unmatched', label: 'Unmatched (0)' },
     { id: 'tax', label: 'Tax Payment (0)' },
   ];
 
-  const filteredTransactions = recentTransactions.filter((tx) => {
+  const filteredTransactions = payTransactions.filter((tx) => {
     // Search filter
     if (search) {
       const q = search.toLowerCase();
       const matchesSource = tx.bank_name?.toLowerCase().includes(q) ?? false;
       const matchesRecipient = tx.counterparty_name?.toLowerCase().includes(q) ?? false;
-      if (!matchesSource && !matchesRecipient) return false;
+      const matchesDesc = tx.description?.toLowerCase().includes(q) ?? false;
+      if (!matchesSource && !matchesRecipient && !matchesDesc) return false;
     }
 
     // Tab filter
@@ -393,7 +408,7 @@ export default function PayPage() {
           </div>
 
           {/* Table */}
-          {loading ? (
+          {payTransactionsLoading ? (
             <div className='p-6 space-y-3 animate-pulse'>
               {[0, 1, 2].map((i) => (
                 <div key={i} className='flex gap-4'>

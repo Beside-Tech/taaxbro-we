@@ -60,6 +60,22 @@ function isExpenseLocked(expense: ExpenseResponse, obligations: TaxObligationRes
   });
 }
 
+function isInvoiceLocked(invoice: InvoiceResponse, obligations: TaxObligationResponse[]): boolean {
+  const checkTypes = ['vat'];
+  const invoiceDate = invoice.issue_date || invoice.created_at;
+
+  return obligations.some((ob) => {
+    if (ob.status.toLowerCase() !== 'paid') return false;
+    if (!checkTypes.includes(ob.tax_type.toLowerCase())) return false;
+    
+    const start = ob.period_start.split('T')[0];
+    const end = ob.period_end.split('T')[0];
+    const inv = invoiceDate.split('T')[0];
+    
+    return inv >= start && inv <= end;
+  });
+}
+
 interface TabProps {
   data: DashboardData | null;
   loading: boolean;
@@ -326,6 +342,8 @@ interface InvoicesTabProps {
   onNewInvoice: () => void;
   onViewInvoice: (invoice: any) => void;
   onLogPayment: (invoice: any) => void;
+  obligations: TaxObligationResponse[];
+  onEditInvoice: (invoice: InvoiceResponse) => void;
 }
 
 function getStatusClass(status: string): string {
@@ -345,7 +363,7 @@ function getStatusClass(status: string): string {
   }
 }
 
-function InvoicesTab({ invoicesList, loading, onNewInvoice, onViewInvoice, onLogPayment }: InvoicesTabProps) {
+function InvoicesTab({ invoicesList, loading, onNewInvoice, onViewInvoice, onLogPayment, obligations, onEditInvoice }: InvoicesTabProps) {
   const [search, setSearch] = useState('');
 
   const filteredInvoices = invoicesList.filter((inv) => {
@@ -430,6 +448,7 @@ function InvoicesTab({ invoicesList, loading, onNewInvoice, onViewInvoice, onLog
               <tbody>
                 {filteredInvoices.map((inv) => {
                   const { date: d } = formatDate(inv.created_at);
+                  const locked = isInvoiceLocked(inv, obligations);
                   return (
                     <tr key={inv.id} className='border-t border-grey-10/40 hover:bg-primary-50/30 transition-colors'>
                       <td className='px-5 py-3.5 text-secondary-10 font-medium'>{inv.invoice_number}</td>
@@ -455,6 +474,18 @@ function InvoicesTab({ invoicesList, loading, onNewInvoice, onViewInvoice, onLog
                               className='flex items-center gap-1 text-success text-sm font-medium hover:underline'
                             >
                               <Icon icon='ph:wallet' /> Pay
+                            </button>
+                          )}
+                          {locked ? (
+                            <span className='inline-flex items-center gap-1 text-xs text-orange-600 font-semibold bg-orange-50 px-2 py-0.5 rounded-lg border border-orange-200/50' title="This period is locked because VAT has been paid.">
+                              <Icon icon='ph:lock-key-fill' className='text-orange-500 text-xs' /> Locked
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => onEditInvoice(inv)}
+                              className='flex items-center gap-1 text-primary-30 text-sm font-medium hover:underline'
+                            >
+                              <Icon icon='ph:pencil-simple' /> Edit
                             </button>
                           )}
                         </div>
@@ -1148,6 +1179,8 @@ export default function BooksPage() {
             onNewInvoice={() => setShowCreateInvoice(true)}
             onViewInvoice={setSelectedInvoice}
             onLogPayment={setPaymentInvoice}
+            obligations={obligations}
+            onEditInvoice={setEditingInvoice}
           />
         )}
         {activeTab === 'Expenses' && user?.business_id && (

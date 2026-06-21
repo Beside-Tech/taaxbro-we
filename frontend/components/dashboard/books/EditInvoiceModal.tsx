@@ -104,7 +104,11 @@ export default function EditInvoiceModal({ invoiceId, businessId, onClose, onSuc
       });
       onSuccess();
     } catch (err: any) {
-      setErrorMsg(err.message ?? 'Failed to update invoice. Please try again.');
+      if (err.status === 423) {
+        setErrorMsg(err.message ?? 'This invoice is locked because VAT for this period has already been paid and cannot be edited.');
+      } else {
+        setErrorMsg(err.message ?? 'Failed to update invoice. Please try again.');
+      }
     } finally {
       setSaving(false);
     }

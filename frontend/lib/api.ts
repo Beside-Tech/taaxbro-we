@@ -587,6 +587,7 @@ export interface InvoiceResponse {
   due_date: string;
   status: string;
   created_at: string;
+  issue_date?: string;
 }
 
 export const invoices = {
@@ -1039,5 +1040,42 @@ export const employees = {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  },
+};
+
+export interface PaySummaryResponse {
+  received_mtd: number;
+  sent_mtd: number;
+  net_mtd: number;
+  period_start: string;
+  period_end: string;
+}
+
+export interface TransactionListItem {
+  id: string;
+  type: 'credit' | 'debit';
+  amount: number;
+  currency: string;
+  description: string | null;
+  counterparty_name: string | null;
+  category: string | null;
+  transaction_date: string;
+  reconciled: boolean;
+}
+
+export const pay = {
+  getSummary(businessId: string): Promise<PaySummaryResponse> {
+    return request<PaySummaryResponse>(`/api/v1/pay/summary?business_id=${businessId}`);
+  },
+  getTransactions(
+    businessId: string,
+    page = 1,
+    pageSize = 20,
+    txType?: 'credit' | 'debit'
+  ): Promise<TransactionListItem[]> {
+    const typeQuery = txType ? `&tx_type=${txType}` : '';
+    return request<TransactionListItem[]>(
+      `/api/v1/pay/transactions?business_id=${businessId}&page=${page}&page_size=${pageSize}${typeQuery}`
+    );
   },
 };
