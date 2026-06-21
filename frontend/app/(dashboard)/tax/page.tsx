@@ -73,6 +73,13 @@ export default function TaxPage() {
   const [autoFixingId, setAutoFixingId] = useState<string | null>(null);
 
   const [selectedObligation, setSelectedObligation] = useState<TaxObligationResponse | null>(null);
+  const [sellsGoods, setSellsGoods] = useState(false);
+  const [inventoryList, setInventoryList] = useState<any[]>([]);
+  const [inventoryLoading, setInventoryLoading] = useState(false);
+  const [selectedFiscalYear, setSelectedFiscalYear] = useState(() => new Date().getFullYear());
+  const [openingInvInput, setOpeningInvInput] = useState('');
+  const [closingInvInput, setClosingInvInput] = useState('');
+  const [savingInventory, setSavingInventory] = useState(false);
   const [breakdownData, setBreakdownData] = useState<any>(null);
   const [breakdownLoading, setBreakdownLoading] = useState(false);
   const [showRecordFiling, setShowRecordFiling] = useState(false);
@@ -110,6 +117,66 @@ export default function TaxPage() {
       .finally(() => setAnomaliesLoading(false));
   };
 
+  const loadInventory = (bizId: string) => {
+    setInventoryLoading(true);
+    tax.getInventory(bizId)
+      .then((res) => {
+        setSellsGoods(res.sells_goods);
+        setInventoryList(res.inventories);
+      })
+      .catch((e) => console.error('Failed to load inventory:', e))
+      .finally(() => setInventoryLoading(false));
+  };
+
+  useEffect(() => {
+    const record = inventoryList.find(i => i.fiscal_year === Number(selectedFiscalYear));
+    if (record) {
+      setOpeningInvInput(record.opening_inventory ? String(record.opening_inventory) : '0');
+      setClosingInvInput(record.closing_inventory !== null && record.closing_inventory !== undefined ? String(record.closing_inventory) : '');
+    } else {
+      setOpeningInvInput('0');
+      setClosingInvInput('');
+    }
+  }, [selectedFiscalYear, inventoryList]);
+
+  const handleSaveInventory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profile?.business_id) return;
+    setSavingInventory(true);
+    try {
+      const payload = {
+        fiscal_year: Number(selectedFiscalYear),
+        opening_inventory: Number(openingInvInput) || 0,
+        closing_inventory: closingInvInput.trim() !== '' ? Number(closingInvInput) : null,
+        valuation_method: 'average_cost',
+      };
+      await tax.saveInventory(profile.business_id, payload);
+      showInfoMessage(`Inventory valuations saved for FY ${selectedFiscalYear}. Calculating adjusted taxable profit and CIT estimates...`);
+      
+      const invRes = await tax.getInventory(profile.business_id);
+      setInventoryList(invRes.inventories);
+      
+      loadObligations(profile.business_id);
+      loadAnomalies(profile.business_id);
+      
+      if (selectedObligation && selectedObligation.tax_type.toLowerCase() === 'cit') {
+        const bd = await tax.getObligationBreakdown(profile.business_id, selectedObligation.id);
+        setBreakdownData(bd);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to save inventory valuations');
+    } finally {
+      setSavingInventory(false);
+    }
+  };
+
+  const stockPurchases = useMemo(() => {
+    if (selectedObligation?.tax_type.toLowerCase() === 'cit' && breakdownData) {
+      return Number(breakdownData.purchases_total || 0);
+    }
+    return 0;
+  }, [selectedObligation, breakdownData]);
+
   useEffect(() => {
     if (!profile?.business_id || !selectedObligation) {
       setBreakdownData(null);
@@ -139,6 +206,7 @@ export default function TaxPage() {
 
     loadObligations(profile.business_id);
     loadAnomalies(profile.business_id);
+    loadInventory(profile.business_id);
     
     tax.getLawUpdates()
       .then((res) => setLawUpdates(res))
@@ -883,6 +951,163 @@ export default function TaxPage() {
               ))}
         </div>
 
+        {/* Inventory & COGS Adjustment Card */}
+        {sellsGoods && (
+          <div className='bg-white border border-grey-10/60 rounded-xl p-6 shadow-sm space-y-6 animate-fade-in'>
+            <div className='flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-grey-10 pb-4'>
+              <div className='flex items-center gap-3'>
+                <div className='w-12 h-12 rounded-xl bg-primary-30/10 text-primary-30 flex items-center justify-center shrink-0 shadow-sm'>
+                  <Icon icon='ph:package' className='text-2xl' />
+                </div>
+                <div>
+                  <h2 className='text-lg font-bold text-secondary-10'>Inventory &amp; COGS Adjustment</h2>
+                  <p className='text-xs text-secondary-30 mt-0.5'>
+                    Manage annual opening/closing inventory balances to adjust taxable profits for Corporate Income Tax (CIT).
+                  </p>
+                </div>
+              </div>
+              
+              <div className='flex items-center gap-2.5'>
+                <label htmlFor='inventory_fy_select' className='text-xs font-semibold text-secondary-20 uppercase tracking-wider'>Fiscal Year:</label>
+                <select
+                  id='inventory_fy_select'
+                  value={selectedFiscalYear}
+                  onChange={(e) => setSelectedFiscalYear(Number(e.target.value))}
+                  className='border border-grey-10 rounded-xl px-4 py-2 text-sm outline-none focus:border-primary-30 bg-white text-secondary-10 font-semibold shadow-sm'
+                >
+                  {[2025, 2026, 2027].map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveInventory} className='space-y-6'>
+              <div className='grid grid-cols-1 md:grid-cols-3 gap-5'>
+                <div>
+                  <label className='block text-xs font-bold text-secondary-20 uppercase tracking-wider mb-2'>Opening Inventory *</label>
+                  <div className='relative'>
+                    <span className='absolute left-4 top-1/2 -translate-y-1/2 text-secondary-30 text-sm'>₦</span>
+                    <input
+                      type='number'
+                      min='0'
+                      step='any'
+                      required
+                      placeholder='0.00'
+                      value={openingInvInput}
+                      onChange={(e) => setOpeningInvInput(e.target.value)}
+                      className='w-full border border-grey-10 rounded-xl pl-8 pr-4 py-3 text-sm outline-none focus:border-primary-30 transition-colors bg-white font-semibold text-secondary-10 shadow-sm'
+                    />
+                  </div>
+                  <p className='text-[10px] text-secondary-30 mt-1.5 leading-relaxed'>
+                    Value of unsold stock at the start of the fiscal year.
+                  </p>
+                </div>
+
+                <div>
+                  <label className='block text-xs font-bold text-secondary-20 uppercase tracking-wider mb-2'>Stock Purchases (Current Year)</label>
+                  <div className='relative'>
+                    <span className='absolute left-4 top-1/2 -translate-y-1/2 text-secondary-30 text-sm'>₦</span>
+                    <input
+                      type='text'
+                      disabled
+                      value={stockPurchases.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                      className='w-full border border-grey-10 rounded-xl pl-8 pr-4 py-3 text-sm outline-none bg-grey-50 font-semibold text-secondary-20 shadow-sm'
+                    />
+                  </div>
+                  <p className='text-[10px] text-secondary-30 mt-1.5 leading-relaxed'>
+                    Calculated automatically from expenses logged under <strong className='text-secondary-20'>"Inventory Purchases (Stock)"</strong>.
+                  </p>
+                </div>
+
+                <div>
+                  <label className='block text-xs font-bold text-secondary-20 uppercase tracking-wider mb-2'>Closing Inventory</label>
+                  <div className='relative'>
+                    <span className='absolute left-4 top-1/2 -translate-y-1/2 text-secondary-30 text-sm'>₦</span>
+                    <input
+                      type='number'
+                      min='0'
+                      step='any'
+                      placeholder='Unrecorded'
+                      value={closingInvInput}
+                      onChange={(e) => setClosingInvInput(e.target.value)}
+                      className='w-full border border-grey-10 rounded-xl pl-8 pr-4 py-3 text-sm outline-none focus:border-primary-30 transition-colors bg-white font-semibold text-secondary-10 shadow-sm'
+                    />
+                  </div>
+                  <p className='text-[10px] text-secondary-30 mt-1.5 leading-relaxed'>
+                    Value of unsold stock remaining at the end of the fiscal year. Leave blank if unrecorded.
+                  </p>
+                </div>
+              </div>
+
+              {/* Dynamic COGS Flowchart */}
+              <div className='p-4.5 rounded-2xl bg-primary-50/15 border border-primary-20/40 space-y-4'>
+                <h3 className='text-xs font-bold text-secondary-20 uppercase tracking-wider'>Cost of Goods Sold (COGS) Calculation</h3>
+                
+                <div className='flex flex-col md:flex-row items-center justify-center gap-4 text-center md:text-left'>
+                  {/* Opening Stock */}
+                  <div className='bg-white border border-grey-10/40 rounded-xl p-3.5 shadow-sm min-w-[150px] flex flex-col items-center justify-center'>
+                    <span className='text-[9px] text-secondary-30 font-bold uppercase tracking-wider'>Opening Stock</span>
+                    <span className='text-sm font-bold text-secondary-10 mt-1.5'>{formatNaira(Number(openingInvInput) || 0)}</span>
+                  </div>
+
+                  <div className='text-secondary-30 font-black text-xl'>+</div>
+
+                  {/* Purchases */}
+                  <div className='bg-white border border-grey-10/40 rounded-xl p-3.5 shadow-sm min-w-[150px] flex flex-col items-center justify-center'>
+                    <span className='text-[9px] text-secondary-30 font-bold uppercase tracking-wider'>Stock Purchases</span>
+                    <span className='text-sm font-bold text-secondary-10 mt-1.5'>{formatNaira(stockPurchases)}</span>
+                  </div>
+
+                  <div className='text-secondary-30 font-black text-xl'>-</div>
+
+                  {/* Closing Stock */}
+                  <div className='bg-white border border-grey-10/40 rounded-xl p-3.5 shadow-sm min-w-[150px] flex flex-col items-center justify-center'>
+                    <span className='text-[9px] text-secondary-30 font-bold uppercase tracking-wider'>Closing Stock</span>
+                    <span className='text-sm font-bold text-secondary-10 mt-1.5'>
+                      {closingInvInput.trim() !== '' ? formatNaira(Number(closingInvInput)) : '₦0.00'}
+                    </span>
+                  </div>
+
+                  <div className='text-secondary-30 font-black text-xl'>=</div>
+
+                  {/* COGS Result */}
+                  <div className='bg-primary-30 text-white rounded-xl p-3.5 shadow-md min-w-[180px] flex flex-col items-center justify-center'>
+                    <span className='text-[9px] text-white/80 font-bold uppercase tracking-wider'>Cost of Goods Sold (COGS)</span>
+                    <span className='text-base font-extrabold mt-1.5'>
+                      {formatNaira(Math.max(0, (Number(openingInvInput) || 0) + stockPurchases - (Number(closingInvInput) || 0)))}
+                    </span>
+                  </div>
+                </div>
+                
+                <p className='text-[10px] text-secondary-30 text-center leading-relaxed max-w-2xl mx-auto pt-1'>
+                  ℹ️ Under periodic inventory accounting, COGS reduces your taxable operating income. A higher closing inventory increases profit and tax liability, while a lower closing inventory reduces them.
+                </p>
+              </div>
+
+              <div className='flex justify-end'>
+                <button
+                  type='submit'
+                  disabled={savingInventory || inventoryLoading}
+                  className='px-6 py-3 rounded-full bg-primary-30 text-white text-sm font-semibold hover:bg-primary-40 transition-colors shadow-sm flex items-center gap-2 disabled:bg-primary-30/50'
+                >
+                  {savingInventory ? (
+                    <>
+                      <Icon icon='ph:circle-notch' className='animate-spin' />
+                      Saving Valuations...
+                    </>
+                  ) : (
+                    <>
+                      <Icon icon='ph:floppy-disk' className='text-base' />
+                      Save Inventory Valuations
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
         {/* Stepper / Compliance Banner */}
         {selectedObligation && (
           <div className='bg-primary-50 border border-primary-10 rounded-xl p-6'>
@@ -1172,15 +1397,42 @@ export default function TaxPage() {
                           </div>
 
                           <div className='border border-grey-10 rounded-xl p-4 bg-white space-y-3 shadow-sm'>
-                            <div className='flex justify-between text-sm'>
-                              <span className='text-secondary-30'>Estimated Net Profit</span>
-                              <span className='font-semibold'>{formatNaira((breakdownData.annual_revenue || 0) - (breakdownData.annual_expenses || 0))}</span>
-                            </div>
-                            <div className='flex justify-between text-sm'>
+                            {breakdownData.cogs_adjusted ? (
+                              <>
+                                <div className='flex justify-between text-sm'>
+                                  <span className='text-secondary-30'>Annual Revenue</span>
+                                  <span className='font-semibold'>{formatNaira(breakdownData.annual_revenue || 0)}</span>
+                                </div>
+                                <div className='flex justify-between text-sm'>
+                                  <span className='text-secondary-30'>Standard Expenses (Excl. Stock)</span>
+                                  <span className='font-semibold'>{formatNaira((breakdownData.annual_expenses || 0) - (breakdownData.purchases_total || 0))}</span>
+                                </div>
+                                <div className='flex justify-between text-sm'>
+                                  <span className='text-secondary-30'>Cost of Goods Sold (COGS)</span>
+                                  <span className='font-semibold text-danger'>-{formatNaira(breakdownData.cogs || 0)}</span>
+                                </div>
+                                <div className='flex justify-between text-sm border-t border-grey-10/40 pt-2.5 font-bold text-secondary-10'>
+                                  <span>Adjusted Net Profit</span>
+                                  <span>
+                                    {formatNaira(
+                                      (breakdownData.annual_revenue || 0) - 
+                                      (((breakdownData.annual_expenses || 0) - (breakdownData.purchases_total || 0)) + (breakdownData.cogs || 0))
+                                    )}
+                                  </span>
+                                </div>
+                              </>
+                            ) : (
+                              <div className='flex justify-between text-sm'>
+                                <span className='text-secondary-30'>Estimated Net Profit</span>
+                                <span className='font-semibold'>{formatNaira((breakdownData.annual_revenue || 0) - (breakdownData.annual_expenses || 0))}</span>
+                              </div>
+                            )}
+                            
+                            <div className='flex justify-between text-sm border-t border-grey-10/40 pt-2.5'>
                               <span className='text-secondary-30'>CIT Company Band</span>
                               <span className='font-semibold text-primary-30 capitalize'>{breakdownData.band || 'Exempt'}</span>
                             </div>
-                            <div className='flex justify-between text-sm border-t border-grey-10/40 pt-2.5'>
+                            <div className='flex justify-between text-sm'>
                               <span className='text-secondary-30'>Company Income Tax Estimate</span>
                               <span className='font-semibold'>{formatNaira(breakdownData.cit_estimate || 0)}</span>
                             </div>

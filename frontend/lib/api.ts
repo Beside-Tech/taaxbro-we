@@ -373,6 +373,7 @@ export interface OnboardingPayload {
   account_name?: string;
   owner_name?: string;
   timezone?: string;
+  sells_goods?: boolean;
 }
 
 export const onboarding = {
@@ -408,6 +409,7 @@ export interface BusinessProfile {
   cit_applicable:  boolean;
   pit_applicable:  boolean;
   fiscal_year_end: string;  // "MM-DD" format, e.g. "12-31"
+  sells_goods?:     boolean;
 }
 
 export const business = {
@@ -849,6 +851,29 @@ export interface TaxProfileSettings {
   cit_applicable: boolean;
   pit_applicable: boolean;
   fiscal_year_end: string; // "MM-DD"
+  sells_goods?: boolean;
+}
+
+export interface BusinessInventoryItemSchema {
+  id: string;
+  fiscal_year: number;
+  opening_inventory: number;
+  closing_inventory: number | null;
+  valuation_method: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InventorySettingsResponse {
+  sells_goods: boolean;
+  inventories: BusinessInventoryItemSchema[];
+}
+
+export interface SaveInventoryRequest {
+  fiscal_year: number;
+  opening_inventory: number;
+  closing_inventory?: number | null;
+  valuation_method?: string;
 }
 
 export interface ComplianceAnomalyResponse {
@@ -970,6 +995,15 @@ export const tax = {
   },
   downloadComplianceReport(businessId: string, scope: 'all' | 'unresolved' | 'resolved'): Promise<Blob> {
     return requestBlob(`/api/v1/tax/compliance/report?business_id=${businessId}&scope=${scope}`);
+  },
+  getInventory(businessId: string): Promise<InventorySettingsResponse> {
+    return request<InventorySettingsResponse>(`/api/v1/tax/inventory?business_id=${businessId}`);
+  },
+  saveInventory(businessId: string, data: SaveInventoryRequest): Promise<BusinessInventoryItemSchema> {
+    return request<BusinessInventoryItemSchema>(`/api/v1/tax/inventory?business_id=${businessId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   },
 };
 

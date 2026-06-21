@@ -29,6 +29,7 @@ const CATEGORIES = [
   { value: 'equipment', label: 'Equipment / Tools' },
   { value: 'professional_services', label: 'Professional Services' },
   { value: 'payroll', label: '💼 Payroll / Salaries' },
+  { value: 'Inventory Purchases', label: 'Inventory Purchases (Stock)' },
   { value: 'other', label: 'Other' },
 ];
 

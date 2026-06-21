@@ -611,6 +611,7 @@ function ExpensesTab({ expensesList, loading, businessId, onRefresh, onNewExpens
     accounting: 'ph:calculator',
     groceries: 'ph:shopping-cart',
     equipment: 'ph:wrench',
+    'inventory purchases': 'ph:package',
   };
 
   const handleScanReceiptClick = () => {
@@ -723,13 +724,13 @@ function ExpensesTab({ expensesList, loading, businessId, onRefresh, onNewExpens
 
         {showFilters && (
           <div className='px-6 py-3 border-b border-grey-10/60 flex flex-wrap gap-2 animate-fade-in'>
-            {['all', 'utility', 'software', 'office', 'travel', 'rent', 'fuel', 'legal', 'accounting', 'groceries', 'equipment'].map((cat) => (
+            {['all', 'utility', 'software', 'office', 'travel', 'rent', 'fuel', 'legal', 'accounting', 'groceries', 'equipment', 'inventory purchases'].map((cat) => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
                 className={`text-xs px-3 py-1.5 rounded-full capitalize border transition-colors ${selectedCategory === cat ? 'bg-primary-40 border-primary-40 text-white' : 'border-grey-10 text-secondary-20 hover:bg-primary-50'}`}
               >
-                {cat}
+                {cat === 'inventory purchases' ? 'inventory purchases' : cat}
               </button>
             ))}
           </div>

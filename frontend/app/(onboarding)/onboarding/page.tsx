@@ -93,6 +93,7 @@ interface FormData {
   bank_name:     string;
   account_number:string;
   account_name:  string;
+  sells_goods:   boolean;
 }
 
 const EMPTY: FormData = {
@@ -110,6 +111,7 @@ const EMPTY: FormData = {
   bank_name:     '',
   account_number:'',
   account_name:  '',
+  sells_goods:   false,
 };
 
 interface Connections {
@@ -232,7 +234,7 @@ function Step1({ value, onChange }: { value: string; onChange(v: string): void }
 
 // ─── Step 2: Smart details per user_type ──────────────────────────────────────
 
-function Step2({ form, set }: { form: FormData; set(k: keyof FormData, v: string): void }) {
+function Step2({ form, set }: { form: FormData; set(k: keyof FormData, v: any): void }) {
   const isBusiness   = form.user_type === 'business';
   const isFreelancer = form.user_type === 'freelancer';
   const isTaxPro     = form.user_type === 'tax_professional';
@@ -421,6 +423,23 @@ function Step2({ form, set }: { form: FormData; set(k: keyof FormData, v: string
             />
           </div>
         )}
+
+        {/* Physical Goods Seller Toggle */}
+        <div className='p-4 rounded-2xl border border-grey-10 bg-primary-50/20 hover:border-primary-30/40 hover:bg-primary-50/30 transition-all flex items-start gap-3 mt-4'>
+          <input
+            type='checkbox'
+            id='onboard_sells_goods_toggle'
+            checked={form.sells_goods}
+            onChange={(e) => set('sells_goods', e.target.checked)}
+            className='w-5 h-5 mt-0.5 text-primary-30 border-grey-10 rounded focus:ring-primary-30 cursor-pointer transition-all shrink-0'
+          />
+          <label htmlFor='onboard_sells_goods_toggle' className='flex flex-col gap-0.5 cursor-pointer select-none'>
+            <span className='text-sm font-semibold text-secondary-10'>Does your business sell physical products/goods?</span>
+            <span className='text-xs text-secondary-30 leading-relaxed'>
+              Select this if you maintain stock/inventory and buy physical products to resell. This activates Year-End Inventory valuations and COGS adjustments for CIT.
+            </span>
+          </label>
+        </div>
       </div>
     </>
   );
@@ -685,7 +704,7 @@ export default function OnboardingPage() {
     if (user?.onboarding_completed) router.replace('/overview');
   }, [user, router]);
 
-  const setField = (key: keyof FormData, value: string) =>
+  const setField = (key: keyof FormData, value: any) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
   // ── Logo file pick ────────────────────────────────────────────────────────
@@ -772,6 +791,7 @@ export default function OnboardingPage() {
         bank_name:     form.bank_name  || undefined,
         account_number:form.account_number || undefined,
         account_name:  form.account_name  || undefined,
+        sells_goods:   form.sells_goods,
       };
       const updatedUser = await onboarding.complete(payload);
       setUser(updatedUser);
@@ -801,6 +821,7 @@ export default function OnboardingPage() {
         bank_name:     form.bank_name  || undefined,
         account_number:form.account_number || undefined,
         account_name:  form.account_name  || undefined,
+        sells_goods:   false,
       };
       const updatedUser = await onboarding.complete(payload);
       setUser(updatedUser);

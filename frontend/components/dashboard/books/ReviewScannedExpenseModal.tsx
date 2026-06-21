@@ -27,6 +27,7 @@ const CATEGORIES = [
   { value: 'equipment', label: 'Equipment / Tools' },
   { value: 'office', label: 'Office Supplies' },
   { value: 'professional_services', label: 'Professional Services' },
+  { value: 'Inventory Purchases', label: 'Inventory Purchases (Stock)' },
   { value: 'other', label: 'Other' },
 ];
 
