@@ -372,6 +372,7 @@ export interface OnboardingPayload {
   account_number?: string;
   account_name?: string;
   owner_name?: string;
+  timezone?: string;
 }
 
 export const onboarding = {
@@ -402,6 +403,7 @@ export interface BusinessProfile {
   account_name:         string | null;
   user_type:            string | null;
   owner_name:           string | null;
+  timezone:             string | null;
   // Tax profile fields
   cit_applicable:  boolean;
   pit_applicable:  boolean;
@@ -439,6 +441,7 @@ export interface WhatsAppSettings {
   reminder_interval_days: number;
   reminder_max_count: number;
   reminder_channel?: 'whatsapp' | 'email' | 'both';
+  reminder_time_hour: number;
 }
 
 export interface WhatsAppSettingsUpdate {
@@ -453,6 +456,7 @@ export interface WhatsAppSettingsUpdate {
   reminder_interval_days?: number;
   reminder_max_count?: number;
   reminder_channel?: 'whatsapp' | 'email' | 'both';
+  reminder_time_hour?: number;
 }
 
 export const integrations = {
@@ -588,6 +592,8 @@ export interface InvoiceResponse {
   status: string;
   created_at: string;
   issue_date?: string;
+  amount_paid: number;
+  balance_due: number;
 }
 
 export const invoices = {

@@ -365,8 +365,16 @@ function getStatusClass(status: string): string {
 
 function InvoicesTab({ invoicesList, loading, onNewInvoice, onViewInvoice, onLogPayment, obligations, onEditInvoice }: InvoicesTabProps) {
   const [search, setSearch] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('all');
+
+  const totalInvoiced = invoicesList.reduce((sum, inv) => sum + (inv.status.toLowerCase() !== 'draft' ? inv.total_amount : 0), 0);
+  const totalCollected = invoicesList.reduce((sum, inv) => sum + (inv.amount_paid ?? 0), 0);
+  const totalOutstanding = invoicesList.reduce((sum, inv) => sum + (inv.balance_due ?? 0), 0);
 
   const filteredInvoices = invoicesList.filter((inv) => {
+    if (selectedStatus !== 'all' && inv.status?.toLowerCase() !== selectedStatus.toLowerCase()) {
+      return false;
+    }
     if (!search) return true;
     const q = search.toLowerCase();
     return (
@@ -396,7 +404,38 @@ function InvoicesTab({ invoicesList, loading, onNewInvoice, onViewInvoice, onLog
   };
 
   return (
-    <div className='space-y-4'>
+    <div className='space-y-5'>
+      {/* Summary Cards */}
+      <div className='grid grid-cols-1 sm:grid-cols-3 gap-4'>
+        <div className='bg-white rounded-xl border border-primary-30/50 p-5 shadow-sm flex items-center justify-between'>
+          <div>
+            <p className='text-xs text-secondary-30 mb-1'>Total Billed</p>
+            <p className='text-xl font-bold text-secondary-10'>{formatNaira(totalInvoiced)}</p>
+          </div>
+          <div className='w-10 h-10 rounded-lg bg-primary-30/10 text-primary-30 flex items-center justify-center shrink-0'>
+            <Icon icon='ph:file-text' className='text-xl' />
+          </div>
+        </div>
+        <div className='bg-white rounded-xl border border-success/50 p-5 shadow-sm flex items-center justify-between'>
+          <div>
+            <p className='text-xs text-secondary-30 mb-1'>Total Collected</p>
+            <p className='text-xl font-bold text-secondary-10'>{formatNaira(totalCollected)}</p>
+          </div>
+          <div className='w-10 h-10 rounded-lg bg-success/10 text-success flex items-center justify-center shrink-0'>
+            <Icon icon='ph:wallet' className='text-xl' />
+          </div>
+        </div>
+        <div className='bg-white rounded-xl border border-orange-400/50 p-5 shadow-sm flex items-center justify-between'>
+          <div>
+            <p className='text-xs text-secondary-30 mb-1'>Total Outstanding</p>
+            <p className='text-xl font-bold text-secondary-10'>{formatNaira(totalOutstanding)}</p>
+          </div>
+          <div className='w-10 h-10 rounded-lg bg-orange-500/10 text-orange-500 flex items-center justify-center shrink-0'>
+            <Icon icon='ph:clock-clockwise' className='text-xl' />
+          </div>
+        </div>
+      </div>
+
       <div className='bg-white rounded-xl border border-grey-10/60 overflow-hidden shadow-sm'>
         <div className='flex items-center justify-between px-6 py-4 border-b border-grey-10/60'>
           <h2 className='text-base font-semibold text-secondary-10'>Invoices</h2>
@@ -414,6 +453,18 @@ function InvoicesTab({ invoicesList, loading, onNewInvoice, onViewInvoice, onLog
               Export <Icon icon='ph:download-simple' />
             </button>
           </div>
+        </div>
+
+        <div className='px-6 py-3 border-b border-grey-10/60 flex flex-wrap gap-2 animate-fade-in'>
+          {['all', 'draft', 'sent', 'partial', 'paid', 'overdue'].map((status) => (
+            <button
+              key={status}
+              onClick={() => setSelectedStatus(status)}
+              className={`text-xs px-3 py-1.5 rounded-full capitalize border transition-colors ${selectedStatus === status ? 'bg-primary-40 border-primary-40 text-white' : 'border-grey-10 text-secondary-20 hover:bg-primary-50'}`}
+            >
+              {status}
+            </button>
+          ))}
         </div>
 
         <div className='px-6 py-3 border-b border-grey-10/60'>
@@ -434,13 +485,14 @@ function InvoicesTab({ invoicesList, loading, onNewInvoice, onViewInvoice, onLog
           <div className='text-center py-12 text-sm text-secondary-30'>No invoices found</div>
         ) : (
           <div className='overflow-x-auto w-full'>
-            <table className='w-full text-sm min-w-[650px]'>
+            <table className='w-full text-sm min-w-[750px]'>
               <thead>
                 <tr className='bg-primary-40 text-white text-xs'>
                   <th className='text-left px-5 py-3 font-medium'>Invoice ID</th>
                   <th className='text-left px-4 py-3 font-medium'><span className='flex items-center gap-1.5'><Icon icon='ph:calendar-check' />Issued</span></th>
                   <th className='text-left px-4 py-3 font-medium'><span className='flex items-center gap-1.5'><Icon icon='ph:user' />Client</span></th>
                   <th className='text-left px-4 py-3 font-medium'><span className='flex items-center gap-1.5'><Icon icon='ph:currency-circle-dollar' />Amount</span></th>
+                  <th className='text-left px-4 py-3 font-medium'><span className='flex items-center gap-1.5'><Icon icon='ph:info' />Outstanding</span></th>
                   <th className='text-left px-4 py-3 font-medium'>Status</th>
                   <th className='text-left px-4 py-3 font-medium'>Action</th>
                 </tr>
@@ -455,6 +507,13 @@ function InvoicesTab({ invoicesList, loading, onNewInvoice, onViewInvoice, onLog
                       <td className='px-4 py-3.5 text-secondary-30'>{d}</td>
                       <td className='px-4 py-3.5 text-secondary-10'>{inv.client_name}</td>
                       <td className='px-4 py-3.5 text-secondary-10 font-semibold'>{formatNaira(inv.total_amount)}</td>
+                      <td className='px-4 py-3.5 text-secondary-10 font-semibold'>
+                        {inv.balance_due > 0 ? (
+                          <span className='text-orange-500 font-bold'>{formatNaira(inv.balance_due)}</span>
+                        ) : (
+                          <span className='text-secondary-30 font-normal'>₦0.00</span>
+                        )}
+                      </td>
                       <td className='px-4 py-3.5'>
                         <span className={`text-xs text-white px-2.5 py-1 rounded-full font-medium capitalize ${getStatusClass(inv.status)}`}>
                           {inv.status}
@@ -524,6 +583,10 @@ interface ExpensesTabProps {
 function ExpensesTab({ expensesList, loading, businessId, onRefresh, onNewExpense, obligations, onEditExpense }: ExpensesTabProps) {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
+
+  const totalExpenses = expensesList.reduce((sum, exp) => sum + Number(exp.amount), 0);
+  const totalVatClaimable = expensesList.reduce((sum, exp) => sum + Number(exp.vat_amount ?? 0), 0);
+  const totalWhtWithheld = expensesList.reduce((sum, exp) => sum + Number(exp.wht_amount ?? 0), 0);
   
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<string | null>(null);
@@ -600,8 +663,40 @@ function ExpensesTab({ expensesList, loading, businessId, onRefresh, onNewExpens
   };
 
   return (
-    <div className='grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5 items-start'>
-      <div className='bg-white rounded-xl border border-grey-10/60 overflow-hidden shadow-sm'>
+    <div className='space-y-5'>
+      {/* Summary Cards */}
+      <div className='grid grid-cols-1 sm:grid-cols-3 gap-4'>
+        <div className='bg-white rounded-xl border border-danger/50 p-5 shadow-sm flex items-center justify-between'>
+          <div>
+            <p className='text-xs text-secondary-30 mb-1'>Total Expenses</p>
+            <p className='text-xl font-bold text-secondary-10'>{formatNaira(totalExpenses)}</p>
+          </div>
+          <div className='w-10 h-10 rounded-lg bg-danger/10 text-danger flex items-center justify-center shrink-0'>
+            <Icon icon='ph:trend-down' className='text-xl' />
+          </div>
+        </div>
+        <div className='bg-white rounded-xl border border-success/50 p-5 shadow-sm flex items-center justify-between'>
+          <div>
+            <p className='text-xs text-secondary-30 mb-1'>VAT Claimable</p>
+            <p className='text-xl font-bold text-secondary-10'>{formatNaira(totalVatClaimable)}</p>
+          </div>
+          <div className='w-10 h-10 rounded-lg bg-success/10 text-success flex items-center justify-center shrink-0'>
+            <Icon icon='ph:hand-coins' className='text-xl' />
+          </div>
+        </div>
+        <div className='bg-white rounded-xl border border-purple-400/50 p-5 shadow-sm flex items-center justify-between'>
+          <div>
+            <p className='text-xs text-secondary-30 mb-1'>WHT Withheld</p>
+            <p className='text-xl font-bold text-secondary-10'>{formatNaira(totalWhtWithheld)}</p>
+          </div>
+          <div className='w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0'>
+            <Icon icon='ph:percentage' className='text-xl' />
+          </div>
+        </div>
+      </div>
+
+      <div className='grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5 items-start'>
+        <div className='bg-white rounded-xl border border-grey-10/60 overflow-hidden shadow-sm'>
         <div className='flex items-center justify-between px-6 py-4 border-b border-grey-10/60'>
           <h2 className='text-base font-semibold text-secondary-10'>Expenses</h2>
           <div className='flex gap-2'>
@@ -788,6 +883,7 @@ function ExpensesTab({ expensesList, loading, businessId, onRefresh, onNewExpens
           }}
         />
       )}
+      </div>
     </div>
   );
 }

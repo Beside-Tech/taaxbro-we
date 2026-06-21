@@ -36,6 +36,23 @@ const USER_TYPES = [
 
 type ActiveTab = 'profile' | 'tax' | 'invoicing' | 'whatsapp' | 'security' | 'sessions';
 
+const COMMON_TIMEZONES = [
+  { value: 'Africa/Lagos', label: 'West Africa Time (Lagos, UTC+1)' },
+  { value: 'Africa/Johannesburg', label: 'South Africa Standard Time (Johannesburg, UTC+2)' },
+  { value: 'Africa/Nairobi', label: 'East Africa Time (Nairobi, UTC+3)' },
+  { value: 'Africa/Cairo', label: 'Eastern European Time (Cairo, UTC+2)' },
+  { value: 'Europe/London', label: 'Greenwich Mean / British Summer Time (London, UTC+0/+1)' },
+  { value: 'Europe/Paris', label: 'Central European Time (Paris, UTC+1/+2)' },
+  { value: 'America/New_York', label: 'Eastern Time (New York, UTC-5/-4)' },
+  { value: 'America/Chicago', label: 'Central Time (Chicago, UTC-6/-5)' },
+  { value: 'America/Denver', label: 'Mountain Time (Denver, UTC-7/-6)' },
+  { value: 'America/Los_Angeles', label: 'Pacific Time (Los Angeles, UTC-8/-7)' },
+  { value: 'Asia/Dubai', label: 'Gulf Standard Time (Dubai, UTC+4)' },
+  { value: 'Asia/Kolkata', label: 'India Standard Time (Kolkata, UTC+5:30)' },
+  { value: 'Asia/Singapore', label: 'Singapore Standard Time (Singapore, UTC+8)' },
+  { value: 'Australia/Sydney', label: 'Australian Eastern Time (Sydney, UTC+10/+11)' },
+];
+
 export default function SettingsPage() {
   const { user, setUser } = useAuth();
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
@@ -115,6 +132,7 @@ export default function SettingsPage() {
     bank_name: '',
     account_number: '',
     account_name: '',
+    timezone: 'Africa/Lagos',
   });
 
   // Load profile details
@@ -140,6 +158,7 @@ export default function SettingsPage() {
           bank_name: data.bank_name ?? '',
           account_number: data.account_number ?? '',
           account_name: data.account_name ?? '',
+          timezone: data.timezone ?? (typeof window !== 'undefined' ? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'Africa/Lagos') : 'Africa/Lagos'),
         });
 
         const fy = data.fiscal_year_end ?? '12-31';
@@ -229,6 +248,7 @@ export default function SettingsPage() {
         bank_name: form.bank_name.trim() || undefined,
         account_number: form.account_number.trim() || undefined,
         account_name: form.account_name.trim() || undefined,
+        timezone: form.timezone,
       };
 
       const updatedUser = await onboarding.complete(payload);
@@ -810,6 +830,26 @@ export default function SettingsPage() {
                         {NIGERIAN_STATES.map((st) => (
                           <option key={st} value={st}>{st}</option>
                         ))}
+                      </select>
+                    </label>
+
+                    <label className='space-y-2 text-sm font-semibold text-secondary-10 flex flex-col'>
+                      Business Timezone
+                      <select
+                        value={form.timezone}
+                        onChange={(e) => setForm({ ...form, timezone: e.target.value })}
+                        className='mt-1 w-full rounded-2xl border border-grey-10 bg-grey-0 px-4 py-3 text-sm font-medium outline-none focus:border-primary-30 focus:bg-white transition-all'
+                      >
+                        {(() => {
+                          const browserTz = typeof window !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : '';
+                          const timezoneOptions = [...COMMON_TIMEZONES];
+                          if (browserTz && !COMMON_TIMEZONES.some(tz => tz.value === browserTz)) {
+                            timezoneOptions.unshift({ value: browserTz, label: `Local Time (${browserTz})` });
+                          }
+                          return timezoneOptions.map((tz) => (
+                            <option key={tz.value} value={tz.value}>{tz.label}</option>
+                          ));
+                        })()}
                       </select>
                     </label>
                   </div>

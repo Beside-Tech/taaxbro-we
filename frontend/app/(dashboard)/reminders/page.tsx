@@ -105,6 +105,7 @@ export default function RemindersPage() {
   const [reminderIntervalDays, setReminderIntervalDays] = useState(3);
   const [reminderMaxCount, setReminderMaxCount] = useState(5);
   const [reminderChannel, setReminderChannel] = useState<'whatsapp' | 'email' | 'both'>('whatsapp');
+  const [reminderTimeHour, setReminderTimeHour] = useState(8);
   
   // Search state for client exclusions in settings modal
   const [exclusionsSearchQuery, setExclusionsSearchQuery] = useState('');
@@ -123,12 +124,14 @@ export default function RemindersPage() {
       setReminderIntervalDays(waSettings.reminder_interval_days);
       setReminderMaxCount(waSettings.reminder_max_count);
       setReminderChannel(waSettings.reminder_channel ?? 'whatsapp');
+      setReminderTimeHour(waSettings.reminder_time_hour ?? 8);
     } else {
       setClientRemindersEnabled(false);
       setReminderDaysBefore(3);
       setReminderIntervalDays(3);
       setReminderMaxCount(5);
       setReminderChannel('whatsapp');
+      setReminderTimeHour(8);
     }
   }, [waSettings]);
 
@@ -329,6 +332,7 @@ export default function RemindersPage() {
         reminder_interval_days: reminderIntervalDays,
         reminder_max_count: reminderMaxCount,
         reminder_channel: reminderChannel,
+        reminder_time_hour: reminderTimeHour,
       });
       setWaSettings(updated);
       setIsSettingsModalOpen(false);
@@ -1022,6 +1026,26 @@ export default function RemindersPage() {
                         className='w-full border border-grey-10 rounded-xl px-3 py-3 text-xs text-secondary-10 bg-white focus:outline-none focus:ring-2 focus:ring-primary-30/40 focus:border-primary-30 transition'
                       />
                     </div>
+                  </div>
+
+                  {/* Preferred Delivery Hour */}
+                  <div className='flex flex-col gap-2'>
+                    <label className='text-xs font-bold text-secondary-30 uppercase tracking-wider'>
+                      Preferred Delivery Hour
+                    </label>
+                    <select
+                      value={reminderTimeHour}
+                      onChange={(e) => setReminderTimeHour(Number(e.target.value))}
+                      className='w-full border border-grey-10 rounded-xl px-3 py-3 text-xs text-secondary-10 bg-white focus:outline-none focus:ring-2 focus:ring-primary-30/40 focus:border-primary-30 transition'
+                    >
+                      {Array.from({ length: 24 }, (_, i) => {
+                        const displayHour = i === 0 ? '12 AM (Midnight)' : i === 12 ? '12 PM (Noon)' : i > 12 ? `${i - 12} PM` : `${i} AM`;
+                        return <option key={i} value={i}>{displayHour}</option>;
+                      })}
+                    </select>
+                    <p className='text-[10px] text-secondary-30'>
+                      Reminders will be dispatched relative to your business local timezone.
+                    </p>
                   </div>
 
                   {/* Delivery Channel */}
