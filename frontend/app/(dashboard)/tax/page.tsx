@@ -738,7 +738,41 @@ export default function TaxPage() {
     return list;
   };
 
+  const getSelectedVatBreakdownRows = () => {
+    if (!breakdownData) return [];
+    const outputList = breakdownData.output_vat || [];
+    const inputList = breakdownData.input_vat || [];
+    const rows: Array<{ category: string; vat: number; txns: number }> = [];
+    
+    if (vatTab === 'output') {
+      const categoriesMap: Record<string, { collected: number; txns: number }> = {};
+      outputList.forEach((inv: any) => {
+        const cat = inv.client_name || 'Sales';
+        if (!categoriesMap[cat]) categoriesMap[cat] = { collected: 0, txns: 0 };
+        categoriesMap[cat].collected += Number(inv.vat_total || 0);
+        categoriesMap[cat].txns += 1;
+      });
+      Object.entries(categoriesMap).forEach(([category, val]) => {
+        rows.push({ category, vat: val.collected, txns: val.txns });
+      });
+    } else {
+      const categoriesMap: Record<string, { collected: number; txns: number }> = {};
+      inputList.forEach((exp: any) => {
+        const cat = exp.category ? (exp.category.charAt(0).toUpperCase() + exp.category.slice(1)) : 'Expenses';
+        if (!categoriesMap[cat]) categoriesMap[cat] = { collected: 0, txns: 0 };
+        categoriesMap[cat].collected += Number(exp.vat_amount || 0);
+        categoriesMap[cat].txns += 1;
+      });
+      Object.entries(categoriesMap).forEach(([category, val]) => {
+        rows.push({ category, vat: val.collected, txns: val.txns });
+      });
+    }
+    return rows;
+  };
+
   const vatBreakdown = getVatBreakdown();
+
+  const activeVatObligation = activeObligations.find(o => o.tax_type.toLowerCase() === 'vat');
 
   // Sum Output VAT
   const outputVatFromTxns = data?.recent_transactions
@@ -746,27 +780,39 @@ export default function TaxPage() {
         .filter(t => t.type === 'credit' && t.vat_amount && Number(t.vat_amount) > 0)
         .reduce((sum, t) => sum + Number(t.vat_amount), 0)
     : 0;
-  const outputVatTotal = stats && Number(stats.tax_reserve) > 0 ? Number(stats.tax_reserve) : outputVatFromTxns;
+  const outputVatTotal = activeVatObligation
+    ? Number(activeVatObligation.gross_output)
+    : (stats && Number(stats.tax_reserve) > 0 ? Number(stats.tax_reserve) : outputVatFromTxns);
 
   // Sum Input VAT
-  const inputVatTotal = data?.recent_transactions
-    ? data.recent_transactions
-        .filter(t => t.type === 'debit' && t.vat_amount && Number(t.vat_amount) > 0)
-        .reduce((sum, t) => sum + Number(t.vat_amount), 0)
-    : 0;
+  const inputVatTotal = activeVatObligation
+    ? Number(activeVatObligation.gross_input)
+    : (data?.recent_transactions
+        ? data.recent_transactions
+            .filter(t => t.type === 'debit' && t.vat_amount && Number(t.vat_amount) > 0)
+            .reduce((sum, t) => sum + Number(t.vat_amount), 0)
+        : 0);
 
-  const netVatPayable = Math.max(0, outputVatTotal - inputVatTotal);
+  const netVatPayable = activeVatObligation
+    ? Number(activeVatObligation.net_liability)
+    : Math.max(0, outputVatTotal - inputVatTotal);
 
   const vatObligation = obligationsList.find(o => o.tax_type.toLowerCase() === 'vat');
   const vatDueDate = vatObligation?.due_date ?? null;
 
-  const inputVatTxns = data?.recent_transactions
-    ? data.recent_transactions.filter(t => t.type === 'debit' && t.vat_amount && Number(t.vat_amount) > 0).length
-    : 0;
+  const isSelectedObligationVat = selectedObligation?.tax_type.toLowerCase() === 'vat';
 
-  const outputVatTxns = data?.recent_transactions
-    ? data.recent_transactions.filter(t => t.type === 'credit' && t.vat_amount && Number(t.vat_amount) > 0).length
-    : 0;
+  const inputVatTxns = isSelectedObligationVat && breakdownData?.input_vat
+    ? breakdownData.input_vat.length
+    : (data?.recent_transactions
+        ? data.recent_transactions.filter(t => t.type === 'debit' && t.vat_amount && Number(t.vat_amount) > 0).length
+        : 0);
+
+  const outputVatTxns = isSelectedObligationVat && breakdownData?.output_vat
+    ? breakdownData.output_vat.length
+    : (data?.recent_transactions
+        ? data.recent_transactions.filter(t => t.type === 'credit' && t.vat_amount && Number(t.vat_amount) > 0).length
+        : 0);
 
   // Total confirmed filings count — only count confirmed rows from real history
   const confirmedFilingCount = filingsList.filter(
@@ -2076,13 +2122,9 @@ export default function TaxPage() {
       {showEdit && (
         <EditVATModal 
           onClose={() => setShowEdit(false)} 
-          initialRows={vatBreakdown.map(v => ({
-            category: v.category,
-            vat: v.collected,
-            txns: v.txns
-          }))}
-          period={stats?.next_filing_date 
-            ? new Date(stats.next_filing_date).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+          initialRows={getSelectedVatBreakdownRows()}
+          period={selectedObligation
+            ? new Date(selectedObligation.period_start).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
             : new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
           }
         />
