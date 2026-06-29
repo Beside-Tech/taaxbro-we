@@ -13,7 +13,8 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import TopBar from '@/components/dashboard/TopBar';
-import { dashboard, invoices, expenses, tax, ai, type DashboardData, type InvoiceResponse, type ExpenseResponse, type TaxObligationResponse } from '@/lib/api';
+import { dashboard, invoices, expenses, tax, ai, corporate, type ClaimResponse, type DashboardData, type InvoiceResponse, type ExpenseResponse, type TaxObligationResponse } from '@/lib/api';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import ComplianceBubble from '@/components/dashboard/books/ComplianceBubble';
 import PaymentLinkModal from '@/components/dashboard/pay/PaymentLinkModal';
@@ -89,16 +90,21 @@ interface TabProps {
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
 function BooksTabs({ active, onChange }: { active: string; onChange: (t: string) => void }) {
-  const tabs = ['Overview', 'Invoices', 'Expenses', 'Reports'];
+  const tabs = ['Overview', 'Invoices', 'Expenses', 'Claims', 'Reports'];
   return (
     <div className='flex flex-wrap gap-4 sm:gap-8 border-b border-grey-10'>
       {tabs.map((t) => (
         <button
           key={t}
           onClick={() => onChange(t)}
-          className={`pb-3 text-sm font-medium transition-colors border-b-2 -mb-px ${active === t ? 'border-primary-30 text-primary-30' : 'border-transparent text-secondary-30 hover:text-secondary-10'}`}
+          className={`pb-3 text-sm font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5 ${
+            active === t ? 'border-primary-30 text-primary-30' : 'border-transparent text-secondary-30 hover:text-secondary-10'
+          }`}
         >
           {t}
+          {t === 'Claims' && (
+            <span className='text-[10px] bg-primary-30/10 text-primary-30 border border-primary-30/20 rounded-full px-1.5 py-0.5 font-semibold'>NEW</span>
+          )}
         </button>
       ))}
     </div>
@@ -1008,7 +1014,244 @@ function ReportsTab({ data, loading, expensesList, expensesLoading }: ReportsTab
   );
 }
 
+// ─── Claims Tab ───────────────────────────────────────────────────────────────
+
+const STATUS_PILL: Record<string, string> = {
+  pending: 'bg-amber-50 text-amber-700 border-amber-200',
+  approved: 'bg-green-50 text-green-700 border-green-200',
+  rejected: 'bg-red-50 text-red-700 border-red-200',
+};
+
+interface ClaimsTabProps {
+  claims: ClaimResponse[];
+  loading: boolean;
+  error: string | null;
+  processing: Record<string, boolean>;
+  businessId: string;
+  onAction: (id: string, action: 'approve' | 'reject') => void;
+  onRetry: () => void;
+  onViewReceipt: (url: string) => void;
+}
+
+function ClaimsTab({ claims, loading, error, processing, businessId, onAction, onRetry, onViewReceipt }: ClaimsTabProps) {
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [copied, setCopied] = useState(false);
+
+  const reimburseLink = businessId
+    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/reimburse/${businessId}`
+    : '';
+
+  const handleCopy = () => {
+    if (!reimburseLink) return;
+    navigator.clipboard.writeText(reimburseLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const totalAmount = claims.reduce((s, c) => s + c.amount, 0);
+  const pendingCount = claims.filter((c) => c.status === 'pending').length;
+  const approvedTotal = claims.filter((c) => c.status === 'approved').reduce((s, c) => s + c.amount, 0);
+
+  const filtered = claims.filter((c) => {
+    if (statusFilter !== 'all' && c.status !== statusFilter) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      if (!c.employee_name.toLowerCase().includes(q) && !(c.description ?? '').toLowerCase().includes(q) && !c.category.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  return (
+    <div className='space-y-5'>
+
+      {/* Error */}
+      {error && (
+        <div className='flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-2xl px-4 py-3'>
+          <Icon icon='ph:warning-circle' className='shrink-0 text-lg' />
+          {error}
+          <button onClick={onRetry} className='ml-auto underline text-red-600 text-xs'>Retry</button>
+        </div>
+      )}
+
+      {/* Stat cards */}
+      <div className='grid grid-cols-1 sm:grid-cols-3 gap-4'>
+        {loading ? (
+          [0, 1, 2].map((i) => (
+            <div key={i} className='bg-white rounded-2xl border border-grey-10 p-5 animate-pulse'>
+              <div className='h-3 bg-grey-10 rounded w-24 mb-3' /><div className='h-7 bg-grey-10 rounded w-32 mb-4' /><div className='h-3 bg-grey-10 rounded w-20' />
+            </div>
+          ))
+        ) : [
+          { label: 'Total Submitted', value: formatNaira(totalAmount), sub: `${claims.length} claims`, icon: 'ph:receipt', border: 'border-primary-30', vc: 'text-primary-30' },
+          { label: 'Pending Review', value: `${pendingCount}`, sub: 'awaiting decision', icon: 'ph:clock', border: 'border-amber-400', vc: 'text-amber-600' },
+          { label: 'Approved Amount', value: formatNaira(approvedTotal), sub: `${claims.filter((c) => c.status === 'approved').length} approved`, icon: 'ph:check-circle', border: 'border-success', vc: 'text-success' },
+        ].map((s) => (
+          <div key={s.label} className={`bg-white rounded-2xl border border-t-4 ${s.border} p-5 shadow-sm`}>
+            <div className='flex items-center gap-2 mb-2'>
+              <Icon icon={s.icon} className={`text-base ${s.vc}`} />
+              <p className='text-secondary-20 font-light text-sm'>{s.label}</p>
+            </div>
+            <p className={`text-2xl font-semibold ${s.vc} mb-1`}>{s.value}</p>
+            <p className='text-xs text-secondary-30'>{s.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Banners row */}
+      <div className='flex flex-col sm:flex-row gap-3'>
+        {/* Reimburse link */}
+        <div className='flex-1 flex items-center gap-3 bg-primary-50 border border-primary-30/20 rounded-2xl px-4 py-3'>
+          <Icon icon='ph:link' className='text-xl text-primary-30 shrink-0' />
+          <div className='flex-1 min-w-0'>
+            <p className='text-xs font-semibold text-secondary-10'>Employee Reimbursement Link</p>
+            <p className='text-xs text-secondary-30 truncate'>{reimburseLink || '—'}</p>
+          </div>
+          <button
+            onClick={handleCopy}
+            className='flex items-center gap-1.5 border border-primary-30/30 text-primary-30 hover:bg-primary-30 hover:text-white rounded-full px-3 py-1.5 text-xs transition-colors whitespace-nowrap'
+          >
+            <Icon icon={copied ? 'ph:check' : 'ph:copy'} />
+            {copied ? 'Copied!' : 'Copy'}
+          </button>
+        </div>
+        {/* Virtual cards teaser */}
+        <div className='flex items-center gap-3 bg-gradient-to-r from-[#1a0533] to-[#2d0f5e] rounded-2xl px-4 py-3 text-white min-w-[220px]'>
+          <Icon icon='ph:credit-card' className='text-xl text-primary-30/80 shrink-0' />
+          <div className='flex-1 min-w-0'>
+            <p className='text-xs font-semibold'>Virtual Corporate Cards</p>
+            <p className='text-[10px] text-white/50'>Spend controls, auto-reconciliation</p>
+          </div>
+          <span className='text-[10px] bg-amber-400 text-amber-900 font-bold px-2 py-0.5 rounded-full whitespace-nowrap'>Soon</span>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className='bg-white rounded-2xl border border-grey-10 overflow-hidden shadow-sm'>
+        {/* Toolbar */}
+        <div className='flex flex-wrap items-center gap-3 px-5 py-4 border-b border-grey-10'>
+          <div className='relative flex-1 min-w-[200px]'>
+            <Icon icon='ph:magnifying-glass' className='absolute left-3 top-1/2 -translate-y-1/2 text-secondary-30' />
+            <input
+              type='text' placeholder='Search employee, category…'
+              value={search} onChange={(e) => setSearch(e.target.value)}
+              className='w-full border border-grey-10 rounded-xl pl-9 pr-4 py-2 text-sm outline-none focus:border-primary-30 transition-colors placeholder:text-secondary-40'
+            />
+          </div>
+          <div className='flex items-center gap-1.5 flex-wrap'>
+            {(['all', 'pending', 'approved', 'rejected'] as const).map((s) => (
+              <button
+                key={s} onClick={() => setStatusFilter(s)}
+                className={`px-3 py-1.5 rounded-full text-xs capitalize transition-colors ${statusFilter === s ? 'bg-primary-30 text-white' : 'border border-grey-10 text-secondary-20 hover:bg-primary-50'}`}
+              >
+                {s} {s !== 'all' ? `(${claims.filter((c) => c.status === s).length})` : `(${claims.length})`}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {loading ? (
+          <div className='p-6 space-y-3 animate-pulse'>{[0,1,2,3].map((i) => <div key={i} className='h-12 bg-grey-10 rounded-xl' />)}</div>
+        ) : filtered.length === 0 ? (
+          <div className='flex flex-col items-center justify-center py-16 text-secondary-30'>
+            <Icon icon='ph:receipt' className='text-5xl mb-3 opacity-30' />
+            <p className='text-sm font-medium'>No claims found</p>
+            <p className='text-xs mt-1'>Share the employee link above so team members can submit receipts</p>
+          </div>
+        ) : (
+          <div className='overflow-x-auto'>
+            <table className='w-full text-sm min-w-[800px]'>
+              <thead>
+                <tr className='bg-primary-40 text-white text-xs'>
+                  {[
+                    { icon: 'ph:calendar-blank', label: 'Date' },
+                    { icon: 'ph:user', label: 'Employee' },
+                    { icon: 'ph:tag', label: 'Category' },
+                    { icon: 'ph:currency-circle-dollar', label: 'Amount' },
+                    { icon: 'ph:note', label: 'Description' },
+                    { icon: 'ph:image', label: 'Receipt' },
+                    { icon: 'ph:circle-half', label: 'Status' },
+                    { icon: 'ph:gear', label: 'Action' },
+                  ].map((h) => (
+                    <th key={h.label} className='text-left px-4 py-3 font-medium'>
+                      <span className='flex items-center gap-1.5'><Icon icon={h.icon} />{h.label}</span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((claim) => {
+                  const isBusy = processing[claim.id];
+                  const d = new Date(claim.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                  return (
+                    <tr key={claim.id} className='border-t border-grey-10/40 hover:bg-primary-50/30 transition-colors'>
+                      <td className='px-4 py-3.5 text-secondary-30 text-xs whitespace-nowrap'>{d}</td>
+                      <td className='px-4 py-3.5'>
+                        <div className='flex items-center gap-2'>
+                          <div className='w-7 h-7 rounded-full bg-primary-50 text-primary-30 font-bold text-xs flex items-center justify-center shrink-0'>
+                            {claim.employee_name.charAt(0).toUpperCase()}
+                          </div>
+                          <span className='text-secondary-10 text-sm font-medium'>{claim.employee_name}</span>
+                        </div>
+                      </td>
+                      <td className='px-4 py-3.5'>
+                        <span className='capitalize text-secondary-20 text-xs bg-grey-10/50 border border-grey-10 rounded-full px-2.5 py-1'>{claim.category}</span>
+                      </td>
+                      <td className='px-4 py-3.5 font-semibold text-secondary-10'>{formatNaira(claim.amount)}</td>
+                      <td className='px-4 py-3.5 text-secondary-30 text-xs max-w-[140px] truncate'>{claim.description ?? '—'}</td>
+                      <td className='px-4 py-3.5'>
+                        {claim.receipt_url ? (
+                          <button onClick={() => onViewReceipt(claim.receipt_url!)} className='flex items-center gap-1 text-primary-30 text-xs font-medium hover:underline'>
+                            <Icon icon='ph:image' className='text-base' /> View
+                          </button>
+                        ) : <span className='text-secondary-40 text-xs'>—</span>}
+                      </td>
+                      <td className='px-4 py-3.5'>
+                        <span className={`capitalize text-xs font-medium border rounded-full px-2.5 py-1 ${STATUS_PILL[claim.status] ?? ''}`}>
+                          {claim.status}
+                        </span>
+                      </td>
+                      <td className='px-4 py-3.5'>
+                        {claim.status === 'pending' ? (
+                          <div className='flex items-center gap-2'>
+                            <button
+                              disabled={isBusy}
+                              onClick={() => onAction(claim.id, 'approve')}
+                              className='flex items-center gap-1 bg-success/10 border border-success/30 text-success hover:bg-success hover:text-white disabled:opacity-40 rounded-full px-3 py-1 text-xs font-medium transition-colors'
+                            >
+                              {isBusy ? <Icon icon='ph:circle-notch' className='animate-spin' /> : <Icon icon='ph:check' />}
+                              Approve
+                            </button>
+                            <button
+                              disabled={isBusy}
+                              onClick={() => onAction(claim.id, 'reject')}
+                              className='flex items-center gap-1 bg-red-50 border border-red-200 text-red-600 hover:bg-red-600 hover:text-white disabled:opacity-40 rounded-full px-3 py-1 text-xs font-medium transition-colors'
+                            >
+                              <Icon icon='ph:x' /> Reject
+                            </button>
+                          </div>
+                        ) : (
+                          <span className='text-secondary-40 text-xs'>{claim.status === 'approved' ? 'Approved ✓' : 'Rejected ✗'}</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className='px-5 py-3 border-t border-grey-10 text-xs text-secondary-30'>
+          Showing {filtered.length} of {claims.length} claims
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function getDateRange(selectedMonth: string, customStart: string, customEnd: string) {
+
   const now = new Date();
   if (selectedMonth === 'current') {
     const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
@@ -1049,6 +1292,16 @@ export default function BooksPage() {
   const [obligationsLoading, setObligationsLoading] = useState(false);
   const [editingExpense, setEditingExpense] = useState<ExpenseResponse | null>(null);
   const [lastSavedRecord, setLastSavedRecord] = useState<{ id: string; type: 'expense' | 'invoice' } | null>(null);
+
+  // ── Claims state ──────────────────────────────────────────────────────
+  const [claimsList, setClaimsList] = useState<ClaimResponse[]>([]);
+  const [claimsLoading, setClaimsLoading] = useState(false);
+  const [claimsLoaded, setClaimsLoaded] = useState(false);
+  const [claimsError, setClaimsError] = useState<string | null>(null);
+  const [claimProcessing, setClaimProcessing] = useState<Record<string, boolean>>({});
+  const [receiptLightbox, setReceiptLightbox] = useState<string | null>(null);
+
+  const searchParams = useSearchParams();
 
   const [showPaymentLink, setShowPaymentLink] = useState(false);
   const [showCreateInvoice, setShowCreateInvoice] = useState(false);
@@ -1154,6 +1407,30 @@ export default function BooksPage() {
     }
   };
 
+  const loadClaims = (force = false) => {
+    if (!claimsLoaded || force) {
+      setClaimsLoading(true);
+      setClaimsError(null);
+      corporate
+        .listClaims()
+        .then((list) => { setClaimsList(list); setClaimsLoaded(true); })
+        .catch((e) => setClaimsError(e.message ?? 'Failed to load claims'))
+        .finally(() => setClaimsLoading(false));
+    }
+  };
+
+  const handleClaimAction = async (id: string, action: 'approve' | 'reject') => {
+    setClaimProcessing((p) => ({ ...p, [id]: true }));
+    try {
+      const updated = await corporate.approveClaim(id, action);
+      setClaimsList((prev) => prev.map((c) => (c.id === id ? updated : c)));
+    } catch (e: any) {
+      alert(e.message ?? 'Action failed');
+    } finally {
+      setClaimProcessing((p) => ({ ...p, [id]: false }));
+    }
+  };
+
   useEffect(() => {
     dashboard
       .get()
@@ -1173,6 +1450,13 @@ export default function BooksPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.business_id]);
 
+  // Handle ?tab= query param on first mount (e.g. redirects from /expenses/claims)
+  useEffect(() => {
+    const tabParam = searchParams?.get('tab');
+    if (tabParam) setActiveTab(tabParam);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Also reload when navigating to specific tabs (force-refresh for latest data)
   useEffect(() => {
     if (activeTab === 'Invoices') {
@@ -1180,6 +1464,8 @@ export default function BooksPage() {
     } else if (activeTab === 'Expenses' || activeTab === 'Reports') {
       loadExpenses(true);
       loadObligations();
+    } else if (activeTab === 'Claims') {
+      loadClaims(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
@@ -1306,7 +1592,52 @@ export default function BooksPage() {
             expensesLoading={expensesLoading}
           />
         )}
+
+        {activeTab === 'Claims' && (
+          <ClaimsTab
+            claims={claimsList}
+            loading={claimsLoading}
+            error={claimsError}
+            processing={claimProcessing}
+            businessId={user?.business_id ?? ''}
+            onAction={handleClaimAction}
+            onRetry={() => loadClaims(true)}
+            onViewReceipt={setReceiptLightbox}
+          />
+        )}
       </main>
+
+      {/* Receipt Lightbox */}
+      {receiptLightbox && (
+        <div
+          className='fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4'
+          onClick={() => setReceiptLightbox(null)}
+        >
+          <div
+            className='relative max-w-3xl w-full bg-white rounded-3xl overflow-hidden shadow-2xl'
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className='flex items-center justify-between px-5 py-3 border-b border-grey-10'>
+              <p className='text-sm font-semibold text-secondary-10'>Receipt Preview</p>
+              <button onClick={() => setReceiptLightbox(null)} className='p-1.5 rounded-xl hover:bg-grey-10/50 text-secondary-30'>
+                <Icon icon='ph:x' className='text-lg' />
+              </button>
+            </div>
+            <div className='p-4 bg-grey-10/20 min-h-[400px] flex items-center justify-center'>
+              {/\.(jpe?g|png|gif|webp)/i.test(receiptLightbox) ? (
+                <img src={receiptLightbox} alt='Receipt' className='max-h-[65vh] max-w-full rounded-xl object-contain shadow-md' />
+              ) : (
+                <iframe src={receiptLightbox} title='Receipt PDF' className='w-full h-[65vh] rounded-xl border border-grey-10' />
+              )}
+            </div>
+            <div className='px-5 py-3 border-t border-grey-10 flex justify-end'>
+              <a href={receiptLightbox} target='_blank' rel='noopener noreferrer' className='flex items-center gap-1.5 text-sm text-primary-30 hover:underline'>
+                <Icon icon='ph:arrow-square-out' /> Open original
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showPaymentLink && (
         <PaymentLinkModal onClose={() => setShowPaymentLink(false)} />

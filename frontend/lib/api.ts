@@ -1118,4 +1118,44 @@ export const pay = {
       `/api/v1/pay/transactions?business_id=${businessId}&page=${page}&page_size=${pageSize}${typeQuery}`
     );
   },
-};
+};
+
+export interface ClaimResponse {
+  id: string;
+  business_id: string;
+  employee_id: string | null;
+  employee_name: string;
+  amount: number;
+  category: string;
+  description: string | null;
+  receipt_url: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  approved_by: string | null;
+  reimbursed_at: string | null;
+  created_at: string;
+}
+
+export const corporate = {
+  listClaims(): Promise<ClaimResponse[]> {
+    return request<ClaimResponse[]>('/api/v1/corporate/claims');
+  },
+  submitClaim(businessId: string, data: {
+    employee_name: string;
+    employee_phone: string;
+    amount: number;
+    category: string;
+    description?: string;
+    receipt_url?: string;
+  }): Promise<ClaimResponse> {
+    return request<ClaimResponse>(`/api/v1/corporate/claims?business_id=${businessId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  approveClaim(claimId: string, action: 'approve' | 'reject'): Promise<ClaimResponse> {
+    return request<ClaimResponse>(`/api/v1/corporate/claims/${claimId}/approve?action=${action}`, {
+      method: 'POST',
+    });
+  },
+};
+
